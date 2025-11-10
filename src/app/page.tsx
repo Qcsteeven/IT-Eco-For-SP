@@ -6,6 +6,7 @@ import { useState } from 'react';
 
 export default function Chat() {
   const [input, setInput] = useState('');
+  const x: any = 'oops';
   const { messages, sendMessage } = useChat();
 
   return (
