@@ -7,8 +7,7 @@ module.exports = {
   ],
   plugins: ['@typescript-eslint', 'prettier'],
   rules: {
-    'prettier/prettier': 'error', // ошибка при неверном форматировании
-    '@typescript-eslint/no-explicit-any': 'error', // пример: запрет any
-    // ... другие правила по желанию
+    'prettier/prettier': 'error', 
+    '@typescript-eslint/no-explicit-any': 'error',
   },
 };

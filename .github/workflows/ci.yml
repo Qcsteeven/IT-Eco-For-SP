@@ -32,6 +32,3 @@ jobs:
 
       - name: Build Next.js app
         run: npm run build
-
-      - name: Summary
-        run: echo "All checks passed: types, linting, and build are green!"
