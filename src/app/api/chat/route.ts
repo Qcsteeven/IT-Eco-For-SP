@@ -9,7 +9,6 @@ import {
 } from 'ai';
 import { z } from 'zod';
 
-
 export const maxDuration = 30;
 
 export async function POST(req: Request) {

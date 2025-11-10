@@ -6,7 +6,10 @@
     "dev": "next dev --turbopack",
     "build": "next build --turbopack",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint . --ext .ts,.tsx --max-warnings 0",
+    "format": "prettier --write \"src/**/*.{ts,tsx}\"",
+    "type-check": "tsc --noEmit",
+    "validate": "npm run lint && npm run format && npm run type-check"
   },
   "dependencies": {
     "@ai-sdk/deepinfra": "^1.0.23",
@@ -29,9 +32,15 @@
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
-    "eslint": "^9",
+    "@typescript-eslint/eslint-plugin": "^8.46.3",
+    "@typescript-eslint/parser": "^8.46.3",
+    "eslint": "^9.39.1",
     "eslint-config-next": "15.5.4",
+    "eslint-config-prettier": "^10.1.8",
+    "eslint-plugin-prettier": "^5.5.4",
+    "prettier": "^3.6.2",
     "tailwindcss": "^4",
     "typescript": "^5"
   }
+  
 }
