@@ -1,25 +1,18 @@
 import { NextResponse } from "next/server";
 import { getDB } from "@/lib/surreal";
 
-type QueryResult<T = any> = {
-  result: T;
-};
-
 export async function GET() {
   try {
     const db = await getDB();
 
-    // Явно типизируем результат
-    const events = (await db.query("SELECT * FROM event;")) as QueryResult[];
+    // Получаем все события напрямую
+    const events = await db.query("SELECT * FROM event;");
 
-    return NextResponse.json(
-      { ok: true, data: events[0]?.result ?? [] },
-      { status: 200 }
-    );
+    // Если вдруг SurrealDB вернёт null/undefined, фильтруем
+    const allEvents = (events ?? []).filter(Boolean);
+
+    return NextResponse.json({ ok: true, data: allEvents }, { status: 200 });
   } catch (err: any) {
-    return NextResponse.json(
-      { ok: false, error: err?.message || String(err) },
-      { status: 500 }
-    );
+    return NextResponse.json({ ok: false, error: err?.message || String(err) }, { status: 500 });
   }
 }
