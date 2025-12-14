@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getDB } from "@/lib/surreal";
+import { getDB } from "@/lib/surreal/surreal";
 
 type QueryResult<T = any> = {
   result: T;
