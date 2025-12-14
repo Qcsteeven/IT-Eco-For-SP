@@ -13,7 +13,7 @@ export default function IntroBlock() {
         height="877"
       />
       <form className="ib-subscribe" action="/home" method="post">
-        <h2 className="ib-title">Получите полезные статьи первыми</h2>
+        <h2 className="ib-title">Получите уведомления о соревнованиях первыми</h2>
         <input
           className="ib-tg"
           type="text"
