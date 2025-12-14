@@ -1,24 +1,23 @@
-// UpcomingEvents.tsx
-'use client'; // Необходимо, так как используется стейт и хуки
+'use client';
 
 import React, { useState, useEffect } from 'react';
-import Card, { CardProps } from './Card'; // Импортируем CardProps
+import Card, { CardProps } from './Card';
 
 import './upcoming-events.scss';
 
-// Интерфейс для данных события
 export interface EventData {
-  id: string; // Id события
+  id: string;
   title: string;
   platform: string;
   status: string;
-  start_date: string;
-  end_date: string;
+
+  start_time_utc: string;
+  end_time_utc: string;
   registration_link: string;
-  // ... другие поля, соответствующие вашей БД
+
+  platform_contest_id?: string;
 }
 
-// Интерфейс для ответа API
 interface ApiResponse {
   ok: boolean;
   data?: EventData[];
@@ -34,12 +33,10 @@ export default function UpcomingEvents() {
     const fetchEvents = async () => {
       try {
         setLoading(true);
-        // Предполагаем, что API находится по пути /api/events
         const response = await fetch('/api/events');
         const result: ApiResponse = await response.json();
 
         if (response.ok && result.ok && result.data) {
-          // Для простоты, мы используем данные напрямую
           setEvents(result.data);
         } else {
           setError(result.error || 'Не удалось загрузить события.');
@@ -82,16 +79,14 @@ export default function UpcomingEvents() {
     );
   }
 
-  // Рендеринг карточек на основе загруженных данных
   const cards = events.map((event) => {
-    // Приводим тип event к EventData для CardProps,
-    // чтобы передать его в компонент Card
     const cardData: CardProps['event'] = {
       title: event.title,
       platform: event.platform,
       status: event.status,
-      start_date: event.start_date,
-      end_date: event.end_date,
+
+      start_date: event.start_time_utc,
+      end_date: event.end_time_utc,
       registration_link: event.registration_link,
     };
 
