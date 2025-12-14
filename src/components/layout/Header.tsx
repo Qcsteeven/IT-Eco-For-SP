@@ -1,7 +1,12 @@
+'use client';
+
 import Link from 'next/link';
+import { useSession } from 'next-auth/react';
 import './header.scss';
 
 export default function Header() {
+  const { data: session, status } = useSession();
+
   return (
     <>
       <div className="header-ghost"></div>
@@ -15,15 +20,19 @@ export default function Header() {
             <Link href="/base" className="header-links-item">
               База знаний
             </Link>
-            <Link href="/chat" className="header-links-item">
-              ИИ Ассистент
-            </Link>
             <Link href="/calendar" className="header-links-item">
               Календарь
             </Link>
-            <Link href="/profile" className="header-links-item">
-              Профиль
-            </Link>
+            {status === 'authenticated' && (
+              <>
+                <Link href="/chat" className="header-links-item">
+                  ИИ Ассистент
+                </Link>
+                <Link href="/profile" className="header-links-item">
+                  Профиль
+                </Link>
+              </>
+            )}
             <Link href="/auth/signin" className="header-links-item">
               Вход / Регистрация
             </Link>
