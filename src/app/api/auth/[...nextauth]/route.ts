@@ -1,9 +1,32 @@
-import NextAuth from 'next-auth';
+import NextAuth, { NextAuthOptions, DefaultSession } from 'next-auth';
 import CredentialsProvider from 'next-auth/providers/credentials';
-
 import { getUserByEmail, verifyPassword } from '@/lib/surreal/auth';
 
-export const authOptions = {
+declare module 'next-auth' {
+  interface Session {
+    user: {
+      id: string;
+      role: string;
+    } & DefaultSession['user'];
+  }
+
+  interface User {
+    id: string;
+    role: string;
+
+    email: string;
+    name?: string;
+  }
+}
+
+declare module 'next-auth/jwt' {
+  interface JWT {
+    id: string;
+    role: string;
+  }
+}
+
+export const authOptions: NextAuthOptions = {
   providers: [
     CredentialsProvider({
       name: 'Email & Password',
@@ -11,13 +34,17 @@ export const authOptions = {
         email: { label: 'Email', type: 'text' },
         password: { label: 'Password', type: 'password' },
       },
-      async authorize(credentials, req) {
+      async authorize(credentials) {
+        if (!credentials?.email || !credentials?.password) {
+          return null;
+        }
+
         const user = await getUserByEmail(credentials.email);
 
         if (user) {
           const isMatch = await verifyPassword(
             credentials.password,
-            user.password_hash,
+            user.password_hash || user.password,
           );
 
           if (isMatch) {
@@ -25,15 +52,14 @@ export const authOptions = {
               console.warn(
                 `[AUTH] БЛОКИРОВКА ВХОДА: Email ${user.email} не верифицирован.`,
               );
-
               throw new Error('EmailNotVerified');
             }
 
             return {
               id: user.id,
               email: user.email,
-              name: user.full_name,
-              role: user.role,
+              name: user.full_name || user.name,
+              role: user.role || 'user',
             };
           }
         }
@@ -56,8 +82,10 @@ export const authOptions = {
       return token;
     },
     async session({ session, token }) {
-      session.user.id = token.id;
-      session.user.role = token.role;
+      if (token && session.user) {
+        session.user.id = token.id;
+        session.user.role = token.role;
+      }
       return session;
     },
   },
