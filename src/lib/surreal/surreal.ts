@@ -12,13 +12,13 @@ export async function getDB() {
     // Авторизация
     await db.signin({
       username: "admin",   // логин
-      password: "...",  // пароль
+      password: "lbvfkjigtl",  // пароль
     });
 
     // Выбираем namespace и database
     await db.use({
-      namespace: "test",   // namespace
-      database: "test",    // database
+      namespace: "bcsp",   // namespace
+      database: "site",    // database
     });
   }
   return db;

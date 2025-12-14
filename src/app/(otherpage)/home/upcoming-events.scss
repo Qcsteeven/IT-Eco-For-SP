@@ -1,0 +1,33 @@
+.upcoming-events {
+  width: 1450px;
+  margin: 0 auto;
+}
+
+.ue-title {
+  font-size: 40px;
+  color: var(--accent-color);
+  margin-bottom: 45px;
+}
+
+.ue-list {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+}
+.contest-card {
+  width: 430px;
+  margin-bottom: 65px;
+}
+
+.ue-next-block {
+  width: max-content;
+  margin: 0 auto;
+}
+.ue-next-btn {
+  width: 265px;
+  height: 65px;
+  border-radius: 10px;
+  box-shadow: 0px 5px 18px #00000042;
+  margin-bottom: 25px;
+}

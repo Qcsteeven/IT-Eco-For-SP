@@ -1,6 +1,6 @@
 // app/page.tsx
 'use client';
-
+import { signOut } from 'next-auth/react';
 import { useChat } from '@ai-sdk/react';
 import { useState } from 'react';
 
@@ -10,6 +10,14 @@ export default function Chat() {
 
   return (
     <div className="flex flex-col w-full max-w-md py-24 mx-auto stretch">
+      {/* ✅ КНОПКА ПЕРЕМЕЩЕНА СЮДА */}
+      <button 
+        onClick={() => signOut({ callbackUrl: '/' })}
+        className="fixed top-0 left-0 m-4 p-2 bg-red-500 text-white rounded shadow-md z-50"
+      >
+        Выйти и на главную
+      </button>
+
       {messages.map((message) => (
         <div key={message.id} className="whitespace-pre-wrap">
           {message.role === 'user' ? 'User: ' : 'AI: '}
