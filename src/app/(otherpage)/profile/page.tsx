@@ -9,14 +9,14 @@ const ProfilePage: React.FC = () => {
       <section id="profile" style={{ display: 'block' }}>
         <div className="profile-header">
           <h2>Иванов Иван</h2>
-          <div className="rating">1428</div>
+          <div className="rating">1488</div>
           <div className="rating-label">Рейтинг в системе БЦСП</div>
         </div>
 
         <h1>Вход в внешние системы</h1>
         <div className="systems-links">
           <a
-            href="https://codeforces.com/enter"
+            href="/dashboard"
             target="_blank"
             rel="noopener noreferrer"
             className="system-link"
@@ -89,7 +89,7 @@ const ProfilePage: React.FC = () => {
               <td>01.11.2025</td>
               <td>Codeforces Round 915</td>
               <td>Codeforces</td>
-              <td>1247 → 1428</td>
+              <td>1247 → 1488</td>
               <td className="rating-change">+181</td>
             </tr>
             <tr>
