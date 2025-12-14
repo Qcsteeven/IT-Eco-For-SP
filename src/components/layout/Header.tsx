@@ -33,9 +33,11 @@ export default function Header() {
                 </Link>
               </>
             )}
-            <Link href="/auth/signin" className="header-links-item">
-              Вход / Регистрация
-            </Link>
+            {status === 'unauthenticated' && (
+              <Link href="/auth/signin" className="header-links-item">
+                Вход / Регистрация
+              </Link>
+            )}
           </ul>
         </div>
       </header>
