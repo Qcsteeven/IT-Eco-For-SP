@@ -15,6 +15,9 @@ export default function Header() {
             <Link href="/base" className="header-links-item">
               База знаний
             </Link>
+            <Link href="/chat" className="header-links-item">
+              ИИ Ассистент
+            </Link>
             <Link href="/calendar" className="header-links-item">
               Календарь
             </Link>
