@@ -1,13 +1,25 @@
-import { NextResponse } from 'next/server';
+import { NextResponse, NextRequest } from 'next/server';
 import { getDB } from '@/lib/surreal/surreal';
+
+interface IVerifyPayload {
+  email?: string;
+  code?: string;
+}
+
+interface IUser {
+  id: string;
+  is_verified: boolean;
+  verification_code: string | null;
+  code_expiry: string | null;
+}
 
 /**
  * @method POST
  * @description Маршрут для подтверждения email с помощью кода.
  */
-export async function POST(request) {
+export async function POST(request: NextRequest) {
   try {
-    const rawBody = await request.json();
+    const rawBody: IVerifyPayload = await request.json();
     const { email: rawEmail, code } = rawBody;
 
     const email = rawEmail ? rawEmail.toLowerCase() : rawEmail;
@@ -24,27 +36,32 @@ export async function POST(request) {
     await db.use({ namespace: 'bcsp', database: 'site' });
 
     const findUserQuery = `
-            SELECT id, is_verified, verification_code, code_expiry 
-            FROM users 
-            WHERE email = $email
-        `;
+      SELECT id, is_verified, verification_code, code_expiry 
+      FROM users 
+      WHERE email = $email
+    `;
 
-    let queryResult;
+    let queryResult: any;
     try {
       queryResult = await db.query(findUserQuery, { email });
-    } catch (dbError) {
+    } catch (dbError: unknown) {
       console.error(`[API/VERIFY] Ошибка DB при SELECT:`, dbError);
+      const errorMessage =
+        dbError instanceof Error ? dbError.message : 'Unknown DB error';
+
       return NextResponse.json(
         {
           message: 'Внутренняя ошибка базы данных при поиске пользователя.',
-          detail: dbError.message,
+          detail: errorMessage,
         },
         { status: 500 },
       );
     }
 
     const records = queryResult?.[0] || [];
-    const userArray = Array.isArray(records) ? records : records.result || [];
+    const userArray: IUser[] = Array.isArray(records)
+      ? records
+      : (records as any).result || [];
 
     if (userArray.length === 0) {
       return NextResponse.json(
@@ -87,12 +104,15 @@ export async function POST(request) {
         verification_code: null,
         code_expiry: null,
       });
-    } catch (dbError) {
+    } catch (dbError: unknown) {
       console.error(`[API/VERIFY] Ошибка DB при MERGE:`, dbError);
+      const errorMessage =
+        dbError instanceof Error ? dbError.message : 'Unknown DB error';
+
       return NextResponse.json(
         {
           message: 'Внутренняя ошибка базы данных при обновлении статуса.',
-          detail: dbError.message,
+          detail: errorMessage,
         },
         { status: 500 },
       );
@@ -104,12 +124,15 @@ export async function POST(request) {
       },
       { status: 200 },
     );
-  } catch (error) {
+  } catch (error: unknown) {
     console.error(`[API/VERIFY] КРИТИЧЕСКАЯ ОШИБКА:`, error);
+    const errorMessage =
+      error instanceof Error ? error.message : 'Unknown Server Error';
+
     return NextResponse.json(
       {
         message: 'Внутренняя ошибка сервера при верификации.',
-        detail: error.message,
+        detail: errorMessage,
       },
       { status: 500 },
     );
