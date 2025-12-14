@@ -34,7 +34,7 @@ export default function SignIn() {
   useEffect(() => {
     // 1. Если пользователь уже авторизован, перенаправляем на главную
     if (status === 'authenticated') {
-      router.replace('/');
+      router.replace('/home');
       return;
     }
 
