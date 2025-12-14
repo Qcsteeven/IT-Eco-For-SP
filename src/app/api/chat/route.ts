@@ -1,6 +1,5 @@
 import { fireworks } from '@ai-sdk/fireworks';
 import { streamText, UIMessage, convertToModelMessages } from 'ai';
-// Убедитесь, что эти пути и функции существуют в вашем проекте
 import { createSystemPrompt } from '@/lib/prompts';
 import { getRagContext } from '@/lib/rag';
 
