@@ -35,7 +35,7 @@ export async function POST(req: Request) {
 
     // RAG + промпт
     const ragContext = await getRagContext(userMessage);
-    const mode = /создай|сформируй|отправь|заполни|json/i.test(userMessage) ? 'action' : 'chat';
+    const mode = /json/i.test(userMessage) ? 'action' : 'chat';
     const systemPrompt = createSystemPrompt({ ragContext, agentRole, mode });
 
     // Генерация
