@@ -1,21 +1,18 @@
 import Link from 'next/link';
 import './header.scss';
 
-
 export default function Header() {
   return (
     <>
       <div className="header-ghost"></div>
       <header className="header">
         <div className="header-wrapper">
-          <div className="header-logo">
-            БЦСП
-          </div>
+          <div className="header-logo">БЦСП</div>
           <ul className="header-links">
             <Link href="/home" className="header-links-item">
               Главная
             </Link>
-            <Link href="/docs" className="header-links-item">
+            <Link href="/base" className="header-links-item">
               База знаний
             </Link>
             <Link href="/calendar" className="header-links-item">
@@ -24,9 +21,12 @@ export default function Header() {
             <Link href="/profile" className="header-links-item">
               Профиль
             </Link>
+            <Link href="/auth/signin" className="header-links-item">
+              Вход / Регистрация
+            </Link>
           </ul>
         </div>
       </header>
     </>
-  )
+  );
 }

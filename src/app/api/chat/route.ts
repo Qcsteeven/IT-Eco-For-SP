@@ -1,6 +1,6 @@
 // app/api/chat/route.ts
 import { fireworks } from '@ai-sdk/fireworks';
-import { streamText, UIMessage, convertToModelMessages} from 'ai';
+import { streamText, UIMessage, convertToModelMessages } from 'ai';
 import { createSystemPrompt } from '@/lib/prompts';
 import { getRagContext } from '@/lib/rag';
 
@@ -35,7 +35,7 @@ export async function POST(req: Request) {
 
     // RAG + промпт
     const ragContext = await getRagContext(userMessage);
-    const mode = /создай|сформируй|отправь|заполни|json/i.test(userMessage) ? 'action' : 'chat';
+    const mode = /json/i.test(userMessage) ? 'action' : 'chat';
     const systemPrompt = createSystemPrompt({ ragContext, agentRole, mode });
 
     // Генерация

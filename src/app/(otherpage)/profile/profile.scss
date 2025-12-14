@@ -1,0 +1,230 @@
+// IT-Eco-For-SP\src\app\(otherpage)\profile.scss
+
+/* Profile Section Styles */
+#profile {
+  padding: 20px;
+  max-width: 900px;
+  margin: 20px auto;
+  background-color: #fff;
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+
+  .profile-header {
+    text-align: center;
+    margin-bottom: 30px;
+    border-bottom: 1px solid #eee;
+    padding-bottom: 20px;
+
+    h2 {
+      margin: 0 0 10px 0;
+      font-size: 2.5em;
+      color: #333;
+    }
+
+    .rating {
+      font-size: 2em;
+      font-weight: bold;
+      color: #007bff;
+      margin-bottom: 5px;
+    }
+
+    .rating-label {
+      font-size: 0.9em;
+      color: #666;
+    }
+  }
+
+  h1 {
+    font-size: 1.8em;
+    color: #444;
+    margin-top: 30px;
+    margin-bottom: 15px;
+    border-bottom: 2px solid #007bff;
+    padding-bottom: 5px;
+  }
+
+  .systems-links {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 15px;
+    margin-bottom: 30px;
+    justify-content: center;
+
+    .system-link {
+      display: inline-block;
+      padding: 12px 20px;
+      background-color: #007bff;
+      color: #fff;
+      text-decoration: none;
+      border-radius: 5px;
+      font-weight: bold;
+      transition: background-color 0.3s ease;
+      box-shadow: 0 2px 5px rgba(0, 123, 255, 0.3);
+
+      &:hover {
+        background-color: #0056b3;
+      }
+    }
+  }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-bottom: 30px;
+
+    th,
+    td {
+      padding: 12px 15px;
+      text-align: left;
+      border-bottom: 1px solid #ddd;
+    }
+
+    th {
+      background-color: #f8f9fa;
+      font-weight: bold;
+      color: #555;
+    }
+
+    tbody tr:nth-child(even) {
+      background-color: #fdfdfd;
+    }
+
+    tbody tr:hover {
+      background-color: #f1f1f1;
+    }
+
+    .rating-change {
+      font-weight: bold;
+      &.negative {
+        color: #dc3545;
+      }
+      &.positive {
+        color: #28a745;
+      }
+    }
+
+    .manual-tag {
+      font-size: 0.8em;
+      background-color: #ffc107;
+      color: #333;
+      padding: 2px 6px;
+      border-radius: 3px;
+      margin-left: 5px;
+      vertical-align: middle;
+    }
+  }
+
+  .edit-form {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 20px;
+    align-items: center;
+
+    label {
+      font-weight: bold;
+      color: #555;
+      grid-column: 1;
+    }
+
+    input[type='text'],
+    input[type='email'],
+    input[type='password'],
+    input[type='tel'] {
+      width: 100%;
+      padding: 10px 12px;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+      box-sizing: border-box; // Important for consistent sizing
+      grid-column: 2;
+
+      &:focus {
+        border-color: #007bff;
+        outline: none;
+        box-shadow: 0 0 5px rgba(0, 123, 255, 0.3);
+      }
+    }
+
+    .btn-save {
+      grid-column: 2; // Position button in the second column
+      padding: 12px 25px;
+      background-color: #28a745;
+      color: #fff;
+      border: none;
+      border-radius: 5px;
+      font-weight: bold;
+      cursor: pointer;
+      transition: background-color 0.3s ease;
+      justify-self: start; // Align button to the start of its grid cell
+
+      &:hover {
+        background-color: #218838;
+      }
+    }
+
+    // Specific adjustments for single column layout on smaller screens
+    @media (max-width: 768px) {
+      grid-template-columns: 1fr;
+
+      label,
+      input,
+      .btn-save {
+        grid-column: 1;
+        width: 100%;
+      }
+
+      .btn-save {
+        justify-self: center; // Center the button in the single column
+      }
+    }
+  }
+}
+
+/* Basic responsive adjustments */
+@media (max-width: 768px) {
+  #profile {
+    margin: 15px;
+    padding: 15px;
+
+    .profile-header h2 {
+      font-size: 2em;
+    }
+
+    .rating {
+      font-size: 1.7em;
+    }
+
+    table {
+      th,
+      td {
+        padding: 10px;
+        font-size: 0.9em;
+      }
+    }
+
+    .systems-links .system-link {
+      padding: 10px 15px;
+      font-size: 0.9em;
+    }
+  }
+}
+
+@media (max-width: 480px) {
+  #profile {
+    .profile-header h2 {
+      font-size: 1.8em;
+    }
+    .rating {
+      font-size: 1.5em;
+    }
+    h1 {
+      font-size: 1.5em;
+    }
+    table {
+      th,
+      td {
+        padding: 8px;
+        font-size: 0.85em;
+      }
+    }
+  }
+}
