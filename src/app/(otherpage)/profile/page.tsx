@@ -63,6 +63,7 @@ const ProfilePage: React.FC = () => {
             setHistoryData(result.data.history);
           } else {
             setError(result.error || 'Не удалось загрузить данные профиля.');
+            signOut();
           }
         } catch (err: any) {
           console.error('Fetch error:', err);
