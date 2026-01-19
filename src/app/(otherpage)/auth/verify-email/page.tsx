@@ -133,7 +133,6 @@ export default function VerifyEmailPage() {
   };
 
   return (
-    // 2. ИСПОЛЬЗУЕМ styles.className
     <div className={styles.verifyEmailContainer}>
       <h2 className={styles.title}>Подтверждение Email 📧</h2>
       <p className={styles.description}>
@@ -186,7 +185,6 @@ export default function VerifyEmailPage() {
       </form>
 
       {message && (
-        // Условный класс для сообщений об успехе/ошибке
         <p className={isSuccess ? styles.successMessage : styles.errorMessage}>
           {message}
         </p>
