@@ -2,20 +2,15 @@
 
 import React, { useState, FormEvent } from 'react';
 import { useRouter } from 'next/navigation';
-// Используем библиотеку иконок
 import { FiEye, FiEyeOff } from 'react-icons/fi';
-// Импортируем модульные SCSS стили
 import styles from './SignUp.module.scss';
 
-// Интерфейс для ожидаемого ответа от API регистрации
 interface RegisterResponse {
   message: string;
-  email?: string; // Ожидаем email в случае успеха
-  // Другие поля, если они есть
+  email?: string;
 }
 
 export default function SignUp() {
-  // Явная типизация для стейта: <string> или <boolean>
   const [email, setEmail] = useState<string>('');
   const [password, setPassword] = useState<string>('');
   const [confirmPassword, setConfirmPassword] = useState<string>('');
@@ -26,23 +21,13 @@ export default function SignUp() {
 
   const router = useRouter();
 
-  /**
-   * Обработчик отправки формы регистрации.
-   * Типизация аргумента e: FormEvent
-   */
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     setError('');
     setLoading(true);
 
-    if (!email || !password || !confirmPassword || !fullName) {
-      setError('Пожалуйста, заполните все поля.');
-      setLoading(false);
-      return;
-    }
-
     if (password !== confirmPassword) {
-      setError('Пароли не совпадают. Пожалуйста, проверьте ввод.');
+      setError('Пароли не совпадают.');
       setLoading(false);
       return;
     }
@@ -50,65 +35,38 @@ export default function SignUp() {
     try {
       const response = await fetch('/api/register', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        // Типизация объекта тела запроса
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, password, full_name: fullName }),
       });
 
-      // Явно указываем ожидаемый тип данных (RegisterResponse)
       const data: RegisterResponse = await response.json();
 
       if (!response.ok) {
-        // Используем data.message, если оно есть
-        setError(
-          data.message || 'Ошибка регистрации. Пожалуйста, проверьте данные.',
-        );
+        setError(data.message || 'Ошибка регистрации.');
       } else {
-        // Используем email из ответа, если он предоставлен, иначе текущий email
-        const verifiedEmail = data.email || email;
-
-        // Перенаправление на страницу верификации
         router.push(
-          `/auth/verify-email?email=${encodeURIComponent(verifiedEmail)}`,
+          `/auth/verify-email?email=${encodeURIComponent(data.email || email)}`,
         );
       }
     } catch (err) {
-      // Приводим ошибку к типу Error для более безопасного логирования
-      console.error(
-        'Ошибка сети/сервера:',
-        err instanceof Error ? err.message : err,
-      );
-      setError('Произошла ошибка при подключении к серверу.');
+      setError('Ошибка подключения к серверу.');
     } finally {
       setLoading(false);
     }
   };
 
-  /**
-   * Переключение видимости паролей.
-   */
-  const togglePasswordVisibility = () => {
-    setShowPassword((prev) => !prev);
-  };
-
   return (
-    <div className={styles.signupContainer}>
+    <div className={styles.signupWrapper}>
       <div className={styles.signupBox}>
         <h1 className={styles.title}>📝 Регистрация</h1>
 
         <form onSubmit={handleSubmit} className={styles.form}>
           {error && <div className={styles.error}>{error}</div>}
 
-          {/* Поле ФИО */}
           <div className={styles.formGroup}>
-            <label htmlFor="fullName" className={styles.label}>
-              ФИО
-            </label>
+            <label className={styles.label}>ФИО</label>
             <input
               type="text"
-              id="fullName"
               value={fullName}
               onChange={(e) => setFullName(e.target.value)}
               placeholder="Иванов Иван Иванович"
@@ -117,14 +75,10 @@ export default function SignUp() {
             />
           </div>
 
-          {/* Поле Email */}
           <div className={styles.formGroup}>
-            <label htmlFor="email" className={styles.label}>
-              Email
-            </label>
+            <label className={styles.label}>Email</label>
             <input
               type="email"
-              id="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               placeholder="Введите ваш email"
@@ -133,51 +87,41 @@ export default function SignUp() {
             />
           </div>
 
-          {/* Поле Пароль */}
-          <div
-            className={`${styles.formGroup} ${styles.passwordInputContainer}`}
-          >
-            <label htmlFor="password" className={styles.label}>
-              Пароль
-            </label>
-            <input
-              type={showPassword ? 'text' : 'password'}
-              id="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              placeholder="Создайте пароль"
-              required
-              className={styles.input}
-            />
-            <button
-              type="button"
-              onClick={togglePasswordVisibility}
-              className={styles.passwordToggle}
-              aria-label={showPassword ? 'Скрыть пароль' : 'Показать пароль'}
-            >
-              {showPassword ? <FiEyeOff size={20} /> : <FiEye size={20} />}
-            </button>
+          <div className={styles.formGroup}>
+            <label className={styles.label}>Пароль</label>
+            <div className={styles.passwordWrapper}>
+              <input
+                type={showPassword ? 'text' : 'password'}
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="Создайте пароль"
+                required
+                className={styles.input}
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword(!showPassword)}
+                className={styles.passwordToggle}
+              >
+                {showPassword ? <FiEyeOff /> : <FiEye />}
+              </button>
+            </div>
           </div>
 
-          {/* Поле Подтверждение пароля */}
-          <div
-            className={`${styles.formGroup} ${styles.passwordInputContainer}`}
-          >
-            <label htmlFor="confirmPassword" className={styles.label}>
-              Подтвердите пароль
-            </label>
-            <input
-              type={showPassword ? 'text' : 'password'}
-              id="confirmPassword"
-              value={confirmPassword}
-              onChange={(e) => setConfirmPassword(e.target.value)}
-              placeholder="Повторите пароль"
-              required
-              className={styles.input}
-            />
+          <div className={styles.formGroup}>
+            <label className={styles.label}>Подтвердите пароль</label>
+            <div className={styles.passwordWrapper}>
+              <input
+                type={showPassword ? 'text' : 'password'}
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+                placeholder="Повторите пароль"
+                required
+                className={styles.input}
+              />
+            </div>
           </div>
 
-          {/* Кнопка отправки */}
           <button
             type="submit"
             disabled={loading}
@@ -186,15 +130,14 @@ export default function SignUp() {
             {loading ? 'Регистрация...' : 'Зарегистрироваться'}
           </button>
 
-          {/* Ссылка на вход */}
           <p className={styles.signinText}>
             Уже есть аккаунт?{' '}
-            <a
-              onClick={() => router.push('/auth/signin')} // Используем router.push
+            <span
+              onClick={() => router.push('/auth/signin')}
               className={styles.signinLink}
             >
               Войти
-            </a>
+            </span>
           </p>
         </form>
       </div>

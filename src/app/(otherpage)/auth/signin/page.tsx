@@ -4,13 +4,11 @@ import React, { useState, useEffect, FormEvent } from 'react';
 import { signIn, useSession, LiteralUnion } from 'next-auth/react';
 import { BuiltInProviderType } from 'next-auth/providers/index';
 import { useRouter, useSearchParams } from 'next/navigation';
-// Импортируем модульные SCSS стили
+import { FiEye, FiEyeOff } from 'react-icons/fi'; // Импорт иконок
 import styles from './SignIn.module.scss';
 
-// Определяем возможные коды ошибок, которые мы ожидаем
 type AuthErrorType = 'EmailNotVerified' | 'CredentialsSignin' | string;
 
-// Типизация для результата signIn
 interface SignInResult {
   error: string | null;
   status: number;
@@ -19,128 +17,68 @@ interface SignInResult {
 }
 
 export default function SignIn() {
-  // Явная типизация для стейта
   const [email, setEmail] = useState<string>('');
   const [password, setPassword] = useState<string>('');
+  const [showPassword, setShowPassword] = useState<boolean>(false);
   const [error, setError] = useState<string>('');
 
-  // useSession предоставляет объект с полем status, которое имеет определенные литеральные типы
   const { status } = useSession();
   const router = useRouter();
-  // useSearchParams может вернуть null, поэтому используем опциональную цепочку
   const searchParams = useSearchParams();
 
-  // Хук useEffect для обработки статуса сессии и ошибок из URL
   useEffect(() => {
-    // 1. Если пользователь уже авторизован, перенаправляем на главную
     if (status === 'authenticated') {
       router.replace('/home');
       return;
     }
 
-    // 2. Обработка ошибок из URL-параметров
-    // searchParams может быть null, поэтому используем опциональную цепочку
     const urlError = searchParams?.get('error') as AuthErrorType | null;
-
     if (urlError) {
       if (urlError === 'EmailNotVerified') {
-        setError(
-          '❌ Ваш аккаунт не верифицирован. Пожалуйста, подтвердите email по ссылке в письме.',
-        );
+        setError('Ваш аккаунт не верифицирован.');
       } else if (urlError === 'CredentialsSignin') {
-        setError('Неверный email или пароль. Пожалуйста, попробуйте снова.');
+        setError('Неверный email или пароль.');
       } else {
-        // Ловим любые другие необработанные ошибки
-        setError('Произошла ошибка входа. Пожалуйста, попробуйте снова.');
+        setError('Произошла ошибка входа.');
       }
     }
-  }, [status, router, searchParams]); // Зависимости хука
+  }, [status, router, searchParams]);
 
-  // Состояния загрузки и аутентификации
   if (status === 'loading') {
-    return (
-      <div className={styles.loadingContainer}>
-        <p className={styles.loadingText}>Проверка сессии...</p>
-      </div>
-    );
+    return <div className={styles.loaderFull}>Загрузка...</div>;
   }
 
-  // Если состояние 'authenticated', хотя редирект уже сработает в useEffect,
-  // это можно оставить как запасной вариант для UX.
-  if (status === 'authenticated') {
-    return (
-      <div className={styles.authenticatedContainer}>
-        <p className={styles.loadingText}>Вы вошли. Перенаправление...</p>
-      </div>
-    );
-  }
-
-  /**
-   * Обработчик отправки формы входа.
-   * Типизация аргумента e: FormEvent
-   */
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     setError('');
 
-    // Явно типизируем провайдера как 'credentials'
-    const result = (await signIn('credentials' as LiteralUnion<BuiltInProviderType, string>, {
-      redirect: false,
-      email,
-      password,
-    })) as SignInResult; // Приводим результат к созданному интерфейсу
+    const result = (await signIn(
+      'credentials' as LiteralUnion<BuiltInProviderType, string>,
+      { redirect: false, email, password },
+    )) as SignInResult;
 
     if (!result.error) {
-      // Успешный вход
       router.push('/');
     } else {
-      // Ошибка входа
-      let errorCode: AuthErrorType;
-
-      if (result.error.includes('EmailNotVerified')) {
-        errorCode = 'EmailNotVerified';
-      } else {
-        errorCode = 'CredentialsSignin';
-      }
-
-      // Перенаправляем обратно на страницу входа с кодом ошибки в URL
+      const errorCode: AuthErrorType = result.error.includes('EmailNotVerified')
+        ? 'EmailNotVerified'
+        : 'CredentialsSignin';
       router.push(`/auth/signin?error=${errorCode}`);
     }
   };
 
-  /**
-   * Обработчик перехода на страницу регистрации.
-   */
-  const handleSignUpClick = (e: FormEvent) => {
-    e.preventDefault();
-    router.push('/auth/signup');
-  };
-
   return (
-    <div className={styles.signinContainer}>
+    <div className={styles.signinWrapper}>
       <div className={styles.signinBox}>
-        <h1 className={styles.title}>
-          🔑 Вход в систему
-        </h1>
+        <h1 className={styles.title}>🔑 Вход</h1>
 
         <form onSubmit={handleSubmit} className={styles.form}>
-          {error && (
-            <div className={styles.error}>
-              {error}
-            </div>
-          )}
+          {error && <div className={styles.error}>{error}</div>}
 
-          {/* Поле Email */}
           <div className={styles.formGroup}>
-            <label
-              htmlFor="email"
-              className={styles.label}
-            >
-              Email
-            </label>
+            <label className={styles.label}>Email</label>
             <input
               type="email"
-              id="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               placeholder="Введите ваш email"
@@ -149,44 +87,39 @@ export default function SignIn() {
             />
           </div>
 
-          {/* Поле Пароль */}
           <div className={styles.formGroup}>
-            <label
-              htmlFor="password"
-              className={styles.label}
-            >
-              Пароль
-            </label>
-            <input
-              type="password"
-              id="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              placeholder="********"
-              required
-              className={styles.input}
-            />
+            <label className={styles.label}>Пароль</label>
+            <div className={styles.passwordInputWrapper}>
+              <input
+                type={showPassword ? 'text' : 'password'}
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="********"
+                required
+                className={styles.input}
+              />
+              <button
+                type="button"
+                className={styles.eyeBtn}
+                onClick={() => setShowPassword(!showPassword)}
+              >
+                {showPassword ? <FiEyeOff size={20} /> : <FiEye size={20} />}
+              </button>
+            </div>
           </div>
 
-          {/* Кнопка отправки */}
-          <button
-            type="submit"
-            className={styles.submitButton}
-            disabled={status === 'loading'}
-          >
+          <button type="submit" className={styles.submitButton}>
             Войти
           </button>
 
-          {/* Ссылка на регистрацию */}
           <p className={styles.signupText}>
             Нет аккаунта?{' '}
-            <a
-              href="/auth/signup"
-              onClick={handleSignUpClick}
+            <span
+              onClick={() => router.push('/auth/signup')}
               className={styles.signupLink}
             >
               Зарегистрироваться
-            </a>
+            </span>
           </p>
         </form>
       </div>
