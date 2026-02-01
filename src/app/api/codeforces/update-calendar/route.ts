@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDB } from '@/lib/surreal/surreal';
-import { buildContestEmbeddingText } from '@/lib/embeddingtext'
+import { buildContestEmbeddingText } from '@/lib/contembtext'
 import { getEmbedding } from '@/lib/embedding'; 
 import axios from 'axios';
 
