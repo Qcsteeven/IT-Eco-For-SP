@@ -1,8 +1,19 @@
-'use client'
-import { useState } from 'react'
-import './calendar.scss'
-import CalendarTable from './CalendarTable'
+'use client';
 
+import { useState, useEffect } from 'react';
+import axios from 'axios';
+import './calendar.scss';
+import CalendarTable from './CalendarTable';
+
+// Типизация для мероприятия (согласно полям в твоей базе SurrealDB)
+interface Contest {
+  id: string;
+  name: string;
+  platform: string;
+  start_time_utc: string;
+  end_time_utc: string;
+  registration_link?: string;
+}
 
 export default function Calendar() {
   const arrowSvg = (
@@ -19,27 +30,45 @@ export default function Calendar() {
         fill="currentColor"
       />
     </svg>
-  )
+  );
 
-  // текущий месяц по умолчанию
-  const [currentDate, setCurrentDate] = useState(new Date())
+  const [currentDate, setCurrentDate] = useState(new Date());
+  const [events, setEvents] = useState<Contest[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  // Загружаем мероприятия при монтировании компонента
+  useEffect(() => {
+    const fetchEvents = async () => {
+      try {
+        setLoading(true);
+        // Вызываем созданный нами ранее эндпоинт
+        const response = await axios.get('/api/contests/all');
+        setEvents(response.data);
+      } catch (error) {
+        console.error('Ошибка при загрузке мероприятий:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchEvents();
+  }, []);
 
   const changeMonth = (direction: number) => {
-    setCurrentDate(prev => {
-      const newDate = new Date(prev)
-      newDate.setMonth(prev.getMonth() + direction)
-      return newDate
-    })
-  }
+    setCurrentDate((prev) => {
+      const newDate = new Date(prev);
+      newDate.setMonth(prev.getMonth() + direction);
+      return newDate;
+    });
+  };
 
   const formatted = new Intl.DateTimeFormat('ru-RU', {
     month: 'long',
     year: 'numeric',
-  }).format(currentDate)
+  }).format(currentDate);
 
   return (
     <div className="calendar">
-
       <div className="c-main">
         <button
           className="btn-change-month _prev"
@@ -51,10 +80,13 @@ export default function Calendar() {
         <div className="calendar-content">
           <div className="c-current-month">
             {formatted}
+            {loading && <span className="loading-spinner">...</span>}
           </div>
+
           <CalendarTable
             year={currentDate.getFullYear()}
             month={currentDate.getMonth()}
+            events={events} // Передаем массив мероприятий в таблицу
           />
         </div>
 
@@ -66,5 +98,5 @@ export default function Calendar() {
         </button>
       </div>
     </div>
-  )
+  );
 }
