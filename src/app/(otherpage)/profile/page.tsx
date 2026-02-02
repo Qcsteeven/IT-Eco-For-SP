@@ -1,23 +1,22 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useSession, signOut } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
 import './profile.scss';
 
-// 1. Обновляем интерфейс
 interface UserData {
   full_name: string;
   email: string;
   bscp_rating: number;
   phone?: string;
-  cf_username?: string | null; // Новое поле
+  cf_username?: string | null;
 }
 
 interface HistoryItem {
-  date_recorded: string;
-  placement: string;
-  mmr_change: number;
+  date_recorded: string; // ISO string
+  placement: string; // e.g. "5376"
+  mmr_change: number; // e.g. 72
   is_manual: boolean;
   source_rating_change: string;
   contest: {
@@ -42,14 +41,25 @@ const ProfilePage: React.FC = () => {
   const [userData, setUserData] = useState<UserData | null>(null);
   const [historyData, setHistoryData] = useState<HistoryItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Фильтры
+  const [dateFrom, setDateFrom] = useState<string>('');
+  const [dateTo, setDateTo] = useState<string>('');
+  const [platformFilter, setPlatformFilter] = useState<string>('all');
+  const [placeFrom, setPlaceFrom] = useState<string>('');
+  const [placeTo, setPlaceTo] = useState<string>('');
+  const [ratingSort, setRatingSort] = useState<'none' | 'asc' | 'desc'>('none');
+
+  // Редирект при неавторизованном доступе
   useEffect(() => {
     if (status === 'unauthenticated') {
       router.replace('/auth/signin');
     }
   }, [status, router]);
 
+  // Загрузка данных
   useEffect(() => {
     if (status === 'authenticated') {
       const fetchProfileData = async () => {
@@ -63,7 +73,7 @@ const ProfilePage: React.FC = () => {
             setHistoryData(result.data.history);
           } else {
             setError(result.error || 'Не удалось загрузить данные профиля.');
-            signOut();
+            if (response.status === 401) signOut();
           }
         } catch (err: any) {
           console.error('Fetch error:', err);
@@ -74,16 +84,173 @@ const ProfilePage: React.FC = () => {
       };
 
       fetchProfileData();
-    } else if (status === 'unauthenticated') {
-      setLoading(false);
     }
   }, [status]);
+
+  // Уникальные платформы
+  const platforms = useMemo(() => {
+    const unique = new Set<string>();
+    historyData.forEach((item) => unique.add(item.contest.platform));
+    return Array.from(unique).sort();
+  }, [historyData]);
+
+  // Фильтрация и сортировка
+  const filteredAndSortedHistory = useMemo(() => {
+    let result = [...historyData];
+
+    // Фильтр по дате
+    if (dateFrom) {
+      const fromDate = new Date(dateFrom);
+      result = result.filter(
+        (item) => new Date(item.date_recorded) >= fromDate,
+      );
+    }
+    if (dateTo) {
+      const toDate = new Date(dateTo);
+      toDate.setHours(23, 59, 59, 999); // до конца дня
+      result = result.filter((item) => new Date(item.date_recorded) <= toDate);
+    }
+
+    // Фильтр по платформе
+    if (platformFilter !== 'all') {
+      result = result.filter(
+        (item) => item.contest.platform === platformFilter,
+      );
+    }
+
+    // Фильтр по месту (placement)
+    if (placeFrom || placeTo) {
+      const minPlace = placeFrom ? parseInt(placeFrom, 10) : -Infinity;
+      const maxPlace = placeTo ? parseInt(placeTo, 10) : Infinity;
+
+      if (!isNaN(minPlace) || !isNaN(maxPlace)) {
+        result = result.filter((item) => {
+          const placeNum = parseInt(item.placement, 10);
+          if (isNaN(placeNum)) return false;
+          return placeNum >= minPlace && placeNum <= maxPlace;
+        });
+      }
+    }
+
+    // Сортировка по рейтингу БЦСП (mmr_change)
+    if (ratingSort !== 'none') {
+      result.sort((a, b) => {
+        if (ratingSort === 'asc') {
+          return a.mmr_change - b.mmr_change;
+        } else {
+          return b.mmr_change - a.mmr_change;
+        }
+      });
+    }
+
+    return result;
+  }, [
+    historyData,
+    dateFrom,
+    dateTo,
+    platformFilter,
+    placeFrom,
+    placeTo,
+    ratingSort,
+  ]);
+
+  // Обработка отвязки CF
+  const handleDisconnectCF = async (e: React.MouseEvent) => {
+    e.preventDefault();
+    if (!userData?.cf_username) return;
+
+    const confirmed = window.confirm(
+      `Вы уверены, что хотите отвязать Codeforces аккаунт: ${userData.cf_username}? Рейтинг будет пересчитан.`,
+    );
+
+    if (!confirmed) return;
+
+    try {
+      const response = await fetch('/api/profile', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ cf_username: null }),
+      });
+
+      const result = await response.json();
+
+      if (response.ok) {
+        setUserData((prev) =>
+          prev
+            ? {
+                ...prev,
+                cf_username: null,
+                bscp_rating: result.new_rating ?? prev.bscp_rating,
+              }
+            : null,
+        );
+        alert('Аккаунт Codeforces отвязан. Рейтинг обновлен.');
+      } else {
+        alert('Ошибка при отвязке аккаунта');
+      }
+    } catch (err) {
+      alert('Ошибка соединения с сервером.');
+    }
+  };
+
+  // Сохранение формы
+  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    setSaving(true);
+
+    const formData = new FormData(e.currentTarget);
+    const payload = {
+      full_name: formData.get('full_name'),
+      phone: formData.get('phone'),
+      oldPassword: formData.get('oldPassword'),
+      newPassword: formData.get('newPassword'),
+    };
+
+    try {
+      const response = await fetch('/api/profile', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+
+      const result = await response.json();
+
+      if (response.ok) {
+        alert('Данные успешно сохранены!');
+        setUserData((prev) =>
+          prev
+            ? {
+                ...prev,
+                full_name: payload.full_name as string,
+                phone: payload.phone as string,
+              }
+            : null,
+        );
+        (e.target as HTMLFormElement).reset();
+      } else {
+        alert(result.error || 'Ошибка при сохранении');
+      }
+    } catch (err) {
+      alert('Ошибка соединения с сервером.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleResetFilters = () => {
+    setDateFrom('');
+    setDateTo('');
+    setPlatformFilter('all');
+    setPlaceFrom('');
+    setPlaceTo('');
+    setRatingSort('none');
+  };
 
   if (status === 'loading' || loading) {
     return (
       <main>
         <section id="profile">
-          <p>Загрузка профиля...</p>
+          <p className="status-msg">Загрузка профиля...</p>
         </section>
       </main>
     );
@@ -93,7 +260,7 @@ const ProfilePage: React.FC = () => {
     return (
       <main>
         <section id="profile">
-          <h1 style={{ color: 'red' }}>Ошибка</h1>
+          <h1 className="error-title">Ошибка</h1>
           <p>{error}</p>
         </section>
       </main>
@@ -105,7 +272,9 @@ const ProfilePage: React.FC = () => {
       <main>
         <section id="profile">
           <p>Данные профиля не найдены.</p>
-          <button onClick={() => signOut()}>Выйти</button>
+          <button onClick={() => signOut()} className="btn-logout">
+            Выйти
+          </button>
         </section>
       </main>
     );
@@ -123,30 +292,25 @@ const ProfilePage: React.FC = () => {
           </button>
         </div>
 
-        <h1>Вход в внешние системы</h1>
+        <h1>Вход во внешние системы</h1>
         <div className="systems-links">
-          {/* 2. ЛОГИКА ДЛЯ CODEFORCES */}
-          <a
-            // Если есть юзернейм -> ссылка на его профиль CF. Если нет -> ссылка на подключение
-            href={
-              userData.cf_username
-                ? `https://codeforces.com/profile/${userData.cf_username}`
-                : '/dashboard'
-            }
-            target="_blank"
-            rel="noopener noreferrer"
-            // Меняем стиль, если подключено (опционально, можно добавить класс 'connected')
-            className={`system-link ${userData.cf_username ? 'connected' : ''}`}
-            style={
-              userData.cf_username
-                ? { borderColor: '#4caf50', color: '#4caf50' }
-                : {}
-            }
-          >
-            {userData.cf_username
-              ? `Профиль Codeforces: ${userData.cf_username}`
-              : 'Подключить Codeforces'}
-          </a>
+          {userData.cf_username ? (
+            <button
+              onClick={handleDisconnectCF}
+              className="system-link connected-cf"
+              title="Нажмите, чтобы отвязать"
+            >
+              <span className="status-indicator"></span>
+              <div className="cf-info">
+                <span className="cf-label">Подключено Codeforces</span>
+                <span className="cf-nickname">{userData.cf_username}</span>
+              </div>
+            </button>
+          ) : (
+            <a href="/dashboard" className="system-link">
+              Подключить Codeforces
+            </a>
+          )}
 
           <a
             href="https://contest.yandex.ru/enter"
@@ -183,19 +347,103 @@ const ProfilePage: React.FC = () => {
         </div>
 
         <h1>История участия и изменения рейтинга</h1>
+
+        {/* Фильтры */}
+        <div className="filters-section">
+          {/* Дата */}
+          <div className="filter-group">
+            <label>Дата (от):</label>
+            <input
+              type="date"
+              value={dateFrom}
+              onChange={(e) => setDateFrom(e.target.value)}
+            />
+          </div>
+          <div className="filter-group">
+            <label>Дата (до):</label>
+            <input
+              type="date"
+              value={dateTo}
+              onChange={(e) => setDateTo(e.target.value)}
+            />
+          </div>
+
+          {/* Платформа */}
+          <div className="filter-group">
+            <label>Платформа:</label>
+            <select
+              value={platformFilter}
+              onChange={(e) => setPlatformFilter(e.target.value)}
+            >
+              <option value="all">Все</option>
+              {platforms.map((p) => (
+                <option key={p} value={p}>
+                  {p}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* Место (диапазон) */}
+          <div className="filter-group">
+            <label>Место от:</label>
+            <input
+              type="number"
+              min="1"
+              value={placeFrom}
+              onChange={(e) => setPlaceFrom(e.target.value)}
+              placeholder="1"
+            />
+          </div>
+          <div className="filter-group">
+            <label>Место до:</label>
+            <input
+              type="number"
+              min="1"
+              value={placeTo}
+              onChange={(e) => setPlaceTo(e.target.value)}
+              placeholder="1000"
+            />
+          </div>
+
+          {/* Сортировка по рейтингу */}
+          <div className="filter-group">
+            <label>Рейтинг БЦСП:</label>
+            <select
+              value={ratingSort}
+              onChange={(e) =>
+                setRatingSort(e.target.value as 'none' | 'asc' | 'desc')
+              }
+            >
+              <option value="none">Без сортировки</option>
+              <option value="asc">По возрастанию</option>
+              <option value="desc">По убыванию</option>
+            </select>
+          </div>
+
+          <button
+            type="button"
+            className="btn-reset-filters"
+            onClick={handleResetFilters}
+          >
+            Сбросить
+          </button>
+        </div>
+
+        {/* Таблица */}
         <table>
           <thead>
             <tr>
               <th>Дата</th>
               <th>Соревнование</th>
               <th>Платформа</th>
-              <th>Результат / Изменение рейтинга</th>
-              <th>Изменение рейтинга БЦСП</th>
+              <th>Результат</th>
+              <th>Рейтинг БЦСП</th>
             </tr>
           </thead>
           <tbody>
-            {historyData.length > 0 ? (
-              historyData.map((item, index) => (
+            {filteredAndSortedHistory.length > 0 ? (
+              filteredAndSortedHistory.map((item, index) => (
                 <tr key={index}>
                   <td>{new Date(item.date_recorded).toLocaleDateString()}</td>
                   <td>{item.contest.title}</td>
@@ -205,8 +453,6 @@ const ProfilePage: React.FC = () => {
                     {item.is_manual && (
                       <span className="manual-tag">вручную</span>
                     )}
-                    {item.source_rating_change &&
-                      ` (${item.source_rating_change})`}
                   </td>
                   <td
                     className={`rating-change ${item.mmr_change < 0 ? 'negative' : ''}`}
@@ -219,53 +465,60 @@ const ProfilePage: React.FC = () => {
               ))
             ) : (
               <tr>
-                <td colSpan={5}>История участия пока пуста.</td>
+                <td colSpan={5}>Нет записей, соответствующих фильтрам.</td>
               </tr>
             )}
           </tbody>
         </table>
 
         <h1>Изменение личных данных</h1>
-        <form className="edit-form">
+        <form className="edit-form" onSubmit={handleSubmit}>
           <label htmlFor="name">ФИО</label>
           <input
             type="text"
             id="name"
+            name="full_name"
             defaultValue={userData.full_name || ''}
-            placeholder="Введите ФИО"
-            disabled={loading}
-          />
-
-          <label htmlFor="email">Email</label>
-          <input
-            type="email"
-            id="email"
-            defaultValue={userData.email || ''}
-            placeholder="Введите email"
-            readOnly
-            disabled={loading}
-          />
-
-          <label htmlFor="password">Новый пароль</label>
-          <input
-            type="password"
-            id="password"
-            placeholder="Введите новый пароль"
-            disabled={loading}
+            disabled={saving}
           />
 
           <label htmlFor="phone">Телефон</label>
           <input
             type="tel"
             id="phone"
+            name="phone"
             defaultValue={userData.phone || ''}
-            placeholder="Введите телефон"
-            disabled={loading}
+            disabled={saving}
           />
 
-          <button type="submit" className="btn-save" disabled={loading}>
-            Сохранить изменения
-          </button>
+          <div className="form-section-title">
+            <h3>Смена пароля</h3>
+            <p>Заполните только для изменения пароля</p>
+          </div>
+
+          <label htmlFor="oldPassword">Старый пароль</label>
+          <input
+            type="password"
+            id="oldPassword"
+            name="oldPassword"
+            placeholder="Текущий пароль"
+            disabled={saving}
+          />
+
+          <label htmlFor="newPassword">Новый пароль</label>
+          <input
+            type="password"
+            id="newPassword"
+            name="newPassword"
+            placeholder="Новый пароль"
+            disabled={saving}
+          />
+
+          <div className="btn-save-container">
+            <button type="submit" className="btn-save" disabled={saving}>
+              {saving ? 'Сохранение...' : 'Сохранить изменения'}
+            </button>
+          </div>
         </form>
       </section>
     </main>
