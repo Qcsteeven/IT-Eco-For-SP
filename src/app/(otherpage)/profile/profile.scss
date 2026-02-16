@@ -43,26 +43,80 @@
     padding-bottom: 5px;
   }
 
+  /* --- ОБНОВЛЕННЫЙ БЛОК КНОПОК --- */
   .systems-links {
-    display: flex;
-    flex-wrap: wrap;
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
     gap: 15px;
-    margin-bottom: 30px;
-    justify-content: center;
+    margin-bottom: 40px;
 
     .system-link {
-      display: inline-block;
+      display: flex;
+      align-items: center;
+      justify-content: center;
       padding: 12px 20px;
-      background-color: #007bff;
-      color: #fff;
+      margin-bottom: 10px;
+      background-color: #f5f5f5; /* Серый по умолчанию (не подключено) */
+      color: #333;
       text-decoration: none;
-      border-radius: 5px;
-      font-weight: bold;
-      transition: background-color 0.3s ease;
-      box-shadow: 0 2px 5px rgba(0, 123, 255, 0.3);
+      border: 1px solid #ddd;
+      border-radius: 8px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      font-size: 16px;
+      width: 100%;
+      min-height: 64px; /* Фиксируем высоту, чтобы кнопки не скакали */
 
       &:hover {
-        background-color: #0056b3;
+        background-color: #e0e0e0;
+      }
+
+      /* СТИЛИ ДЛЯ ПОДКЛЮЧЕННОГО СОСТОЯНИЯ */
+      /* Применяются, когда у элемента есть класс "connected-cf" */
+      &.connected-cf {
+        background-color: #007bff; /* Синий фон */
+        color: #fff; /* Белый текст */
+        border-color: #0056b3;
+        justify-content: flex-start; /* Выравнивание влево */
+        text-align: left;
+        position: relative;
+
+        &:hover {
+          background-color: #0056b3; /* Темно-синий при наведении */
+        }
+
+        /* Зеленая точка */
+        .status-indicator {
+          display: block;
+          flex-shrink: 0;
+          width: 12px;
+          height: 12px;
+          background-color: #4cd137;
+          border-radius: 50%;
+          margin-right: 15px;
+          box-shadow: 0 0 5px rgba(76, 209, 55, 0.8);
+        }
+
+        /* Контейнер для текста (Лейбл + Никнейм) */
+        .cf-info {
+          display: flex;
+          flex-direction: column;
+          line-height: 1.2;
+
+          .cf-label {
+            font-size: 0.75em;
+            text-transform: uppercase;
+            opacity: 0.85;
+            font-weight: normal;
+            margin-bottom: 2px;
+          }
+
+          .cf-nickname {
+            font-size: 1.1em;
+            font-weight: bold;
+          }
+        }
       }
     }
   }
@@ -126,6 +180,27 @@
       grid-column: 1;
     }
 
+    .form-section-title {
+      grid-column: 1 / -1;
+      display: flex;
+      flex-direction: column;
+      margin-top: 15px;
+
+      h3 {
+        font-weight: bold !important;
+        color: #555 !important;
+        font-size: 1em;
+        margin: 0;
+      }
+
+      p {
+        font-size: 0.85em;
+        color: #888;
+        font-weight: normal;
+        margin: 4px 0 0 0;
+      }
+    }
+
     input[type='text'],
     input[type='email'],
     input[type='password'],
@@ -134,7 +209,7 @@
       padding: 10px 12px;
       border: 1px solid #ccc;
       border-radius: 4px;
-      box-sizing: border-box; // Important for consistent sizing
+      box-sizing: border-box;
       grid-column: 2;
 
       &:focus {
@@ -144,8 +219,14 @@
       }
     }
 
+    .btn-save-container {
+      grid-column: 1 / -1;
+      display: flex;
+      justify-content: flex-end;
+      margin-top: 10px;
+    }
+
     .btn-save {
-      grid-column: 2; // Position button in the second column
       padding: 12px 25px;
       background-color: #28a745;
       color: #fff;
@@ -154,27 +235,64 @@
       font-weight: bold;
       cursor: pointer;
       transition: background-color 0.3s ease;
-      justify-self: start; // Align button to the start of its grid cell
 
       &:hover {
         background-color: #218838;
       }
     }
 
-    // Specific adjustments for single column layout on smaller screens
     @media (max-width: 768px) {
       grid-template-columns: 1fr;
-
-      label,
-      input,
-      .btn-save {
+      label, input, .form-section-title, .btn-save-container {
         grid-column: 1;
-        width: 100%;
       }
+      .btn-save-container { justify-content: center; }
+    }
+  }
+}
 
-      .btn-save {
-        justify-self: center; // Center the button in the single column
-      }
+.filters-section {
+  display: flex;
+  gap: 12px;
+  margin: 16px 0 20px;
+  flex-wrap: wrap;
+  align-items: end;
+
+  .filter-group {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    min-width: 120px;
+
+    label {
+      font-size: 0.85em;
+      font-weight: 600;
+    }
+
+    input,
+    select {
+      padding: 6px 8px;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+      font-size: 0.95em;
+    }
+
+    input[type='number'] {
+      width: 100%;
+    }
+  }
+
+  .btn-reset-filters {
+    padding: 6px 12px;
+    background: #f5f5f5;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    cursor: pointer;
+    height: fit-content;
+    font-size: 0.9em;
+
+    &:hover {
+      background: #e9e9e9;
     }
   }
 }

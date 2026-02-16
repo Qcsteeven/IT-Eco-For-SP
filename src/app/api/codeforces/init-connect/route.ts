@@ -3,9 +3,6 @@ import { getDB } from '@/lib/surreal/surreal';
 import crypto from 'crypto';
 import { Surreal } from 'surrealdb';
 
-/**
- * [POST] /api/codeforces/init-connect
- */
 export async function POST(req: NextRequest) {
   let db: Surreal | null = null;
   try {
@@ -41,13 +38,11 @@ export async function POST(req: NextRequest) {
                     api_token_hash = '',
                     cf_api_key = '', 
                     cf_api_secret = ''
-                -- ИСПРАВЛЕНИЕ 2: Используем type::record($userId) в условии WHERE
                 WHERE user_id = type::record($userId) AND platform_name = 'codeforces'
             `;
     } else {
       query = `
                 CREATE external_accounts CONTENT {
-                    -- ИСПРАВЛЕНИЕ 3: Явно преобразуем строку в Record ID
                     user_id: type::record($userId),
                     platform_name: 'codeforces',
                     handle_username: $handle,
