@@ -15,8 +15,8 @@ export const initCron = () => {
       // Важно: в dev режиме порт обычно 3000
       const response = await axios.get('http://localhost:3000/api/codeforces/update-calendar');
       console.log('[CRON] Success:', response.data);
-    } catch (error) {
-      console.error('[CRON] Error hitting API:', error.message);
+    } catch (error: any) {
+      console.error('[CRON] Error hitting API:', error?.message || 'Unknown error');
     }
   });
 

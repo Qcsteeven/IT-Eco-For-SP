@@ -11,6 +11,7 @@ interface UserData {
   bscp_rating: number;
   phone?: string;
   cf_username?: string | null;
+  atcoder_username?: string | null;
 }
 
 interface HistoryItem {
@@ -25,6 +26,63 @@ interface HistoryItem {
   };
 }
 
+interface AtCoderSubmission {
+  contest_id: string;
+  contest_name: string;
+  user_rank: number;
+  user_old_rating: number;
+  user_new_rating: number;
+  user_rating_change: number;
+  user_performance: number;
+  contest_end_time: string;
+  is_rated: boolean;
+}
+
+interface CFSubmission {
+  contest_id: string;
+  contest_name: string;
+  user_rank: number;
+  user_old_rating: number;
+  user_new_rating: number;
+  user_rating_change: number;
+  contest_end_time: string;
+  is_rated: boolean;
+}
+
+interface AtCoderUserInfo {
+  rating: number;
+  rank: string;
+  attended_contests_count: number;
+  rated_point_sum: number;
+}
+
+interface CFUserInfo {
+  rating: number;
+  rank: string;
+  max_rating: number;
+  attended_contests_count: number;
+}
+
+interface AtCoderData {
+  connected: boolean;
+  atcoder_username: string | null;
+  user_info?: AtCoderUserInfo;
+  submissions: AtCoderSubmission[];
+  pending_verification?: boolean;
+  pending_atcoder_username?: string | null;
+  verification_code?: string;
+}
+
+interface CFData {
+  connected: boolean;
+  cf_username: string | null;
+  user_info?: CFUserInfo;
+  submissions: CFSubmission[];
+  pending_verification?: boolean;
+  pending_cf_username?: string | null;
+  verification_code?: string;
+}
+
 interface ProfileApiResponse {
   ok: boolean;
   data?: {
@@ -34,8 +92,14 @@ interface ProfileApiResponse {
   error?: string;
 }
 
+interface AtCoderApiResponse {
+  ok: boolean;
+  data?: AtCoderData;
+  error?: string;
+}
+
 const ProfilePage: React.FC = () => {
-  const { data: session, status } = useSession();
+  const { status } = useSession();
   const router = useRouter();
 
   const [userData, setUserData] = useState<UserData | null>(null);
@@ -43,6 +107,26 @@ const ProfilePage: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // AtCoder состояния
+  const [atCoderData, setAtCoderData] = useState<AtCoderData | null>(null);
+  const [showAtCoderModal, setShowAtCoderModal] = useState(false);
+  const [atCoderInput, setAtCoderInput] = useState('');
+  const [atCoderLoading, setAtCoderLoading] = useState(false);
+  const [atCoderError, setAtCoderError] = useState<string | null>(null);
+  const [showAtCoderSubmissions, setShowAtCoderSubmissions] = useState(false);
+  const [generatedVerificationCode, setGeneratedVerificationCode] = useState('');
+  const [verificationStep, setVerificationStep] = useState<'input_username' | 'show_code' | 'verifying'>('input_username');
+
+  // Codeforces состояния
+  const [cfData, setCfData] = useState<CFData | null>(null);
+  const [showCFModal, setShowCFModal] = useState(false);
+  const [cfInput, setCfInput] = useState('');
+  const [cfLoading, setCfLoading] = useState(false);
+  const [cfError, setCfError] = useState<string | null>(null);
+  const [showCFSubmissions, setShowCFSubmissions] = useState(false);
+  const [cfGeneratedCode, setCfGeneratedCode] = useState('');
+  const [cfVerificationStep, setCfVerificationStep] = useState<'input_username' | 'show_code' | 'verifying'>('input_username');
 
   // Фильтры
   const [dateFrom, setDateFrom] = useState<string>('');
@@ -68,14 +152,18 @@ const ProfilePage: React.FC = () => {
           const response = await fetch('/api/profile');
           const result: ProfileApiResponse = await response.json();
 
+          console.log('[Profile API] Response:', result);
+
           if (response.ok && result.ok && result.data) {
             setUserData(result.data.user);
             setHistoryData(result.data.history);
+            console.log('[Profile] History loaded:', result.data.history.length, 'items');
+            console.log('[Profile] Platforms:', [...new Set(result.data.history.map((item: HistoryItem) => item.contest.platform))]);
           } else {
             setError(result.error || 'Не удалось загрузить данные профиля.');
             if (response.status === 401) signOut();
           }
-        } catch (err: any) {
+        } catch (err) {
           console.error('Fetch error:', err);
           setError('Сетевая ошибка при загрузке данных.');
         } finally {
@@ -84,6 +172,102 @@ const ProfilePage: React.FC = () => {
       };
 
       fetchProfileData();
+    }
+  }, [status]);
+
+  // Загрузка данных AtCoder
+  useEffect(() => {
+    if (status === 'authenticated') {
+      const fetchAtCoderData = async () => {
+        try {
+          const response = await fetch('/api/profile/atcoder');
+          const result: AtCoderApiResponse = await response.json();
+
+          if (response.ok && result.ok && result.data) {
+            setAtCoderData(result.data);
+            
+            // Обновляем историю из данных AtCoder
+            if (result.data.submissions && result.data.submissions.length > 0) {
+              const atCoderHistory: HistoryItem[] = result.data.submissions.map((sub) => ({
+                date_recorded: sub.contest_end_time || new Date().toISOString(),
+                placement: sub.user_rank?.toString() || '0',
+                mmr_change: sub.user_rating_change || 0,
+                is_manual: false,
+                source_rating_change: (sub.user_rating_change || 0) >= 0 
+                  ? `+${sub.user_rating_change}` 
+                  : `${sub.user_rating_change}`,
+                contest: {
+                  title: sub.contest_name || sub.contest_id || 'Unknown Contest',
+                  platform: 'AtCoder',
+                },
+              }));
+              
+              setHistoryData(prev => {
+                // Фильтруем существующие записи AtCoder
+                const nonAtCoderHistory = prev.filter(item => item.contest.platform !== 'AtCoder');
+                // Объединяем с новыми данными AtCoder
+                const combined = [...nonAtCoderHistory, ...atCoderHistory];
+                // Сортируем по дате (новые сверху)
+                return combined.sort((a, b) =>
+                  new Date(b.date_recorded).getTime() - new Date(a.date_recorded).getTime()
+                );
+              });
+            }
+          }
+        } catch (err) {
+          console.error('AtCoder fetch error:', err);
+        }
+      };
+
+      fetchAtCoderData();
+    }
+  }, [status]);
+
+  // Загрузка данных Codeforces
+  useEffect(() => {
+    if (status === 'authenticated') {
+      const fetchCFData = async () => {
+        try {
+          const response = await fetch('/api/profile/codeforces');
+          const result: CFData = await response.json();
+
+          if (response.ok && result) {
+            setCfData(result);
+            
+            // Обновляем историю из данных Codeforces
+            if (result.submissions && result.submissions.length > 0) {
+              const cfHistory: HistoryItem[] = result.submissions.map((sub) => ({
+                date_recorded: sub.contest_end_time || new Date().toISOString(),
+                placement: sub.user_rank?.toString() || '0',
+                mmr_change: sub.user_rating_change || 0,
+                is_manual: false,
+                source_rating_change: (sub.user_rating_change || 0) >= 0 
+                  ? `+${sub.user_rating_change}` 
+                  : `${sub.user_rating_change}`,
+                contest: {
+                  title: sub.contest_name || sub.contest_id || 'Unknown Contest',
+                  platform: 'Codeforces',
+                },
+              }));
+              
+              setHistoryData(prev => {
+                // Фильтруем существующие записи Codeforces
+                const nonCFHistory = prev.filter(item => item.contest.platform !== 'Codeforces');
+                // Объединяем с новыми данными Codeforces
+                const combined = [...nonCFHistory, ...cfHistory];
+                // Сортируем по дате (новые сверху)
+                return combined.sort((a, b) =>
+                  new Date(b.date_recorded).getTime() - new Date(a.date_recorded).getTime()
+                );
+              });
+            }
+          }
+        } catch (err) {
+          console.error('Codeforces fetch error:', err);
+        }
+      };
+
+      fetchCFData();
     }
   }, [status]);
 
@@ -154,43 +338,258 @@ const ProfilePage: React.FC = () => {
     ratingSort,
   ]);
 
-  // Обработка отвязки CF
-  const handleDisconnectCF = async (e: React.MouseEvent) => {
+  // Обработка открытия модального окна AtCoder
+  const handleAtCoderClick = (e: React.MouseEvent) => {
     e.preventDefault();
-    if (!userData?.cf_username) return;
+    if (atCoderData?.connected) {
+      // Если уже подключен - показываем/скрываем сабмишены
+      setShowAtCoderSubmissions(!showAtCoderSubmissions);
+    } else if (atCoderData?.pending_verification) {
+      // Если ожидается верификация - показываем шаг проверки
+      setVerificationStep('verifying');
+      setAtCoderInput(atCoderData.pending_atcoder_username || '');
+      setShowAtCoderModal(true);
+      setAtCoderError(null);
+    } else {
+      // Если не подключен - открываем модальное окно с вводом username
+      setVerificationStep('input_username');
+      setAtCoderInput(userData?.atcoder_username || '');
+      setShowAtCoderModal(true);
+      setAtCoderError(null);
+    }
+  };
+
+  // Обработка начала привязки AtCoder (отправка username)
+  const handleConnectAtCoder = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!atCoderInput.trim()) {
+      setAtCoderError('Введите имя пользователя AtCoder');
+      return;
+    }
+
+    setAtCoderLoading(true);
+    setAtCoderError(null);
+
+    try {
+      const response = await fetch('/api/profile/atcoder', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ atcoder_username: atCoderInput.trim() }),
+      });
+
+      const result = await response.json();
+
+      if (response.ok && result.ok) {
+        // Сохраняем код и показываем экран с инструкцией
+        setGeneratedVerificationCode(result.verification_code);
+        setVerificationStep('show_code');
+      } else {
+        setAtCoderError(result.error || 'Ошибка при привязке аккаунта');
+      }
+    } catch (err) {
+      setAtCoderError('Ошибка соединения с сервером.');
+    } finally {
+      setAtCoderLoading(false);
+    }
+  };
+
+  // Обработка проверки кода в Affiliation
+  const handleVerifyAffiliation = async () => {
+    setAtCoderLoading(true);
+    setAtCoderError(null);
+
+    try {
+      const response = await fetch('/api/profile/atcoder', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+      });
+
+      const result = await response.json();
+
+      if (response.ok && result.ok) {
+        alert(`Аккаунт AtCoder "${atCoderInput.trim()}" успешно привязан!`);
+        setShowAtCoderModal(false);
+        setAtCoderInput('');
+        setGeneratedVerificationCode('');
+        setVerificationStep('input_username');
+        
+        // Сразу обновляем данные
+        const atCoderResponse = await fetch('/api/profile/atcoder');
+        const atCoderResult = await atCoderResponse.json();
+        if (atCoderResponse.ok && atCoderResult.ok && atCoderResult.data) {
+          setAtCoderData(atCoderResult.data);
+        }
+      } else {
+        setAtCoderError(result.error || 'Код не найден в Affiliation');
+      }
+    } catch (err) {
+      setAtCoderError('Ошибка соединения с сервером.');
+    } finally {
+      setAtCoderLoading(false);
+    }
+  };
+
+  // Обработка отвязки AtCoder
+  const handleDisconnectAtCoder = async (e: React.MouseEvent) => {
+    e.preventDefault();
+    if (!atCoderData?.atcoder_username) return;
 
     const confirmed = window.confirm(
-      `Вы уверены, что хотите отвязать Codeforces аккаунт: ${userData.cf_username}? Рейтинг будет пересчитан.`,
+      `Вы уверены, что хотите отвязать AtCoder аккаунт: ${atCoderData.atcoder_username}?`,
     );
 
     if (!confirmed) return;
 
     try {
-      const response = await fetch('/api/profile', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ cf_username: null }),
+      const response = await fetch('/api/profile/atcoder', {
+        method: 'DELETE',
       });
 
       const result = await response.json();
 
-      if (response.ok) {
-        setUserData((prev) =>
-          prev
-            ? {
-                ...prev,
-                cf_username: null,
-                bscp_rating: result.new_rating ?? prev.bscp_rating,
-              }
-            : null,
-        );
-        alert('Аккаунт Codeforces отвязан. Рейтинг обновлен.');
+      if (response.ok && result.ok) {
+        alert('Аккаунт AtCoder отвязан.');
+        setUserData((prev) => (prev ? { ...prev, atcoder_username: null } : null));
+        setAtCoderData({ connected: false, atcoder_username: null, submissions: [] });
+        setShowAtCoderSubmissions(false);
       } else {
-        alert('Ошибка при отвязке аккаунта');
+        alert(result.error || 'Ошибка при отвязке аккаунта');
       }
     } catch (err) {
       alert('Ошибка соединения с сервером.');
     }
+  };
+
+  // Сброс модального окна
+  const handleCloseModal = () => {
+    setShowAtCoderModal(false);
+    setAtCoderError(null);
+    setGeneratedVerificationCode('');
+    setVerificationStep('input_username');
+  };
+
+  // Codeforces функции
+  const handleCFClick = (e: React.MouseEvent) => {
+    e.preventDefault();
+    if (cfData?.connected) {
+      setShowCFSubmissions(!showCFSubmissions);
+    } else if (cfData?.pending_verification) {
+      setCfVerificationStep('verifying');
+      setCfInput(cfData.pending_cf_username || '');
+      setShowCFModal(true);
+      setCfError(null);
+    } else {
+      setCfVerificationStep('input_username');
+      setCfInput('');
+      setShowCFModal(true);
+      setCfError(null);
+    }
+  };
+
+  const handleConnectCF = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!cfInput.trim()) {
+      setCfError('Введите хендл Codeforces');
+      return;
+    }
+
+    setCfLoading(true);
+    setCfError(null);
+
+    try {
+      const response = await fetch('/api/profile/codeforces', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ cf_handle: cfInput.trim() }),
+      });
+
+      const result = await response.json();
+
+      if (response.ok && result.ok) {
+        setCfGeneratedCode(result.verification_code);
+        setCfVerificationStep('show_code');
+      } else {
+        setCfError(result.error || 'Ошибка при привязке аккаунта');
+      }
+    } catch (err) {
+      setCfError('Ошибка соединения с сервером.');
+    } finally {
+      setCfLoading(false);
+    }
+  };
+
+  const handleVerifyCFFirstName = async () => {
+    setCfLoading(true);
+    setCfError(null);
+
+    try {
+      const response = await fetch('/api/profile/codeforces', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+      });
+
+      const result = await response.json();
+
+      if (response.ok && result.ok) {
+        alert(`Аккаунт Codeforces "${cfInput.trim()}" успешно привязан!`);
+        setShowCFModal(false);
+        setCfInput('');
+        setCfGeneratedCode('');
+        setCfVerificationStep('input_username');
+        
+        // Сразу обновляем данные
+        const cfResponse = await fetch('/api/profile/codeforces');
+        const cfResult = await cfResponse.json();
+        if (cfResponse.ok && cfResult) {
+          setCfData(cfResult);
+        }
+      } else {
+        setCfError(result.error || 'Код не найден в First Name');
+      }
+    } catch (err) {
+      setCfError('Ошибка соединения с сервером.');
+    } finally {
+      setCfLoading(false);
+    }
+  };
+
+  const handleDisconnectCFNew = async (e: React.MouseEvent) => {
+    e.preventDefault();
+    if (!cfData?.cf_username) return;
+
+    const confirmed = window.confirm(
+      `Вы уверены, что хотите отвязать Codeforces аккаунт: ${cfData.cf_username}? Рейтинг будет пересчитан.`,
+    );
+
+    if (!confirmed) return;
+
+    try {
+      const response = await fetch('/api/profile/codeforces', {
+        method: 'DELETE',
+      });
+
+      const result = await response.json();
+
+      if (response.ok && result.ok) {
+        alert('Аккаунт Codeforces отвязан. Рейтинг обновлен.');
+        setUserData((prev) =>
+          prev ? { ...prev, cf_username: null, bscp_rating: 0 } : null,
+        );
+        setCfData({ connected: false, cf_username: null, submissions: [] });
+        setShowCFSubmissions(false);
+      } else {
+        alert(result.error || 'Ошибка при отвязке аккаунта');
+      }
+    } catch (err) {
+      alert('Ошибка соединения с сервером.');
+    }
+  };
+
+  const handleCFCloseModal = () => {
+    setShowCFModal(false);
+    setCfError(null);
+    setCfGeneratedCode('');
+    setCfVerificationStep('input_username');
   };
 
   // Сохранение формы
@@ -294,24 +693,78 @@ const ProfilePage: React.FC = () => {
 
         <h1>Вход во внешние системы</h1>
         <div className="systems-links">
-          {userData.cf_username ? (
+          {/* Codeforces кнопка */}
+          {cfData?.connected ? (
             <button
-              onClick={handleDisconnectCF}
+              onClick={handleCFClick}
               className="system-link connected-cf"
-              title="Нажмите, чтобы отвязать"
+              title="Нажмите, чтобы посмотреть историю или отвязать"
             >
               <span className="status-indicator"></span>
               <div className="cf-info">
                 <span className="cf-label">Подключено Codeforces</span>
-                <span className="cf-nickname">{userData.cf_username}</span>
+                <span className="cf-nickname">{cfData.cf_username}</span>
+              </div>
+            </button>
+          ) : cfData?.pending_verification ? (
+            <button
+              onClick={handleCFClick}
+              className="system-link connected-cf"
+              style={{ backgroundColor: '#ffc107', color: '#333', border: '1px solid #e0a800' }}
+              title="Нажмите, чтобы завершить верификацию"
+            >
+              <span className="status-indicator" style={{ backgroundColor: '#ffc107' }}></span>
+              <div className="cf-info">
+                <span className="cf-label">Ожидает подтверждения</span>
+                <span className="cf-nickname">{cfData.pending_cf_username}</span>
               </div>
             </button>
           ) : (
-            <a href="/dashboard" className="system-link">
+            <button
+              onClick={handleCFClick}
+              className="system-link"
+              title="Нажмите, чтобы привязать"
+            >
               Подключить Codeforces
-            </a>
+            </button>
           )}
 
+          {/* AtCoder кнопка */}
+          {atCoderData?.connected ? (
+            <button
+              onClick={handleAtCoderClick}
+              className="system-link connected-cf"
+              title="Нажмите, чтобы отвязать или посмотреть submissions"
+            >
+              <span className="status-indicator"></span>
+              <div className="cf-info">
+                <span className="cf-label">Подключено AtCoder</span>
+                <span className="cf-nickname">{atCoderData.atcoder_username}</span>
+              </div>
+            </button>
+          ) : atCoderData?.pending_verification ? (
+            <button
+              onClick={handleAtCoderClick}
+              className="system-link connected-cf"
+              style={{ backgroundColor: '#ffc107', color: '#333', border: '1px solid #e0a800' }}
+              title="Нажмите, чтобы завершить верификацию"
+            >
+              <span className="status-indicator" style={{ backgroundColor: '#ffc107' }}></span>
+              <div className="cf-info">
+                <span className="cf-label">Ожидает подтверждения</span>
+                <span className="cf-nickname">{atCoderData.pending_atcoder_username}</span>
+              </div>
+            </button>
+          ) : (
+            <button
+              onClick={handleAtCoderClick}
+              className="system-link"
+              title="Нажмите, чтобы привязать"
+            >
+              Подключить AtCoder
+            </button>
+          )}
+          
           <a
             href="https://contest.yandex.ru/enter"
             target="_blank"
@@ -319,14 +772,6 @@ const ProfilePage: React.FC = () => {
             className="system-link"
           >
             Вход в Yandex.Contest
-          </a>
-          <a
-            href="https://atcoder.jp/login"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="system-link"
-          >
-            Вход в AtCoder
           </a>
           <a
             href="https://leetcode.com/accounts/login/"
@@ -345,6 +790,376 @@ const ProfilePage: React.FC = () => {
             Вход в ICPC
           </a>
         </div>
+
+        {/* Модальное окно для привязки Codeforces */}
+        {showCFModal && (
+          <div className="modal-overlay" onClick={handleCFCloseModal}>
+            <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+              {cfVerificationStep === 'input_username' ? (
+                <>
+                  <h2>Привязка аккаунта Codeforces</h2>
+                  <p>Введите ваш хендл на Codeforces:</p>
+                  <form onSubmit={handleConnectCF}>
+                    <input
+                      type="text"
+                      value={cfInput}
+                      onChange={(e) => setCfInput(e.target.value)}
+                      placeholder="Например: tourist"
+                      disabled={cfLoading}
+                      autoFocus
+                    />
+                    {cfError && <p className="error-message">{cfError}</p>}
+                    <div className="modal-buttons">
+                      <button
+                        type="button"
+                        onClick={handleCFCloseModal}
+                        disabled={cfLoading}
+                        className="btn-cancel"
+                      >
+                        Отмена
+                      </button>
+                      <button
+                        type="submit"
+                        disabled={cfLoading}
+                        className="btn-submit"
+                      >
+                        {cfLoading ? 'Проверка...' : 'Далее'}
+                      </button>
+                    </div>
+                  </form>
+                </>
+              ) : cfVerificationStep === 'show_code' ? (
+                <>
+                  <h2>Код верификации</h2>
+                  <div className="verification-code-display">
+                    <p>
+                      <strong>Сохраните этот код!</strong>
+                    </p>
+                    <p>
+                      Разместите его в вашем <strong>профиле на Codeforces</strong> в поле <strong>First Name</strong>:
+                    </p>
+                    <ol className="affiliation-steps">
+                      <li>Перейдите на <a href="https://codeforces.com/settings" target="_blank" rel="noopener noreferrer">Codeforces Settings</a></li>
+                      <li>Найдите поле <strong>First Name</strong> (Имя)</li>
+                      <li>Вставьте туда этот код (см. ниже)</li>
+                      <li>Нажмите <strong>Save Changes</strong> для сохранения</li>
+                      <li>Вернитесь сюда и нажмите &laquo;Проверить&raquo;</li>
+                    </ol>
+                    <div className="code-box">{cfGeneratedCode}</div>
+                    <p className="code-warning">
+                      ⚠️ Код будет показан только один раз!
+                    </p>
+                  </div>
+                  <div className="modal-buttons">
+                    <button
+                      type="button"
+                      onClick={handleCFCloseModal}
+                      disabled={cfLoading}
+                      className="btn-cancel"
+                    >
+                      Отмена
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setCfVerificationStep('verifying')}
+                      disabled={cfLoading}
+                      className="btn-submit"
+                    >
+                      Я разместил код в First Name
+                    </button>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <h2>Проверка привязки</h2>
+                  <p className="verification-instructions">
+                    Проверяем, что код размещён в поле <strong>First Name</strong> на Codeforces...
+                  </p>
+                  <div className="checking-status">
+                    <div className="spinner"></div>
+                    <p>Проверка профиля <strong>{cfInput}</strong>...</p>
+                  </div>
+                  {cfError && <p className="error-message">{cfError}</p>}
+                  <div className="modal-buttons">
+                    <button
+                      type="button"
+                      onClick={handleCFCloseModal}
+                      disabled={cfLoading}
+                      className="btn-cancel"
+                    >
+                      Отмена
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleVerifyCFFirstName}
+                      disabled={cfLoading}
+                      className="btn-submit"
+                    >
+                      {cfLoading ? 'Проверка...' : 'Проверить'}
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Модальное окно для привязки AtCoder */}
+        {showAtCoderModal && (
+          <div className="modal-overlay" onClick={handleCloseModal}>
+            <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+              {verificationStep === 'input_username' ? (
+                <>
+                  <h2>Привязка аккаунта AtCoder</h2>
+                  <p>Введите ваше имя пользователя на AtCoder:</p>
+                  <form onSubmit={handleConnectAtCoder}>
+                    <input
+                      type="text"
+                      value={atCoderInput}
+                      onChange={(e) => setAtCoderInput(e.target.value)}
+                      placeholder="Например: user123"
+                      disabled={atCoderLoading}
+                      autoFocus
+                    />
+                    {atCoderError && <p className="error-message">{atCoderError}</p>}
+                    <div className="modal-buttons">
+                      <button
+                        type="button"
+                        onClick={handleCloseModal}
+                        disabled={atCoderLoading}
+                        className="btn-cancel"
+                      >
+                        Отмена
+                      </button>
+                      <button
+                        type="submit"
+                        disabled={atCoderLoading}
+                        className="btn-submit"
+                      >
+                        {atCoderLoading ? 'Проверка...' : 'Далее'}
+                      </button>
+                    </div>
+                  </form>
+                </>
+              ) : verificationStep === 'show_code' ? (
+                <>
+                  <h2>Код верификации</h2>
+                  <div className="verification-code-display">
+                    <p>
+                      <strong>Сохраните этот код!</strong>
+                    </p>
+                    <p>
+                      Разместите его в вашем <strong>профиле на AtCoder</strong> в поле <strong>Affiliation</strong>:
+                    </p>
+                    <ol className="affiliation-steps">
+                      <li>Перейдите на <a href="https://atcoder.jp/settings" target="_blank" rel="noopener noreferrer">AtCoder Settings</a></li>
+                      <li>Найдите поле <strong>Affiliation</strong> (Организация/Компания)</li>
+                      <li>Вставьте туда этот код (см. ниже)</li>
+                      <li>Нажмите <strong>Update</strong> для сохранения</li>
+                      <li>Вернитесь сюда и нажмите &laquo;Проверить&raquo;</li>
+                    </ol>
+                    <div className="code-box">{generatedVerificationCode}</div>
+                    <p className="code-warning">
+                      ⚠️ Код будет показан только один раз!
+                    </p>
+                  </div>
+                  <div className="modal-buttons">
+                    <button
+                      type="button"
+                      onClick={handleCloseModal}
+                      disabled={atCoderLoading}
+                      className="btn-cancel"
+                    >
+                      Отмена
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setVerificationStep('verifying')}
+                      disabled={atCoderLoading}
+                      className="btn-submit"
+                    >
+                      Я разместил код в Affiliation
+                    </button>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <h2>Проверка привязки</h2>
+                  <p className="verification-instructions">
+                    Проверяем, что код размещён в поле <strong>Affiliation</strong> на AtCoder...
+                  </p>
+                  <div className="checking-status">
+                    <div className="spinner"></div>
+                    <p>Проверка профиля <strong>{atCoderInput}</strong>...</p>
+                  </div>
+                  {atCoderError && <p className="error-message">{atCoderError}</p>}
+                  <div className="modal-buttons">
+                    <button
+                      type="button"
+                      onClick={handleCloseModal}
+                      disabled={atCoderLoading}
+                      className="btn-cancel"
+                    >
+                      Отмена
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleVerifyAffiliation}
+                      disabled={atCoderLoading}
+                      className="btn-submit"
+                    >
+                      {atCoderLoading ? 'Проверка...' : 'Проверить'}
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Секция с данными AtCoder */}
+        {atCoderData?.connected && showAtCoderSubmissions && (
+          <div className="atcoder-section">
+            <div className="atcoder-header">
+              <h2>Данные AtCoder: {atCoderData.atcoder_username}</h2>
+              <button
+                onClick={handleDisconnectAtCoder}
+                className="btn-disconnect"
+                title="Отвязать аккаунт"
+              >
+                Отвязать
+              </button>
+            </div>
+            
+            {atCoderData.user_info && (
+              <div className="atcoder-stats">
+                <div className="stat-item">
+                  <span className="stat-label">Рейтинг:</span>
+                  <span className="stat-value">{atCoderData.user_info.rating}</span>
+                </div>
+                <div className="stat-item">
+                  <span className="stat-label">Ранг:</span>
+                  <span className="stat-value">{atCoderData.user_info.rank || 'N/A'}</span>
+                </div>
+                <div className="stat-item">
+                  <span className="stat-label">Участий в контестах:</span>
+                  <span className="stat-value">{atCoderData.user_info.attended_contests_count}</span>
+                </div>
+                <div className="stat-item">
+                  <span className="stat-label">Сумма очков:</span>
+                  <span className="stat-value">{atCoderData.user_info.rated_point_sum}</span>
+                </div>
+              </div>
+            )}
+
+            <h3>История участия в контестах</h3>
+            {atCoderData.submissions && atCoderData.submissions.length > 0 ? (
+              <table className="atcoder-submissions">
+                <thead>
+                  <tr>
+                    <th>Дата</th>
+                    <th>Контест</th>
+                    <th>Место</th>
+                    <th>Рейтинг до</th>
+                    <th>Рейтинг после</th>
+                    <th>Изменение</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {atCoderData.submissions
+                    .slice()
+                    .reverse()
+                    .map((sub) => (
+                      <tr key={sub.contest_id + sub.contest_end_time}>
+                        <td>{sub.contest_end_time ? new Date(sub.contest_end_time).toLocaleDateString() : 'N/A'}</td>
+                        <td>{sub.contest_name}</td>
+                        <td>{sub.user_rank || 'N/A'}</td>
+                        <td>{sub.user_old_rating || 'N/A'}</td>
+                        <td>{sub.user_new_rating || 'N/A'}</td>
+                        <td className={sub.user_rating_change >= 0 ? 'status-ac' : 'rating-change negative'}>
+                          {sub.user_rating_change >= 0 ? '+' : ''}{sub.user_rating_change}
+                        </td>
+                      </tr>
+                    ))}
+                </tbody>
+              </table>
+            ) : (
+              <p>Нет данных об участии в контестах или данные загружаются...</p>
+            )}
+          </div>
+        )}
+
+        {/* Секция с данными Codeforces */}
+        {cfData?.connected && showCFSubmissions && (
+          <div className="atcoder-section">
+            <div className="atcoder-header">
+              <h2>Данные Codeforces: {cfData.cf_username}</h2>
+              <button
+                onClick={handleDisconnectCFNew}
+                className="btn-disconnect"
+                title="Отвязать аккаунт"
+              >
+                Отвязать
+              </button>
+            </div>
+
+            {cfData.user_info && (
+              <div className="atcoder-stats">
+                <div className="stat-item">
+                  <span className="stat-label">Рейтинг:</span>
+                  <span className="stat-value">{cfData.user_info.rating}</span>
+                </div>
+                <div className="stat-item">
+                  <span className="stat-label">Ранг:</span>
+                  <span className="stat-value">{cfData.user_info.rank || 'N/A'}</span>
+                </div>
+                <div className="stat-item">
+                  <span className="stat-label">Макс. рейтинг:</span>
+                  <span className="stat-value">{cfData.user_info.max_rating || 'N/A'}</span>
+                </div>
+                <div className="stat-item">
+                  <span className="stat-label">Участий в контестах:</span>
+                  <span className="stat-value">{cfData.user_info.attended_contests_count}</span>
+                </div>
+              </div>
+            )}
+
+            <h3>История участия в контестах</h3>
+            {cfData.submissions && cfData.submissions.length > 0 ? (
+              <table className="atcoder-submissions">
+                <thead>
+                  <tr>
+                    <th>Дата</th>
+                    <th>Контест</th>
+                    <th>Место</th>
+                    <th>Рейтинг до</th>
+                    <th>Рейтинг после</th>
+                    <th>Изменение</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {cfData.submissions
+                    .slice()
+                    .reverse()
+                    .map((sub) => (
+                      <tr key={sub.contest_id + sub.contest_end_time}>
+                        <td>{sub.contest_end_time ? new Date(sub.contest_end_time).toLocaleDateString() : 'N/A'}</td>
+                        <td>{sub.contest_name}</td>
+                        <td>{sub.user_rank || 'N/A'}</td>
+                        <td>{sub.user_old_rating || 'N/A'}</td>
+                        <td>{sub.user_new_rating || 'N/A'}</td>
+                        <td className={sub.user_rating_change >= 0 ? 'status-ac' : 'rating-change negative'}>
+                          {sub.user_rating_change >= 0 ? '+' : ''}{sub.user_rating_change}
+                        </td>
+                      </tr>
+                    ))}
+                </tbody>
+              </table>
+            ) : (
+              <p>Нет данных об участии в контестах или данные загружаются...</p>
+            )}
+          </div>
+        )}
 
         <h1>История участия и изменения рейтинга</h1>
 
@@ -447,7 +1262,13 @@ const ProfilePage: React.FC = () => {
                 <tr key={index}>
                   <td>{new Date(item.date_recorded).toLocaleDateString()}</td>
                   <td>{item.contest.title}</td>
-                  <td>{item.contest.platform}</td>
+                  <td>
+                    <span className={`platform-badge platform-${item.contest.platform.toLowerCase()}`}>
+                      {item.contest.platform === 'Codeforces' && '🔴 '}
+                      {item.contest.platform === 'AtCoder' && '🟠 '}
+                      {item.contest.platform}
+                    </span>
+                  </td>
                   <td>
                     {item.placement}
                     {item.is_manual && (

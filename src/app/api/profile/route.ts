@@ -3,6 +3,8 @@ import { getServerSession } from 'next-auth';
 import { getDB } from '@/lib/surreal/surreal';
 import { authOptions } from '@/lib/authOptions';
 import { hashPassword, verifyPassword } from '@/lib/surreal/auth';
+import axios from 'axios';
+import { fetchUserInfo, fetchUserContestList } from '@qatadaazzeh/atcoder-api';
 
 interface CF_RatingResult {
   contestId: number;
@@ -30,9 +32,10 @@ export async function GET() {
 
     const userQuery = await db.query(
       `
-      SELECT 
+      SELECT
         id, full_name, email, bscp_rating, phone,
-        (SELECT VALUE handle_username FROM external_accounts WHERE user_id = type::thing($id) AND platform_name = 'codeforces' LIMIT 1)[0] AS cf_username
+        (SELECT VALUE handle_username FROM external_accounts WHERE user_id = type::thing($id) AND platform_name = 'codeforces' AND is_verified = true LIMIT 1)[0] AS cf_username,
+        (SELECT VALUE handle_username FROM external_accounts WHERE user_id = type::thing($id) AND platform_name = 'atcoder' AND is_verified = true LIMIT 1)[0] AS atcoder_username
       FROM type::thing($id);
       `,
       { id: userId },
@@ -51,6 +54,7 @@ export async function GET() {
     let liveHistory: any[] = [];
     let calculatedTotalRating = 0;
 
+    // Получаем историю с Codeforces
     if (userData.cf_username) {
       try {
         const cfRes = await fetch(
@@ -62,7 +66,7 @@ export async function GET() {
         if (cfData.status === 'OK') {
           const cfResults: CF_RatingResult[] = cfData.result;
 
-          liveHistory = cfResults
+          const cfHistory = cfResults
             .slice()
             .reverse()
             .map((item) => {
@@ -73,7 +77,7 @@ export async function GET() {
                 date_recorded: new Date(
                   item.ratingUpdateTimeSeconds * 1000,
                 ).toISOString(),
-                placement: item.rank.toString(), // Только цифра места, без текста и скобок
+                placement: item.rank.toString(),
                 mmr_change: diff,
                 is_manual: false,
                 source_rating_change: diff >= 0 ? `+${diff}` : `${diff}`,
@@ -84,17 +88,58 @@ export async function GET() {
               };
             });
 
-          if (userData.bscp_rating !== calculatedTotalRating) {
-            await db.query(
-              `UPDATE type::thing($id) SET bscp_rating = $newRating`,
-              { id: userId, newRating: calculatedTotalRating },
-            );
-            userData.bscp_rating = calculatedTotalRating;
-          }
+          liveHistory = [...liveHistory, ...cfHistory];
         }
       } catch (e) {
         console.error('CF Fetch Error:', e);
       }
+    }
+
+    // Получаем историю с AtCoder
+    if (userData.atcoder_username) {
+      console.log(`[AtCoder] Fetching history for: ${userData.atcoder_username}`);
+
+      try {
+        // Используем @qatadaazzeh/atcoder-api для получения данных
+        const userInfo = await fetchUserInfo(userData.atcoder_username);
+        const contestHistory = await fetchUserContestList(userData.atcoder_username);
+
+        console.log(`[AtCoder] Contests fetched: ${contestHistory.length}`);
+
+        const atCoderHistory = contestHistory.map((contest: any) => {
+          const diff = contest.userRatingChange || ((contest.userNewRating || 0) - (contest.userOldRating || 0));
+
+          return {
+            date_recorded: new Date(contest.contestEndTime || contest.contest_end_time || Date.now()).toISOString(),
+            placement: (contest.userRank || contest.rank || '0').toString(),
+            mmr_change: diff,
+            is_manual: false,
+            source_rating_change: diff >= 0 ? `+${diff}` : `${diff}`,
+            contest: {
+              title: contest.contestName || contest.contest_id || '',
+              platform: 'AtCoder',
+            },
+          };
+        });
+
+        console.log(`[AtCoder] Formatted history:`, atCoderHistory);
+        liveHistory = [...liveHistory, ...atCoderHistory];
+        console.log(`[AtCoder] Total history after merge: ${liveHistory.length}`);
+      } catch (e) {
+        console.error('AtCoder Fetch Error:', e);
+      }
+    }
+
+    // Сортируем по дате (новые сверху)
+    liveHistory.sort((a, b) => new Date(b.date_recorded).getTime() - new Date(a.date_recorded).getTime());
+
+    // Обновляем рейтинг если изменился
+    if (userData.bscp_rating !== calculatedTotalRating && calculatedTotalRating !== 0) {
+      await db.query(
+        `UPDATE type::thing($id) SET bscp_rating = $newRating`,
+        { id: userId, newRating: calculatedTotalRating },
+      );
+      userData.bscp_rating = calculatedTotalRating;
     }
 
     return NextResponse.json({
