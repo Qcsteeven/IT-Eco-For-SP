@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDB } from '@/lib/surreal/surreal';
+import { buildContestEmbeddingText } from '@/lib/contembtext'
+import { getEmbedding } from '@/lib/embedding'; 
 import axios from 'axios';
 
 export async function GET(req: NextRequest) {
@@ -12,7 +14,7 @@ export async function GET(req: NextRequest) {
     }
 
     const upcomingContests = response.data.result.filter(
-      (contest: any) => contest.phase === 'BEFORE',
+      (contest: any) => contest.phase === 'BEFORE'
     );
 
     const db = await getDB();
@@ -22,32 +24,42 @@ export async function GET(req: NextRequest) {
 
       const startTime = new Date(contest.startTimeSeconds * 1000).toISOString();
       const endTime = new Date(
-        (contest.startTimeSeconds + contest.durationSeconds) * 1000,
+        (contest.startTimeSeconds + contest.durationSeconds) * 1000
       ).toISOString();
 
-      // Мы используем MERGE, чтобы обновить только указанные поля
-      // Если Surreal жалуется на 'title', значит в схеме оно обязательное.
+      // Генерируем эмбеддинг из enriched-текста
+      let embedding: number[] = [];
+      try {
+        const embeddingText = await buildContestEmbeddingText(contest);
+        embedding = await getEmbedding(embeddingText);
+      } catch (e) {
+        console.warn(`⚠️ Failed to generate embedding for contest ID ${contest.id}:`, e);
+        continue; // или пропустить запись
+      }
+
       await db.query(
         `
         UPSERT type::thing($id) CONTENT {
             platform: 'Codeforces',
             platform_contest_id: $pc_id,
             name: $name,
-            title: $name, -- Добавляем title, если БД его требует
+            title: $name,
             start_time_utc: type::datetime($start),
             end_time_utc: type::datetime($end),
             registration_link: $link,
+            embedding: $embedding,  -- ← добавлено
             updated_at: time::now()
         };
         `,
         {
           id: recordId,
           pc_id: contest.id.toString(),
-          name: contest.name || 'Untitled Contest', // Защита от NONE
+          name: contest.name || 'Untitled Contest',
           start: startTime,
           end: endTime,
-          link: `https://codeforces.com/contests/${contest.id}`,
-        },
+          link: `https://codeforces.com/contests/${contest.id}`, 
+          embedding,
+        }
       );
     }
 

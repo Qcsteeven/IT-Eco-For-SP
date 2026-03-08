@@ -1,9 +1,8 @@
-// src/lib/rag.ts
 import { getDB } from "@/lib/surreal/surreal";
+import { getEmbedding } from "@/lib/embedding"; // ваша функция Fireworks
 
-// Типы для данных из SurrealDB
 interface NewsItem {
-  id: any; // Может быть строкой или объектом _RecordId
+  id: any;
   title: string;
   content: string;
   publish_date: string;
@@ -11,75 +10,51 @@ interface NewsItem {
 }
 
 interface Contest {
-  id: any; // Может быть строкой или объектом _RecordId
+  id: any;
   title: string;
   platform: string;
   status: string;
   start_time_utc: string;
   end_time_utc: string;
   registration_link: string;
+  similarity?: number; // добавим для удобства
 }
 
 export async function getRagContext(query: string | undefined): Promise<string> {
-  const safeQuery = (query ?? '').trim().toLowerCase();
-  
+  const safeQuery = (query ?? '').trim();
+  if (!safeQuery) return '';
+
+  const lowerQuery = safeQuery.toLowerCase();
+
   // Базовые ответы
-  if (safeQuery.includes('дедлайн')) {
+  if (lowerQuery.includes('дедлайн')) {
     return 'Дедлайн по задаче "AI-агент" — 14 декабря 2025.';
   }
-  if (safeQuery.includes('rag')) {
+  if (lowerQuery.includes('rag')) {
     return 'RAG (Retrieval-Augmented Generation) — метод, при котором к запросу добавляется релевантный контекст из базы знаний.';
-  }
-
-  // Извлечение даты из запроса
-  const dateMatch = safeQuery.match(/(\d{1,2})[ .-](\d{1,2})[ .-](\d{2,4})/);
-  let targetDate = '';
-  
-  if (dateMatch) {
-    const day = dateMatch[1].padStart(2, '0');
-    const month = dateMatch[2].padStart(2, '0');
-    const year = dateMatch[3].length === 2 ? `20${dateMatch[3]}` : dateMatch[3];
-    targetDate = `${year}-${month}-${day}`;
   }
 
   try {
     const db = await getDB();
-    const now = new Date().toISOString();
     let context = '';
 
-    // 1. Обработка новостей
-    if (safeQuery.includes('новости') || safeQuery.includes('новость')) {
-      let newsQuery = '';
-      const params: Record<string, string> = {};
-
-      if (dateMatch) {
-        newsQuery = `SELECT * FROM news WHERE string::slice(publish_date, 0, 10) = $targetDate`;
-        params.targetDate = targetDate;
-      } else if (safeQuery.includes('последние') || safeQuery.includes('свежие')) {
-        newsQuery = `SELECT * FROM news ORDER BY publish_date DESC LIMIT 5`;
-      } else {
-        // По умолчанию последние новости
-        newsQuery = `SELECT * FROM news ORDER BY publish_date DESC LIMIT 5`;
-      }
-
-      const newsResult = await db.query(newsQuery, params);
-      
-      // Корректная типизация результата
+    if (lowerQuery.includes('новости') || lowerQuery.includes('новость')) {
+      const newsResult = await db.query(
+        `SELECT * FROM news ORDER BY publish_date DESC LIMIT 5`
+      );
       const newsItems: NewsItem[] = Array.isArray(newsResult) && newsResult.length > 0 
         ? (newsResult[0] as NewsItem[]) 
         : [];
-      
+
       if (newsItems.length > 0) {
         context += '📰 Последние новости:\n';
         newsItems.forEach((item) => {
           const date = item.publish_date
             ? new Date(item.publish_date).toLocaleDateString('ru-RU')
             : 'Без даты';
-          
           const contentPreview = item.content?.length > 100 
             ? `${item.content.substring(0, 100)}...` 
             : item.content || 'Без содержания';
-          
           context += `- ${item.title || 'Без заголовка'} (${date})\n`;
           context += `  ${contentPreview}\n`;
           context += `  Источник: ${item.registration_link?.trim() || 'внутренняя рассылка'}\n\n`;
@@ -87,69 +62,55 @@ export async function getRagContext(query: string | undefined): Promise<string> 
       }
     }
 
-    // 2. Обработка контестов
-    if (safeQuery.includes('контест') || safeQuery.includes('соревновани')) {
-      let contestQuery = '';
-      let contestType = 'Актуальные контесты';
-      const params: Record<string, string> = { now };
 
-      if (safeQuery.includes('будущие') || safeQuery.includes('предстоящие')) {
-        contestQuery = `SELECT * FROM contests 
-                        WHERE status != 'Finished' 
-                        AND end_time_utc > $now 
-                        ORDER BY start_time_utc ASC 
-                        LIMIT 5`;
-        contestType = 'Будущие контесты';
-      } 
-      else if (safeQuery.includes('прошедшие') || safeQuery.includes('завершенные')) {
-        contestQuery = `SELECT * FROM contests 
-                        WHERE status = 'Finished' 
-                        OR end_time_utc < $now 
-                        ORDER BY end_time_utc DESC 
-                        LIMIT 5`;
-        contestType = 'Прошедшие контесты';
-      } 
-      else if (dateMatch) {
-        contestQuery = `SELECT * FROM contests 
-                        WHERE string::slice(start_time_utc, 0, 10) = $targetDate 
-                        OR string::slice(end_time_utc, 0, 10) = $targetDate`;
-        params.targetDate = targetDate;
-        contestType = `Контесты за ${targetDate.split('-').reverse().join('.')}`;
-      } 
-      else {
-        contestQuery = `SELECT * FROM contests 
-                        ORDER BY start_time_utc DESC 
-                        LIMIT 5`;
-      }
+    if (lowerQuery.includes('контест') || lowerQuery.includes('соревновани')) {
+      try {
+        const queryEmbedding = await getEmbedding(safeQuery); // исходный query, не lowercase
 
-      if (contestQuery) {
-        const contestResult = await db.query(contestQuery, params);
-        
-        // Корректная типизация результата
+        const contestResult = await db.query(
+          `
+          SELECT 
+            *,
+            vector::similarity::cosine(embedding, $query_vector) AS similarity
+          FROM contests
+          WHERE embedding <|20|> $query_vector
+          ORDER BY similarity DESC
+          LIMIT 5;
+          `,
+          { query_vector: queryEmbedding }
+        );
+
         const contests: Contest[] = Array.isArray(contestResult) && contestResult.length > 0 
           ? (contestResult[0] as Contest[]) 
           : [];
-        console.log(contests)
+
         if (contests.length > 0) {
-          context += `${contestType}:\n`;
+          context += '🎯 Релевантные контесты (по смыслу):\n';
           contests.forEach((contest) => {
             const start = contest.start_time_utc
               ? new Date(contest.start_time_utc).toLocaleString('ru-RU')
-              : 'Неизвестное время начала';
-            
+              : 'Неизвестно';
             const end = contest.end_time_utc
               ? new Date(contest.end_time_utc).toLocaleString('ru-RU')
-              : 'Неизвестное время окончания';
-            
-            context += `- ${contest.title || 'Без названия'} (${contest.platform || 'Неизвестная платформа'})\n`;
-            context += `  Статус: ${contest.status || 'Неизвестно'}\n`;
-            context += `  Время: ${start} - ${end}\n`;
-            context += `  Регистрация: ${contest.registration_link?.trim() || 'Ссылка отсутствует'}\n\n`;
+              : 'Неизвестно';
+
+            context += `- ${contest.title || 'Без названия'} (${contest.platform || 'Codeforces'})\n`;
+            context += `  Время: ${start} – ${end}\n`;
+            context += `  Регистрация: ${contest.registration_link?.trim() || '—'}\n`;
+            if (contest.similarity !== undefined) {
+              context += `  Схожесть: ${(contest.similarity * 100).toFixed(1)}%\n`;
+            }
+            context += `\n`;
           });
+        } else {
+          context += 'Контесты по вашему запросу не найдены.\n';
         }
+      } catch (e) {
+        console.warn('Ошибка векторного поиска контестов:', e);
+        context += 'Не удалось выполнить семантический поиск контестов.\n';
       }
     }
-    console.log(context.trim())
+
     return context.trim();
   } catch (error) {
     console.error('RAG Error:', error);

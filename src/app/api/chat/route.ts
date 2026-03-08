@@ -1,9 +1,12 @@
-import { fireworks } from '@ai-sdk/fireworks';
-import { streamText, UIMessage, convertToModelMessages } from 'ai';
+import { UIMessage } from 'ai';
 import { createSystemPrompt } from '@/lib/prompts';
 import { getRagContext } from '@/lib/rag';
+import { apiBaseUrl } from 'next-auth/client/_utils';
 
 export const maxDuration = 30;
+
+// Отключаем кэширование для этого роута
+export const dynamic = 'force-dynamic';
 
 export async function POST(req: Request) {
   try {
@@ -16,7 +19,6 @@ export async function POST(req: Request) {
     let userMessage = '';
 
     if (lastUserMessage?.parts) {
-      // Собираем все текстовые части
       for (const part of lastUserMessage.parts) {
         if (part.type === 'text') {
           userMessage += part.text;
@@ -29,22 +31,47 @@ export async function POST(req: Request) {
       throw new Error('Empty user message after extracting from parts');
     }
 
-    // 🔸 ВРЕМЕННО: фиксированная роль (заменить на данные пользователя позже)
-    const agentRole = 'student'; // или 'organizer'
+    const agentRole = 'student';
 
     // RAG + промпт
     const ragContext = await getRagContext(userMessage);
     const mode = /json/i.test(userMessage) ? 'action' : 'chat';
     const systemPrompt = createSystemPrompt({ ragContext, agentRole, mode });
 
-    // Генерация
-    const result = streamText({
-      model: fireworks('accounts/fireworks/models/gpt-oss-20b'),
-      messages: convertToModelMessages(messages),
-      system: systemPrompt,
+    // Конвертируем сообщения в простой формат для RouterAI
+    const simpleMessages = messages.map(m => {
+      const textParts = m.parts?.filter(p => p.type === 'text') || [];
+      const text = textParts.map((p: any) => p.text).join('');
+      return { role: m.role, content: text };
     });
 
-    return result.toUIMessageStreamResponse();
+    // Прямой запрос к RouterAI API
+    const response = await fetch('https://routerai.ru/api/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${process.env.ROUTERAI_API_KEY}`,
+      },
+      body: JSON.stringify({
+        model: 'qwen/qwen3-235b-a22b-2507',
+        messages: [
+          { role: 'system', content: systemPrompt },
+          ...simpleMessages
+        ],
+        stream: true,
+      }),
+    });
+
+    if (!response.ok || !response.body) {
+      throw new Error(`RouterAI API error: ${response.status}`);
+    }
+
+    // Возвращаем стрим напрямую
+    return new Response(response.body, {
+      headers: {
+        'Content-Type': 'text/event-stream; charset=utf-8',
+      },
+    });
   } catch (error) {
     console.error('AI chat error:', error);
     return new Response(JSON.stringify({ error: 'AI generation failed' }), {
