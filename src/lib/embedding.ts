@@ -1,12 +1,12 @@
 export async function getEmbedding(text: string): Promise<number[]> {
-  const response = await fetch('https://api.fireworks.ai/inference/v1/embeddings', {
+  const response = await fetch('https://routerai.ru/api/v1/embeddings', {
     method: 'POST',
     headers: {
-      'Authorization': `Bearer ${process.env.FIREWORKS_API_KEY}`,
+      'Authorization': `Bearer ${process.env.ROUTERAI_API_KEY}`,
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
-      model: 'nomic-ai/nomic-embed-text-v1.5', // ← embedding-модель
+      model: 'intfloat/multilingual-e5-large', // ← embedding-модель
       input: text,
       encoding_format: 'float',
     }),
