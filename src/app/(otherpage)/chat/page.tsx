@@ -47,6 +47,9 @@ export default function ChatPage() {
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messagesRef = useRef<UIMessage[]>([]);
+  const fullTextRef = useRef('');
+  const displayedTextRef = useRef('');
+  const displayedIndexRef = useRef(0);
 
   // Синхронизируем ref с state
   useEffect(() => {
@@ -75,19 +78,12 @@ export default function ChatPage() {
       parts: [{ type: 'text', text: input }],
     };
 
-    // Сохраняем текущие сообщения ДО обновления state
     const currentMessages = [...messagesRef.current];
-    
-    // Добавляем сообщение пользователя в state
+
     setMessages((prev) => [...prev, userMessage]);
     setInput('');
 
     try {
-      console.log('[client] sending messages:', [...currentMessages, userMessage].map(m => ({ 
-        role: m.role, 
-        text: m.parts?.find(p => p.type === 'text')?.text?.slice(0, 30) 
-      })));
-      
       const res = await fetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -103,43 +99,60 @@ export default function ChatPage() {
       const reader = res.body.getReader();
       const decoder = new TextDecoder();
 
-      let assistantMessage: UIMessage = {
-        id: crypto.randomUUID(),
-        role: 'assistant',
-        parts: [],
+      const assistantId = crypto.randomUUID();
+      fullTextRef.current = '';
+      displayedTextRef.current = '';
+      displayedIndexRef.current = 0;
+
+      // Буфер для сбора полных JSON строк
+      let buffer = '';
+      let isAnimating = false;
+
+      const updateAssistantMessage = (text: string) => {
+        setMessages((prev) => {
+          const filtered = prev.filter((m) => m.id !== assistantId);
+          return [
+            ...filtered,
+            {
+              id: assistantId,
+              role: 'assistant',
+              parts: [{ type: 'text', text }],
+            },
+          ];
+        });
       };
 
-      let fullText = '';
-      let displayedText = '';
-      let typingQueue = '';
-      let typingTimeout: NodeJS.Timeout | null = null;
+      const typeNextCharacter = () => {
+        const currentFull = fullTextRef.current;
+        const currentIndex = displayedIndexRef.current;
 
-      // Typing effect - посимвольное отображение
-      const typeCharacter = () => {
-        if (typingQueue.length > 0 && displayedText.length < fullText.length) {
-          const charsToAdd = 2;
-          const nextChars = typingQueue.slice(0, charsToAdd);
-          typingQueue = typingQueue.slice(charsToAdd);
-          displayedText += nextChars;
-          
-          assistantMessage.parts = [{ type: 'text', text: displayedText }];
-          setMessages((prev) => {
-            const filtered = prev.filter(m => m.id !== assistantMessage.id);
-            return [...filtered, assistantMessage];
-          });
-          
-          const delay = Math.max(15, 40 - displayedText.length * 0.3);
-          typingTimeout = setTimeout(typeCharacter, delay);
+        if (currentIndex < currentFull.length) {
+          const nextChars = currentFull.slice(currentIndex, currentIndex + 2);
+          displayedIndexRef.current = currentIndex + nextChars.length;
+          displayedTextRef.current = currentFull.slice(0, displayedIndexRef.current);
+
+          updateAssistantMessage(displayedTextRef.current);
+
+          const delay = Math.max(15, 50 - currentIndex * 0.1);
+          setTimeout(() => {
+            typeNextCharacter();
+          }, delay);
+        } else {
+          // Анимация завершена, но могут прийти новые данные
+          isAnimating = false;
         }
       };
 
-      const addToTypingQueue = (text: string) => {
-        fullText += text;
-        typingQueue += text;
-        
-        if (!typingTimeout) {
-          typeCharacter();
+      // Запускает анимацию, если есть данные для отображения
+      const startAnimation = () => {
+        if (displayedIndexRef.current >= fullTextRef.current.length) {
+          return; // Всё отображено
         }
+        if (isAnimating) {
+          return; // Анимация уже запущена
+        }
+        isAnimating = true;
+        typeNextCharacter();
       };
 
       while (true) {
@@ -147,39 +160,43 @@ export default function ChatPage() {
         if (done) break;
 
         const chunk = decoder.decode(value, { stream: true });
+        buffer += chunk;
 
-        // Парсим SSE-формат: data: {...}
-        const lines = chunk.split('\n');
-        for (const line of lines) {
-          if (!line.trim() || !line.startsWith('data:')) continue;
+        // Разделяем по двойным новым строкам (конец SSE сообщения)
+        const parts = buffer.split('\n\n');
+        buffer = parts.pop() || ''; // Оставляем незавершённую часть в буфере
 
-          const data = line.substring(5).trim();
+        for (const line of parts) {
+          const trimmedLine = line.trim();
+          if (!trimmedLine || !trimmedLine.startsWith('data:')) continue;
+
+          const data = trimmedLine.substring(5).trim();
           if (data === '[DONE]') break;
 
           try {
             const event = JSON.parse(data);
-            if (event.choices?.[0]?.delta?.content) {
-              addToTypingQueue(event.choices[0].delta.content);
+            const content = event.choices?.[0]?.delta?.content;
+            if (content) {
+              fullTextRef.current += content;
+              startAnimation();
             }
-          } catch (e) {
+          } catch {
             // Игнорируем некорректные строки
           }
         }
       }
 
-      // Ждём завершения печати
-      if (typingTimeout) {
-        await new Promise<void>((resolve) => {
-          const checkComplete = () => {
-            if (typingQueue.length === 0) {
-              resolve();
-            } else {
-              setTimeout(checkComplete, 50);
-            }
-          };
-          checkComplete();
-        });
-      }
+      // Ждём завершения анимации
+      await new Promise<void>((resolve) => {
+        const checkComplete = () => {
+          if (displayedTextRef.current.length >= fullTextRef.current.length) {
+            resolve();
+          } else {
+            setTimeout(checkComplete, 30);
+          }
+        };
+        checkComplete();
+      });
     } catch (err) {
       console.error(err);
     } finally {
