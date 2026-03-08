@@ -44,9 +44,14 @@ export default function ChatPage() {
   const [messages, setMessages] = useState<UIMessage[]>([]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const messagesRef = useRef<UIMessage[]>([]);
+
+  // Синхронизируем ref с state
+  useEffect(() => {
+    messagesRef.current = messages;
+  }, [messages]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -62,7 +67,6 @@ export default function ChatPage() {
     e.preventDefault();
     if (!input.trim() || isLoading) return;
 
-    setError(null);
     setIsLoading(true);
 
     const userMessage: UIMessage = {
@@ -71,15 +75,24 @@ export default function ChatPage() {
       parts: [{ type: 'text', text: input }],
     };
 
+    // Сохраняем текущие сообщения ДО обновления state
+    const currentMessages = [...messagesRef.current];
+    
+    // Добавляем сообщение пользователя в state
     setMessages((prev) => [...prev, userMessage]);
     setInput('');
 
     try {
+      console.log('[client] sending messages:', [...currentMessages, userMessage].map(m => ({ 
+        role: m.role, 
+        text: m.parts?.find(p => p.type === 'text')?.text?.slice(0, 30) 
+      })));
+      
       const res = await fetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          messages: [...messages, userMessage],
+          messages: [...currentMessages, userMessage],
         }),
       });
 
@@ -96,48 +109,79 @@ export default function ChatPage() {
         parts: [],
       };
 
-      setMessages((prev) => [...prev, assistantMessage]);
+      let fullText = '';
+      let displayedText = '';
+      let typingQueue = '';
+      let typingTimeout: NodeJS.Timeout | null = null;
+
+      // Typing effect - посимвольное отображение
+      const typeCharacter = () => {
+        if (typingQueue.length > 0 && displayedText.length < fullText.length) {
+          const charsToAdd = 2;
+          const nextChars = typingQueue.slice(0, charsToAdd);
+          typingQueue = typingQueue.slice(charsToAdd);
+          displayedText += nextChars;
+          
+          assistantMessage.parts = [{ type: 'text', text: displayedText }];
+          setMessages((prev) => {
+            const filtered = prev.filter(m => m.id !== assistantMessage.id);
+            return [...filtered, assistantMessage];
+          });
+          
+          const delay = Math.max(15, 40 - displayedText.length * 0.3);
+          typingTimeout = setTimeout(typeCharacter, delay);
+        }
+      };
+
+      const addToTypingQueue = (text: string) => {
+        fullText += text;
+        typingQueue += text;
+        
+        if (!typingTimeout) {
+          typeCharacter();
+        }
+      };
 
       while (true) {
         const { value, done } = await reader.read();
         if (done) break;
 
         const chunk = decoder.decode(value, { stream: true });
+
+        // Парсим SSE-формат: data: {...}
         const lines = chunk.split('\n');
-
         for (const line of lines) {
-          if (!line.startsWith('data:')) continue;
+          if (!line.trim() || !line.startsWith('data:')) continue;
 
-          const data = line.replace(/^data:\s*/, '');
+          const data = line.substring(5).trim();
+          if (data === '[DONE]') break;
 
-          if (data === '[DONE]') return;
-
-          const event = JSON.parse(data);
-
-          if (event.type === 'text-delta') {
-            // Добавляем дельту к последнему текстовому part
-            let lastPart = assistantMessage.parts?.[assistantMessage.parts.length - 1];
-
-            if (!lastPart || lastPart.type !== 'text') {
-              // Если parts пустой или последний не текст, создаем новый
-              assistantMessage.parts = [
-                ...(assistantMessage.parts ?? []),
-                { type: 'text', text: event.delta },
-              ];
-            } else {
-              // Иначе конкатенируем дельту к последнему текстовому part
-              lastPart.text += event.delta;
+          try {
+            const event = JSON.parse(data);
+            if (event.choices?.[0]?.delta?.content) {
+              addToTypingQueue(event.choices[0].delta.content);
             }
-
-            // Обновляем state
-            setMessages((prev) => [...prev.slice(0, -1), assistantMessage]);
+          } catch (e) {
+            // Игнорируем некорректные строки
           }
-
+        }
       }
-    }
+
+      // Ждём завершения печати
+      if (typingTimeout) {
+        await new Promise<void>((resolve) => {
+          const checkComplete = () => {
+            if (typingQueue.length === 0) {
+              resolve();
+            } else {
+              setTimeout(checkComplete, 50);
+            }
+          };
+          checkComplete();
+        });
+      }
     } catch (err) {
       console.error(err);
-      setError('Ошибка при получении ответа от AI');
     } finally {
       setIsLoading(false);
     }
@@ -170,12 +214,6 @@ export default function ChatPage() {
       </div>
 
       <div className={styles.inputArea}>
-        {error && (
-          <div className="text-red-500 mb-2 p-2 bg-red-50 border border-red-200 rounded">
-            {error}
-          </div>
-        )}
-
         <form onSubmit={sendMessage} className={styles.form}>
           <input
             className={styles.inputField}
