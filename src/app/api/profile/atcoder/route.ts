@@ -71,19 +71,29 @@ export async function GET(req: NextRequest) {
 
       // Получаем contest history
       const contestHistory = await fetchUserContestList(userData.atcoder_username);
+      
+      console.log('[AtCoder] Raw contest history:', JSON.stringify(contestHistory, null, 2).substring(0, 1000));
 
       // Форматируем данные
-      const formattedSubmissions = contestHistory.map((contest: any) => ({
-        contest_id: contest.contestId || '',
-        contest_name: contest.contestName || contest.contestId || '',
-        user_rank: contest.userRank || 0,
-        user_old_rating: contest.userOldRating || 0,
-        user_new_rating: contest.userNewRating || 0,
-        user_rating_change: contest.userRatingChange || 0,
-        user_performance: contest.userPerformance || 0,
-        contest_end_time: contest.contestEndTime || '',
-        is_rated: contest.isRated || false,
-      }));
+      const formattedSubmissions = contestHistory.map((contest: any) => {
+        // Пробуем разные варианты названий полей
+        const contestId = contest.contestId || contest.contest_id || contest.contestId || '';
+        const contestName = contest.contestName || contest.contest_name || contestId || '';
+        
+        console.log('[AtCoder] Mapped contest:', { contestId, contestName });
+        
+        return ({
+          contest_id: contestId,
+          contest_name: contestName,
+          user_rank: contest.userRank || contest.user_rank || 0,
+          user_old_rating: contest.userOldRating || contest.user_old_rating || 0,
+          user_new_rating: contest.userNewRating || contest.user_new_rating || 0,
+          user_rating_change: contest.userRatingChange || contest.user_rating_change || 0,
+          user_performance: contest.userPerformance || contest.user_performance || 0,
+          contest_end_time: contest.contestEndTime || contest.contest_end_time || '',
+          is_rated: contest.isRated || contest.is_rated || false,
+        });
+      });
 
       return NextResponse.json({
         ok: true,

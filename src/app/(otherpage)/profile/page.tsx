@@ -23,6 +23,7 @@ interface HistoryItem {
   contest: {
     title: string;
     platform: string;
+    id?: string; // ID соревнования для кликабельности
   };
 }
 
@@ -61,6 +62,27 @@ interface CFUserInfo {
   rank: string;
   max_rating: number;
   attended_contests_count: number;
+}
+
+interface ContestProblem {
+  contestId: number;
+  problemIndex: string;
+  problemName: string;
+  problemUrl: string;
+}
+
+interface ContestProblemsApiResponse {
+  ok: boolean;
+  problems?: ContestProblem[];
+  solvedCount?: number;
+  totalCount?: number;
+  error?: string;
+}
+
+interface SelectedContest {
+  contestId: string;
+  contestName: string;
+  platform: string;
 }
 
 interface AtCoderData {
@@ -128,6 +150,11 @@ const ProfilePage: React.FC = () => {
   const [cfGeneratedCode, setCfGeneratedCode] = useState('');
   const [cfVerificationStep, setCfVerificationStep] = useState<'input_username' | 'show_code' | 'verifying'>('input_username');
 
+  // Состояния для задач соревнования
+  const [expandedContestId, setExpandedContestId] = useState<string | null>(null);
+  const [contestProblems, setContestProblems] = useState<Record<string, ContestProblem[]>>({});
+  const [contestProblemsLoading, setContestProblemsLoading] = useState<Record<string, boolean>>({});
+
   // Фильтры
   const [dateFrom, setDateFrom] = useState<string>('');
   const [dateTo, setDateTo] = useState<string>('');
@@ -185,34 +212,9 @@ const ProfilePage: React.FC = () => {
 
           if (response.ok && result.ok && result.data) {
             setAtCoderData(result.data);
-            
-            // Обновляем историю из данных AtCoder
-            if (result.data.submissions && result.data.submissions.length > 0) {
-              const atCoderHistory: HistoryItem[] = result.data.submissions.map((sub) => ({
-                date_recorded: sub.contest_end_time || new Date().toISOString(),
-                placement: sub.user_rank?.toString() || '0',
-                mmr_change: sub.user_rating_change || 0,
-                is_manual: false,
-                source_rating_change: (sub.user_rating_change || 0) >= 0 
-                  ? `+${sub.user_rating_change}` 
-                  : `${sub.user_rating_change}`,
-                contest: {
-                  title: sub.contest_name || sub.contest_id || 'Unknown Contest',
-                  platform: 'AtCoder',
-                },
-              }));
-              
-              setHistoryData(prev => {
-                // Фильтруем существующие записи AtCoder
-                const nonAtCoderHistory = prev.filter(item => item.contest.platform !== 'AtCoder');
-                // Объединяем с новыми данными AtCoder
-                const combined = [...nonAtCoderHistory, ...atCoderHistory];
-                // Сортируем по дате (новые сверху)
-                return combined.sort((a, b) =>
-                  new Date(b.date_recorded).getTime() - new Date(a.date_recorded).getTime()
-                );
-              });
-            }
+
+            // AtCoder история теперь загружается через основной API /api/profile
+            // Здесь ничего не делаем, данные уже есть в historyData
           }
         } catch (err) {
           console.error('AtCoder fetch error:', err);
@@ -233,34 +235,9 @@ const ProfilePage: React.FC = () => {
 
           if (response.ok && result) {
             setCfData(result);
-            
-            // Обновляем историю из данных Codeforces
-            if (result.submissions && result.submissions.length > 0) {
-              const cfHistory: HistoryItem[] = result.submissions.map((sub) => ({
-                date_recorded: sub.contest_end_time || new Date().toISOString(),
-                placement: sub.user_rank?.toString() || '0',
-                mmr_change: sub.user_rating_change || 0,
-                is_manual: false,
-                source_rating_change: (sub.user_rating_change || 0) >= 0 
-                  ? `+${sub.user_rating_change}` 
-                  : `${sub.user_rating_change}`,
-                contest: {
-                  title: sub.contest_name || sub.contest_id || 'Unknown Contest',
-                  platform: 'Codeforces',
-                },
-              }));
-              
-              setHistoryData(prev => {
-                // Фильтруем существующие записи Codeforces
-                const nonCFHistory = prev.filter(item => item.contest.platform !== 'Codeforces');
-                // Объединяем с новыми данными Codeforces
-                const combined = [...nonCFHistory, ...cfHistory];
-                // Сортируем по дате (новые сверху)
-                return combined.sort((a, b) =>
-                  new Date(b.date_recorded).getTime() - new Date(a.date_recorded).getTime()
-                );
-              });
-            }
+
+            // Codeforces история теперь загружается через основной API /api/profile
+            // Здесь ничего не делаем, данные уже есть в historyData
           }
         } catch (err) {
           console.error('Codeforces fetch error:', err);
@@ -590,6 +567,157 @@ const ProfilePage: React.FC = () => {
     setCfError(null);
     setCfGeneratedCode('');
     setCfVerificationStep('input_username');
+  };
+
+  // Загрузка задач соревнования
+  const handleContestClick = async (contestId: string, contestName: string, platform: string) => {
+    const uniqueKey = `${platform}_${contestId}`;
+    
+    // Если уже раскрыто - сворачиваем
+    if (expandedContestId === uniqueKey) {
+      setExpandedContestId(null);
+      return;
+    }
+    
+    setExpandedContestId(uniqueKey);
+    
+    // Если уже загружено - не загружаем снова
+    if (contestProblems[uniqueKey]) {
+      return;
+    }
+    
+    setContestProblemsLoading(prev => ({ ...prev, [uniqueKey]: true }));
+
+    // Для Codeforces и AtCoder используем клиентский fetch
+    if (platform.toLowerCase() === 'codeforces') {
+      await loadCFProblemsClientSide(contestId, uniqueKey);
+    } else if (platform.toLowerCase() === 'atcoder') {
+      await loadAtCoderProblemsClientSide(contestId, uniqueKey);
+    }
+  };
+
+  // Загрузка задач Codeforces - показываем только решённые
+  const loadCFProblemsClientSide = async (contestId: string, uniqueKey: string) => {
+    console.log(`[CF Client] Fetching solved problems for contest ${contestId}`);
+    
+    try {
+      // Получаем данные пользователя
+      const profileResponse = await fetch('/api/profile/codeforces');
+      const profileData = await profileResponse.json();
+      
+      if (!profileData.connected || !profileData.cf_username) {
+        console.error('[CF Client] Codeforces not connected');
+        setContestProblems(prev => ({ ...prev, [uniqueKey]: [] }));
+        setContestProblemsLoading(prev => ({ ...prev, [uniqueKey]: false }));
+        return;
+      }
+      
+      const cfHandle = profileData.cf_username;
+      console.log(`[CF Client] Using handle: ${cfHandle}`);
+      
+      // Получаем submission'ы пользователя
+      const submissionsRes = await fetch(
+        `https://codeforces.com/api/user.status?handle=${cfHandle}&from=1&count=10000`
+      );
+      const submissionsData = await submissionsRes.json();
+      
+      const solvedProblems = new Map<string, { name: string }>();
+      
+      if (submissionsData.status === 'OK' && submissionsData.result) {
+        const submissions: unknown[] = submissionsData.result;
+        console.log(`[CF Client] Found ${submissions.length} submissions`);
+        
+        // Фильтруем только решённые задачи для этого конкурса
+        submissions.forEach((sub: unknown) => {
+          const submission = sub as { 
+            problem?: { contestId?: number; index?: string; name?: string }; 
+            verdict?: string;
+          };
+          
+          if (submission.problem?.contestId === parseInt(contestId) && submission.verdict === 'OK') {
+            const idx = submission.problem.index || 'Unknown';
+            solvedProblems.set(idx, {
+              name: submission.problem.name || `Problem ${idx}`,
+            });
+          }
+        });
+        
+        console.log(`[CF Client] Solved problems:`, Array.from(solvedProblems.keys()));
+      }
+      
+      // Формируем список только решённых задач
+      const problems: ContestProblem[] = Array.from(solvedProblems.entries()).map(([index, data]) => ({
+        contestId: parseInt(contestId),
+        problemIndex: index,
+        problemName: data.name,
+        problemType: 'PROGRAMMING',
+        tags: [],
+        solved: true,
+        problemUrl: `https://codeforces.com/contest/${contestId}/problem/${index}`,
+      }));
+      
+      // Сортируем по индексу (A, B, C...)
+      problems.sort((a, b) => a.problemIndex.localeCompare(b.problemIndex));
+      
+      console.log(`[CF Client] Total solved: ${problems.length}`);
+      console.log(`[CF Client] Problems:`, problems);
+      
+      setContestProblems(prev => ({ ...prev, [uniqueKey]: problems }));
+    } catch (err) {
+      console.error('[CF Client] Error loading problems:', err);
+      setContestProblems(prev => ({ ...prev, [uniqueKey]: [] }));
+    } finally {
+      setContestProblemsLoading(prev => ({ ...prev, [uniqueKey]: false }));
+    }
+  };
+
+  // Загрузка задач AtCoder - показываем только решённые
+  const loadAtCoderProblemsClientSide = async (contestId: string, uniqueKey: string) => {
+    console.log(`[AtCoder Client] Fetching solved problems for contest ${contestId}, uniqueKey: ${uniqueKey}`);
+    
+    try {
+      // Шаг 1: Получаем список решённых problem IDs через GET
+      const getResponse = await fetch(`/api/atcoder/${contestId}/solved`);
+      const getResult = await getResponse.json();
+      
+      console.log('[AtCoder Client] GET response:', getResult);
+      
+      if (!getResponse.ok || !getResult.ok || !getResult.problemIds || getResult.problemIds.length === 0) {
+        console.log('[AtCoder Client] No solved problems found');
+        setContestProblems(prev => ({ ...prev, [uniqueKey]: [] }));
+        setContestProblemsLoading(prev => ({ ...prev, [uniqueKey]: false }));
+        return;
+      }
+      
+      // Шаг 2: Получаем названия задач через POST
+      const postResponse = await fetch(`/api/atcoder/${contestId}/solved`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          problemIds: getResult.problemIds,
+        }),
+      });
+      
+      const postResult = await postResponse.json();
+      console.log('[AtCoder Client] POST response:', postResult);
+      
+      if (postResponse.ok && postResult.ok && postResult.problems) {
+        console.log(`[AtCoder Client] Total solved: ${postResult.problems.length}`);
+        console.log(`[AtCoder Client] Problems:`, postResult.problems);
+        
+        setContestProblems(prev => ({ ...prev, [uniqueKey]: postResult.problems }));
+      } else {
+        console.error(`[AtCoder Client] Error:`, postResult.error);
+        setContestProblems(prev => ({ ...prev, [uniqueKey]: [] }));
+      }
+    } catch (err) {
+      console.error('[AtCoder Client] Error loading problems:', err);
+      setContestProblems(prev => ({ ...prev, [uniqueKey]: [] }));
+    } finally {
+      setContestProblemsLoading(prev => ({ ...prev, [uniqueKey]: false }));
+    }
   };
 
   // Сохранение формы
@@ -1258,32 +1386,117 @@ const ProfilePage: React.FC = () => {
           </thead>
           <tbody>
             {filteredAndSortedHistory.length > 0 ? (
-              filteredAndSortedHistory.map((item, index) => (
-                <tr key={index}>
-                  <td>{new Date(item.date_recorded).toLocaleDateString()}</td>
-                  <td>{item.contest.title}</td>
-                  <td>
-                    <span className={`platform-badge platform-${item.contest.platform.toLowerCase()}`}>
-                      {item.contest.platform === 'Codeforces' && '🔴 '}
-                      {item.contest.platform === 'AtCoder' && '🟠 '}
-                      {item.contest.platform}
-                    </span>
-                  </td>
-                  <td>
-                    {item.placement}
-                    {item.is_manual && (
-                      <span className="manual-tag">вручную</span>
+              filteredAndSortedHistory.map((item, index) => {
+                const uniqueKey = item.contest.id ? `${item.contest.platform}_${item.contest.id}` : null;
+                const isExpanded = uniqueKey && expandedContestId === uniqueKey;
+                const problems = uniqueKey ? contestProblems[uniqueKey] : null;
+                const isLoading = uniqueKey ? contestProblemsLoading[uniqueKey] : false;
+                
+                console.log(`[Table] Item ${index}:`, { 
+                  title: item.contest.title, 
+                  platform: item.contest.platform, 
+                  id: item.contest.id,
+                  uniqueKey 
+                });
+
+                return (
+                  <React.Fragment key={index}>
+                    <tr className={isExpanded ? 'expanded-row' : ''}>
+                      <td>{new Date(item.date_recorded).toLocaleDateString()}</td>
+                      <td>
+                        {item.contest.id ? (
+                          <button
+                            className="contest-link"
+                            onClick={() => {
+                              console.log(`[Table] Clicking contest:`, item.contest);
+                              handleContestClick(item.contest.id!, item.contest.title, item.contest.platform);
+                            }}
+                            type="button"
+                          >
+                            {isExpanded ? '▼ ' : '▶ '}
+                            {item.contest.title}
+                          </button>
+                        ) : (
+                          item.contest.title
+                        )}
+                      </td>
+                      <td>
+                        <span className={`platform-badge platform-${item.contest.platform.toLowerCase()}`}>
+                          {item.contest.platform === 'Codeforces' && '🔴 '}
+                          {item.contest.platform === 'AtCoder' && '🟠 '}
+                          {item.contest.platform}
+                        </span>
+                      </td>
+                      <td>
+                        {item.placement}
+                        {item.is_manual && (
+                          <span className="manual-tag">вручную</span>
+                        )}
+                      </td>
+                      <td
+                        className={`rating-change ${item.mmr_change < 0 ? 'negative' : ''}`}
+                      >
+                        {item.mmr_change > 0
+                          ? `+${item.mmr_change}`
+                          : item.mmr_change}
+                      </td>
+                    </tr>
+                    {isExpanded && uniqueKey && (
+                      <tr className="problems-expand-row">
+                        <td colSpan={5}>
+                          <div className="problems-container">
+                            {isLoading ? (
+                              <div className="loading-problems">
+                                <div className="spinner"></div>
+                                <p>Загрузка задач...</p>
+                              </div>
+                            ) : problems && problems.length > 0 ? (
+                              <>
+                                <div className="problems-summary">
+                                  <p>
+                                    Решено задач: <strong>{problems.length}</strong>
+                                  </p>
+                                </div>
+                                <table className="problems-table">
+                                  <thead>
+                                    <tr>
+                                      <th>Индекс</th>
+                                      <th>Название</th>
+                                      <th>Ссылка</th>
+                                    </tr>
+                                  </thead>
+                                  <tbody>
+                                    {problems.map((problem, idx) => (
+                                      <tr key={`${uniqueKey}_${problem.problemIndex}_${idx}`} className="solved-row">
+                                        <td className="problem-index">{problem.problemIndex}</td>
+                                        <td className="problem-name">{problem.problemName}</td>
+                                        <td>
+                                          <a
+                                            href={problem.problemUrl}
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            className="problem-link-button"
+                                          >
+                                            Открыть задачу
+                                          </a>
+                                        </td>
+                                      </tr>
+                                    ))}
+                                  </tbody>
+                                </table>
+                              </>
+                            ) : (
+                              <div className="no-problems">
+                                <p>Нет данных о задачах или произошла ошибка при загрузке.</p>
+                              </div>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
                     )}
-                  </td>
-                  <td
-                    className={`rating-change ${item.mmr_change < 0 ? 'negative' : ''}`}
-                  >
-                    {item.mmr_change > 0
-                      ? `+${item.mmr_change}`
-                      : item.mmr_change}
-                  </td>
-                </tr>
-              ))
+                  </React.Fragment>
+                );
+              })
             ) : (
               <tr>
                 <td colSpan={5}>Нет записей, соответствующих фильтрам.</td>

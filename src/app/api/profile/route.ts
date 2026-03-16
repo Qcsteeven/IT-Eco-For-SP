@@ -84,6 +84,7 @@ export async function GET() {
                 contest: {
                   title: item.contestName,
                   platform: 'Codeforces',
+                  id: item.contestId.toString(),
                 },
               };
             });
@@ -108,6 +109,9 @@ export async function GET() {
 
         const atCoderHistory = contestHistory.map((contest: any) => {
           const diff = contest.userRatingChange || ((contest.userNewRating || 0) - (contest.userOldRating || 0));
+          // Извлекаем короткий ID (abc446 из abc446.contest.atcoder.jp)
+          const fullContestId = contest.contestId || '';
+          const shortContestId = fullContestId.split('.')[0] || '';
 
           return {
             date_recorded: new Date(contest.contestEndTime || contest.contest_end_time || Date.now()).toISOString(),
@@ -118,6 +122,7 @@ export async function GET() {
             contest: {
               title: contest.contestName || contest.contest_id || '',
               platform: 'AtCoder',
+              id: shortContestId,
             },
           };
         });
