@@ -4,8 +4,11 @@
   "private": true,
   "scripts": {
     "dev": "next dev --turbopack",
+    "dev:docker": "docker compose up dev",
     "build": "next build --turbopack",
+    "build:docker": "docker compose build app",
     "start": "next start",
+    "start:docker": "docker compose up app",
     "lint": "eslint . --ext .ts,.tsx --max-warnings 0",
     "format": "prettier --write \"src/**/*.{ts,tsx}\"",
     "type-check": "tsc --noEmit",

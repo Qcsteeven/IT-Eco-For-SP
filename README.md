@@ -1,20 +1,27 @@
 This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
 
-## Getting Started
+## Quick Start
 
-First, run the development server:
+### Local Development
 
 ```bash
+npm install
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open [http://localhost:3000](http://localhost:3000)
+
+### Docker (рекомендуется)
+
+```bash
+# Production
+docker compose up app
+
+# Development (с hot-reload)
+docker compose up dev
+```
+
+См. [README.docker.md](./README.docker.md) для подробной документации.
 
 You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
 
