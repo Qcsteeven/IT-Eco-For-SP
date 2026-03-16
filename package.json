@@ -4,8 +4,11 @@
   "private": true,
   "scripts": {
     "dev": "next dev --turbopack",
+    "dev:docker": "docker compose up dev",
     "build": "next build --turbopack",
+    "build:docker": "docker compose build app",
     "start": "next start",
+    "start:docker": "docker compose up app",
     "lint": "eslint . --ext .ts,.tsx --max-warnings 0",
     "format": "prettier --write \"src/**/*.{ts,tsx}\"",
     "type-check": "tsc --noEmit",
@@ -27,6 +30,7 @@
     "bcrypt": "^6.0.0",
     "bcryptjs": "^3.0.3",
     "crypto": "^1.0.1",
+    "dotenv": "^17.3.1",
     "lucide-react": "^0.561.0",
     "next": "^15.5.4",
     "next-auth": "^4.24.13",
@@ -56,6 +60,7 @@
     "prettier": "^3.6.2",
     "sass": "^1.96.0",
     "tailwindcss": "^4",
+    "tsx": "^4.21.0",
     "typescript": "^5"
   }
 }

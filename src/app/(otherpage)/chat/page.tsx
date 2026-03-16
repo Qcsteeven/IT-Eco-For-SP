@@ -44,9 +44,17 @@ export default function ChatPage() {
   const [messages, setMessages] = useState<UIMessage[]>([]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const messagesRef = useRef<UIMessage[]>([]);
+  const fullTextRef = useRef('');
+  const displayedTextRef = useRef('');
+  const displayedIndexRef = useRef(0);
+
+  // Синхронизируем ref с state
+  useEffect(() => {
+    messagesRef.current = messages;
+  }, [messages]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -62,7 +70,6 @@ export default function ChatPage() {
     e.preventDefault();
     if (!input.trim() || isLoading) return;
 
-    setError(null);
     setIsLoading(true);
 
     const userMessage: UIMessage = {
@@ -70,6 +77,8 @@ export default function ChatPage() {
       role: 'user',
       parts: [{ type: 'text', text: input }],
     };
+
+    const currentMessages = [...messagesRef.current];
 
     setMessages((prev) => [...prev, userMessage]);
     setInput('');
@@ -79,7 +88,7 @@ export default function ChatPage() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          messages: [...messages, userMessage],
+          messages: [...currentMessages, userMessage],
         }),
       });
 
@@ -90,54 +99,106 @@ export default function ChatPage() {
       const reader = res.body.getReader();
       const decoder = new TextDecoder();
 
-      let assistantMessage: UIMessage = {
-        id: crypto.randomUUID(),
-        role: 'assistant',
-        parts: [],
+      const assistantId = crypto.randomUUID();
+      fullTextRef.current = '';
+      displayedTextRef.current = '';
+      displayedIndexRef.current = 0;
+
+      // Буфер для сбора полных JSON строк
+      let buffer = '';
+      let isAnimating = false;
+
+      const updateAssistantMessage = (text: string) => {
+        setMessages((prev) => {
+          const filtered = prev.filter((m) => m.id !== assistantId);
+          return [
+            ...filtered,
+            {
+              id: assistantId,
+              role: 'assistant',
+              parts: [{ type: 'text', text }],
+            },
+          ];
+        });
       };
 
-      setMessages((prev) => [...prev, assistantMessage]);
+      const typeNextCharacter = () => {
+        const currentFull = fullTextRef.current;
+        const currentIndex = displayedIndexRef.current;
+
+        if (currentIndex < currentFull.length) {
+          const nextChars = currentFull.slice(currentIndex, currentIndex + 2);
+          displayedIndexRef.current = currentIndex + nextChars.length;
+          displayedTextRef.current = currentFull.slice(0, displayedIndexRef.current);
+
+          updateAssistantMessage(displayedTextRef.current);
+
+          const delay = Math.max(15, 50 - currentIndex * 0.1);
+          setTimeout(() => {
+            typeNextCharacter();
+          }, delay);
+        } else {
+          // Анимация завершена, но могут прийти новые данные
+          isAnimating = false;
+        }
+      };
+
+      // Запускает анимацию, если есть данные для отображения
+      const startAnimation = () => {
+        if (displayedIndexRef.current >= fullTextRef.current.length) {
+          return; // Всё отображено
+        }
+        if (isAnimating) {
+          return; // Анимация уже запущена
+        }
+        isAnimating = true;
+        typeNextCharacter();
+      };
 
       while (true) {
         const { value, done } = await reader.read();
         if (done) break;
 
         const chunk = decoder.decode(value, { stream: true });
-        const lines = chunk.split('\n');
+        buffer += chunk;
 
-        for (const line of lines) {
-          if (!line.startsWith('data:')) continue;
+        // Разделяем по двойным новым строкам (конец SSE сообщения)
+        const parts = buffer.split('\n\n');
+        buffer = parts.pop() || ''; // Оставляем незавершённую часть в буфере
 
-          const data = line.replace(/^data:\s*/, '');
+        for (const line of parts) {
+          const trimmedLine = line.trim();
+          if (!trimmedLine || !trimmedLine.startsWith('data:')) continue;
 
-          if (data === '[DONE]') return;
+          const data = trimmedLine.substring(5).trim();
+          if (data === '[DONE]') break;
 
-          const event = JSON.parse(data);
-
-          if (event.type === 'text-delta') {
-            // Добавляем дельту к последнему текстовому part
-            let lastPart = assistantMessage.parts?.[assistantMessage.parts.length - 1];
-
-            if (!lastPart || lastPart.type !== 'text') {
-              // Если parts пустой или последний не текст, создаем новый
-              assistantMessage.parts = [
-                ...(assistantMessage.parts ?? []),
-                { type: 'text', text: event.delta },
-              ];
-            } else {
-              // Иначе конкатенируем дельту к последнему текстовому part
-              lastPart.text += event.delta;
+          try {
+            const event = JSON.parse(data);
+            const content = event.choices?.[0]?.delta?.content;
+            if (content) {
+              fullTextRef.current += content;
+              startAnimation();
             }
-
-            // Обновляем state
-            setMessages((prev) => [...prev.slice(0, -1), assistantMessage]);
+          } catch {
+            // Игнорируем некорректные строки
           }
-
+        }
       }
-    }
+
+      // Ждём завершения анимации
+      await new Promise<void>((resolve) => {
+        const checkComplete = () => {
+          if (displayedTextRef.current.length >= fullTextRef.current.length) {
+            resolve();
+          } else {
+            setTimeout(checkComplete, 30);
+          }
+        };
+        checkComplete();
+      });
     } catch (err) {
       console.error(err);
-      setError('Ошибка при получении ответа от AI');
     } finally {
       setIsLoading(false);
     }
@@ -170,12 +231,6 @@ export default function ChatPage() {
       </div>
 
       <div className={styles.inputArea}>
-        {error && (
-          <div className="text-red-500 mb-2 p-2 bg-red-50 border border-red-200 rounded">
-            {error}
-          </div>
-        )}
-
         <form onSubmit={sendMessage} className={styles.form}>
           <input
             className={styles.inputField}
