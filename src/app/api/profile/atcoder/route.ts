@@ -4,6 +4,7 @@ import { getDB } from '@/lib/surreal/surreal';
 import { authOptions } from '@/lib/authOptions';
 import { fetchUserInfo, fetchUserContestList } from '@qatadaazzeh/atcoder-api';
 import crypto from 'crypto';
+import axios from 'axios';
 
 // Генерация кода верификации
 function generateVerificationCode(): string {
@@ -342,10 +343,49 @@ export async function PUT(req: NextRequest) {
       );
     }
 
-    // Подтверждаем привязку
+    // Подтверждаем привязку и обновляем рейтинг
+    // Получаем рейтинг AtCoder пользователя
+    let atcoderRating = 0;
+    try {
+      const userInfo = await fetchUserInfo(atcoderUsername);
+      atcoderRating = userInfo.userRating || 0;
+    } catch (e) {
+      console.error('Error getting AtCoder rating:', e);
+    }
+
+    // Получаем рейтинг Codeforces пользователя (если привязан)
+    let cfRating = 0;
+    try {
+      const cfQuery = await db.query(
+        `SELECT (SELECT VALUE handle_username FROM external_accounts WHERE user_id = type::thing($user_id) AND platform_name = 'codeforces' AND is_verified = true LIMIT 1)[0] AS cf_username FROM type::thing($user_id)`,
+        { user_id: userId },
+      );
+      const cfResult = (cfQuery[0] as any)?.[0];
+      const cfUsername = cfResult?.cf_username;
+
+      if (cfUsername) {
+        const cfRes = await axios.get(`https://codeforces.com/api/user.info?handles=${cfUsername}`);
+        if (cfRes.data.status === 'OK' && cfRes.data.result && cfRes.data.result.length > 0) {
+          cfRating = cfRes.data.result[0].rating || 0;
+        }
+      }
+    } catch (e) {
+      console.error('Error getting CF rating:', e);
+    }
+
+    // Итоговый рейтинг = MAX(CF, AtCoder)
+    const finalRating = Math.max(cfRating, atcoderRating);
+
     await db.query(
-      `UPDATE external_accounts SET is_verified = true, verified = true, verified_at = time::now() WHERE id = $id`,
-      { id: verificationRecord.id },
+      `
+      BEGIN TRANSACTION;
+
+      UPDATE external_accounts SET is_verified = true, verified = true, verified_at = time::now() WHERE id = $id;
+      UPDATE users SET bscp_rating = $newRating WHERE id = type::thing($user_id);
+
+      COMMIT TRANSACTION;
+      `,
+      { id: verificationRecord.id, user_id: userId, newRating: finalRating },
     );
 
     return NextResponse.json({
@@ -378,10 +418,40 @@ export async function DELETE(req: NextRequest) {
 
     const userId = session.user.id.toString();
 
-    // Удаляем привязку
+    // Получаем рейтинг Codeforces пользователя (если привязан)
+    let cfRating = 0;
+    try {
+      const cfQuery = await db.query(
+        `SELECT (SELECT VALUE handle_username FROM external_accounts WHERE user_id = type::thing($user_id) AND platform_name = 'codeforces' AND is_verified = true LIMIT 1)[0] AS cf_username FROM type::thing($user_id)`,
+        { user_id: userId },
+      );
+      const cfResult = (cfQuery[0] as any)?.[0];
+      const cfUsername = cfResult?.cf_username;
+
+      if (cfUsername) {
+        const cfRes = await axios.get(`https://codeforces.com/api/user.info?handles=${cfUsername}`);
+        if (cfRes.data.status === 'OK' && cfRes.data.result && cfRes.data.result.length > 0) {
+          cfRating = cfRes.data.result[0].rating || 0;
+        }
+      }
+    } catch (e) {
+      console.error('Error getting CF rating:', e);
+    }
+
+    // Итоговый рейтинг = MAX(CF, 0) = CF (т.к. AtCoder отвязан)
+    const finalRating = cfRating;
+
+    // Удаляем привязку и обновляем рейтинг
     await db.query(
-      `DELETE external_accounts WHERE user_id = type::thing($id) AND platform_name = 'atcoder'`,
-      { id: userId },
+      `
+      BEGIN TRANSACTION;
+
+      DELETE external_accounts WHERE user_id = type::thing($id) AND platform_name = 'atcoder';
+      UPDATE users SET bscp_rating = $newRating WHERE id = type::thing($id);
+
+      COMMIT TRANSACTION;
+      `,
+      { id: userId, newRating: finalRating },
     );
 
     return NextResponse.json({

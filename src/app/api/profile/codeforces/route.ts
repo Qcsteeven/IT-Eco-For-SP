@@ -4,6 +4,7 @@ import { getDB } from '@/lib/surreal/surreal';
 import { authOptions } from '@/lib/authOptions';
 import crypto from 'crypto';
 import axios from 'axios';
+import { fetchUserInfo } from '@qatadaazzeh/atcoder-api';
 
 // Генерация кода верификации
 function generateVerificationCode(): string {
@@ -270,7 +271,7 @@ export async function PUT(req: NextRequest) {
     // Проверяем, что код есть в профиле Codeforces (в поле firstName)
     try {
       const cfRes = await axios.get(`https://codeforces.com/api/user.info?handles=${cfHandle}`);
-      
+
       if (cfRes.data.status !== 'OK' || !cfRes.data.result || cfRes.data.result.length === 0) {
         return NextResponse.json(
           { ok: false, error: 'Ошибка при получении данных профиля Codeforces' },
@@ -280,13 +281,13 @@ export async function PUT(req: NextRequest) {
 
       const cfUser = cfRes.data.result[0];
       const firstName = cfUser.firstName || '';
-      
+
       console.log(`[Codeforces] Profile: ${cfHandle}, First Name: "${firstName}", Expected: "${expectedCode}"`);
-      
+
       if (!firstName.includes(expectedCode)) {
         return NextResponse.json(
-          { 
-            ok: false, 
+          {
+            ok: false,
             error: `Код "${expectedCode}" не найден в поле First Name на Codeforces. Проверьте, что вы разместили код точно и сохранили изменения.`,
             current_first_name: firstName || '(не указано)',
           },
@@ -301,16 +302,37 @@ export async function PUT(req: NextRequest) {
       );
     }
 
-    // Получаем рейтинг пользователя
-    let newRating = 0;
+    // Получаем рейтинг Codeforces пользователя
+    let cfRating = 0;
     try {
       const cfRes = await axios.get(`https://codeforces.com/api/user.info?handles=${cfHandle}`);
       if (cfRes.data.status === 'OK' && cfRes.data.result && cfRes.data.result.length > 0) {
-        newRating = cfRes.data.result[0].rating || 0;
+        cfRating = cfRes.data.result[0].rating || 0;
       }
     } catch (e) {
       console.error('Error getting CF rating:', e);
     }
+
+    // Получаем рейтинг AtCoder пользователя (если привязан)
+    let atcoderRating = 0;
+    try {
+      const atcoderQuery = await db.query(
+        `SELECT (SELECT VALUE handle_username FROM external_accounts WHERE user_id = type::thing($user_id) AND platform_name = 'atcoder' AND is_verified = true LIMIT 1)[0] AS atcoder_username FROM type::thing($user_id)`,
+        { user_id: userId },
+      );
+      const atcoderResult = (atcoderQuery[0] as any)?.[0];
+      const atcoderUsername = atcoderResult?.atcoder_username;
+
+      if (atcoderUsername) {
+        const userInfo = await fetchUserInfo(atcoderUsername);
+        atcoderRating = userInfo.userRating || 0;
+      }
+    } catch (e) {
+      console.error('Error getting AtCoder rating:', e);
+    }
+
+    // Итоговый рейтинг = MAX(CF, AtCoder)
+    const finalRating = Math.max(cfRating, atcoderRating);
 
     // Подтверждаем привязку и обновляем рейтинг
     const updateResult = await db.query(
@@ -322,7 +344,7 @@ export async function PUT(req: NextRequest) {
 
       COMMIT TRANSACTION;
       `,
-      { id: verificationRecord.id, user_id: userId, newRating: newRating },
+      { id: verificationRecord.id, user_id: userId, newRating: finalRating },
     );
 
     console.log(`[CF PUT] Update result:`, JSON.stringify(updateResult, null, 2));
@@ -357,17 +379,38 @@ export async function DELETE(req: NextRequest) {
 
     const userId = session.user.id.toString();
 
-    // Удаляем привязку и сбрасываем рейтинг
+    // Получаем рейтинг AtCoder пользователя (если привязан)
+    let atcoderRating = 0;
+    try {
+      const atcoderQuery = await db.query(
+        `SELECT (SELECT VALUE handle_username FROM external_accounts WHERE user_id = type::thing($user_id) AND platform_name = 'atcoder' AND is_verified = true LIMIT 1)[0] AS atcoder_username FROM type::thing($user_id)`,
+        { user_id: userId },
+      );
+      const atcoderResult = (atcoderQuery[0] as any)?.[0];
+      const atcoderUsername = atcoderResult?.atcoder_username;
+
+      if (atcoderUsername) {
+        const userInfo = await fetchUserInfo(atcoderUsername);
+        atcoderRating = userInfo.userRating || 0;
+      }
+    } catch (e) {
+      console.error('Error getting AtCoder rating:', e);
+    }
+
+    // Итоговый рейтинг = MAX(0, AtCoder) = AtCoder (т.к. CF отвязан)
+    const finalRating = atcoderRating;
+
+    // Удаляем привязку и обновляем рейтинг
     await db.query(
       `
       BEGIN TRANSACTION;
-      
+
       DELETE external_accounts WHERE user_id = type::thing($id) AND platform_name = 'codeforces';
-      UPDATE users SET bscp_rating = 0 WHERE id = type::thing($id);
-      
+      UPDATE users SET bscp_rating = $newRating WHERE id = type::thing($id);
+
       COMMIT TRANSACTION;
       `,
-      { id: userId },
+      { id: userId, newRating: finalRating },
     );
 
     return NextResponse.json({

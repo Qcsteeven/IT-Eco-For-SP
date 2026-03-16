@@ -3,7 +3,6 @@ import { getServerSession } from 'next-auth';
 import { getDB } from '@/lib/surreal/surreal';
 import { authOptions } from '@/lib/authOptions';
 import { hashPassword, verifyPassword } from '@/lib/surreal/auth';
-import axios from 'axios';
 import { fetchUserInfo, fetchUserContestList } from '@qatadaazzeh/atcoder-api';
 
 interface CF_RatingResult {
@@ -52,9 +51,10 @@ export async function GET() {
     }
 
     let liveHistory: any[] = [];
-    let calculatedTotalRating = 0;
+    let cfCurrentRating = 0;
+    let atcoderCurrentRating = 0;
 
-    // Получаем историю с Codeforces
+    // Получаем историю с Codeforces и текущий рейтинг
     if (userData.cf_username) {
       try {
         const cfRes = await fetch(
@@ -66,12 +66,17 @@ export async function GET() {
         if (cfData.status === 'OK') {
           const cfResults: CF_RatingResult[] = cfData.result;
 
+          // Текущий рейтинг - последний newRating в списке (самый свежий)
+          if (cfResults.length > 0) {
+            const lastContest = cfResults[cfResults.length - 1];
+            cfCurrentRating = lastContest.newRating;
+          }
+
           const cfHistory = cfResults
             .slice()
             .reverse()
             .map((item) => {
               const diff = item.newRating - item.oldRating;
-              calculatedTotalRating += diff;
 
               return {
                 date_recorded: new Date(
@@ -96,7 +101,7 @@ export async function GET() {
       }
     }
 
-    // Получаем историю с AtCoder
+    // Получаем историю с AtCoder и текущий рейтинг
     if (userData.atcoder_username) {
       console.log(`[AtCoder] Fetching history for: ${userData.atcoder_username}`);
 
@@ -106,6 +111,9 @@ export async function GET() {
         const contestHistory = await fetchUserContestList(userData.atcoder_username);
 
         console.log(`[AtCoder] Contests fetched: ${contestHistory.length}`);
+
+        // Текущий рейтинг из userInfo
+        atcoderCurrentRating = userInfo.userRating || 0;
 
         const atCoderHistory = contestHistory.map((contest: any) => {
           const diff = contest.userRatingChange || ((contest.userNewRating || 0) - (contest.userOldRating || 0));
@@ -138,13 +146,16 @@ export async function GET() {
     // Сортируем по дате (новые сверху)
     liveHistory.sort((a, b) => new Date(b.date_recorded).getTime() - new Date(a.date_recorded).getTime());
 
+    // Итоговый рейтинг = MAX(CF, AtCoder)
+    const finalRating = Math.max(cfCurrentRating, atcoderCurrentRating);
+
     // Обновляем рейтинг если изменился
-    if (userData.bscp_rating !== calculatedTotalRating && calculatedTotalRating !== 0) {
+    if (userData.bscp_rating !== finalRating && finalRating !== 0) {
       await db.query(
         `UPDATE type::thing($id) SET bscp_rating = $newRating`,
-        { id: userId, newRating: calculatedTotalRating },
+        { id: userId, newRating: finalRating },
       );
-      userData.bscp_rating = calculatedTotalRating;
+      userData.bscp_rating = finalRating;
     }
 
     return NextResponse.json({
