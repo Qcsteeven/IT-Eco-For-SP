@@ -1,0 +1,312 @@
+.cf-stats-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.6);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 1000;
+  animation: fadeIn 0.2s ease;
+}
+
+.cf-stats-modal {
+  background: linear-gradient(135deg, #fff 0%, #f8f9fa 100%);
+  border-radius: 16px;
+  padding: 30px;
+  max-width: 600px;
+  width: 90%;
+  max-height: 85vh;
+  overflow-y: auto;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+  position: relative;
+  animation: slideUp 0.3s ease;
+}
+
+.cf-stats-close {
+  position: absolute;
+  top: 15px;
+  right: 15px;
+  background: none;
+  border: none;
+  font-size: 28px;
+  cursor: pointer;
+  color: #666;
+  width: 36px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  transition: all 0.2s;
+  
+  &:hover {
+    background-color: #f0f0f0;
+    color: #333;
+  }
+}
+
+.cf-stats-title {
+  margin: 0 0 25px 0;
+  font-size: 24px;
+  color: #333;
+  text-align: center;
+  border-bottom: 2px solid #007bff;
+  padding-bottom: 15px;
+}
+
+// Основной блок с кармой
+.cf-karma-main {
+  text-align: center;
+  margin-bottom: 30px;
+  padding: 20px;
+  background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+  border-radius: 12px;
+}
+
+.cf-karma-value {
+  font-size: 72px;
+  font-weight: bold;
+  line-height: 1;
+  margin-bottom: 10px;
+}
+
+.cf-karma-level {
+  font-size: 20px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+// Сетка статистики
+.cf-stats-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 15px;
+  margin-bottom: 25px;
+}
+
+.cf-stat-card {
+  background: #fff;
+  border: 2px solid #e9ecef;
+  border-radius: 12px;
+  padding: 15px;
+  text-align: center;
+  transition: transform 0.2s, box-shadow 0.2s;
+  
+  &:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  }
+}
+
+.cf-stat-value {
+  font-size: 28px;
+  font-weight: bold;
+  color: #007bff;
+  margin-bottom: 5px;
+}
+
+.cf-stat-label {
+  font-size: 12px;
+  color: #666;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+// Секции
+.cf-section {
+  margin-bottom: 25px;
+  padding-bottom: 25px;
+  border-bottom: 1px solid #e9ecef;
+  
+  &:last-child {
+    border-bottom: none;
+    margin-bottom: 0;
+    padding-bottom: 0;
+  }
+}
+
+.cf-section-title {
+  font-size: 18px;
+  color: #333;
+  margin: 0 0 15px 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  
+  &::before {
+    content: '';
+    display: block;
+    width: 4px;
+    height: 20px;
+    background: linear-gradient(180deg, #007bff 0%, #0056b3 100%);
+    border-radius: 2px;
+  }
+}
+
+// График распределения по сложности
+.cf-difficulty-chart {
+  margin-bottom: 15px;
+}
+
+.cf-difficulty-bar {
+  display: flex;
+  height: 40px;
+  border-radius: 8px;
+  overflow: hidden;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.cf-difficulty-segment {
+  min-width: 2%;
+  transition: width 0.5s ease;
+  
+  &.cf-easy {
+    background: linear-gradient(180deg, #28a745 0%, #1e7e34 100%);
+  }
+  
+  &.cf-medium {
+    background: linear-gradient(180deg, #007bff 0%, #0056b3 100%);
+  }
+  
+  &.cf-hard {
+    background: linear-gradient(180deg, #dc3545 0%, #c82333 100%);
+  }
+}
+
+.cf-difficulty-legend {
+  display: flex;
+  justify-content: space-around;
+  margin-top: 10px;
+  font-size: 13px;
+}
+
+.cf-legend-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  
+  &.cf-easy { color: #28a745; }
+  &.cf-medium { color: #007bff; }
+  &.cf-hard { color: #dc3545; }
+}
+
+// Разбивка кармы
+.cf-karma-breakdown {
+  background: #f8f9fa;
+  border-radius: 8px;
+  padding: 15px;
+}
+
+.cf-breakdown-row {
+  display: flex;
+  justify-content: space-between;
+  padding: 8px 12px;
+  border-bottom: 1px solid #e9ecef;
+  font-size: 14px;
+  
+  &:last-child {
+    border-bottom: none;
+  }
+  
+  &.cf-total {
+    margin-top: 10px;
+    padding-top: 10px;
+    border-top: 2px solid #dee2e6;
+    font-weight: bold;
+    font-size: 16px;
+  }
+}
+
+// График тегов
+.cf-tags-chart {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.cf-tag-row {
+  display: grid;
+  grid-template-columns: 120px 1fr 60px;
+  gap: 10px;
+  align-items: center;
+}
+
+.cf-tag-name {
+  font-size: 13px;
+  color: #333;
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cf-tag-bar-container {
+  background: #e9ecef;
+  border-radius: 4px;
+  height: 24px;
+  overflow: hidden;
+}
+
+.cf-tag-bar {
+  height: 100%;
+  border-radius: 4px;
+  transition: width 0.5s ease;
+  min-width: 2%;
+}
+
+.cf-tag-count {
+  font-size: 12px;
+  color: #666;
+  text-align: right;
+  white-space: nowrap;
+}
+
+// Анимации
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes slideUp {
+  from {
+    transform: translateY(30px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+// Адаптивность
+@media (max-width: 600px) {
+  .cf-stats-modal {
+    padding: 20px;
+    width: 95%;
+  }
+  
+  .cf-karma-value {
+    font-size: 56px;
+  }
+  
+  .cf-stats-grid {
+    grid-template-columns: 1fr;
+  }
+  
+  .cf-tag-row {
+    grid-template-columns: 100px 1fr 50px;
+    gap: 8px;
+  }
+  
+  .cf-tag-name {
+    font-size: 12px;
+  }
+}

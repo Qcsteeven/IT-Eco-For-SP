@@ -14,6 +14,19 @@ interface CF_RatingResult {
   newRating: number;
 }
 
+interface HistoryItem {
+  date_recorded: string;
+  placement: string;
+  mmr_change: number;
+  is_manual: boolean;
+  source_rating_change: string;
+  contest: {
+    title: string;
+    platform: string;
+    id: string;
+  };
+}
+
 export async function GET() {
   try {
     const session = await getServerSession(authOptions);
@@ -32,7 +45,7 @@ export async function GET() {
     const userQuery = await db.query(
       `
       SELECT
-        id, full_name, email, bscp_rating, phone,
+        id, full_name, email, bscp_rating, phone, codeforces_karma,
         (SELECT VALUE handle_username FROM external_accounts WHERE user_id = type::thing($id) AND platform_name = 'codeforces' AND is_verified = true LIMIT 1)[0] AS cf_username,
         (SELECT VALUE handle_username FROM external_accounts WHERE user_id = type::thing($id) AND platform_name = 'atcoder' AND is_verified = true LIMIT 1)[0] AS atcoder_username
       FROM type::thing($id);
@@ -40,7 +53,7 @@ export async function GET() {
       { id: userId },
     );
 
-    const resultArr = userQuery[0] as any;
+    const resultArr = userQuery[0] as Record<string, unknown>[];
     const userData = Array.isArray(resultArr) ? resultArr[0] : resultArr;
 
     if (!userData) {
@@ -50,7 +63,7 @@ export async function GET() {
       );
     }
 
-    let liveHistory: any[] = [];
+    let liveHistory: HistoryItem[] = [];
     let cfCurrentRating = 0;
     let atcoderCurrentRating = 0;
 
@@ -103,12 +116,16 @@ export async function GET() {
 
     // Получаем историю с AtCoder и текущий рейтинг
     if (userData.atcoder_username) {
-      console.log(`[AtCoder] Fetching history for: ${userData.atcoder_username}`);
+      console.log(
+        `[AtCoder] Fetching history for: ${userData.atcoder_username}`,
+      );
 
       try {
         // Используем @qatadaazzeh/atcoder-api для получения данных
         const userInfo = await fetchUserInfo(userData.atcoder_username);
-        const contestHistory = await fetchUserContestList(userData.atcoder_username);
+        const contestHistory = await fetchUserContestList(
+          userData.atcoder_username,
+        );
 
         console.log(`[AtCoder] Contests fetched: ${contestHistory.length}`);
 
@@ -116,13 +133,17 @@ export async function GET() {
         atcoderCurrentRating = userInfo.userRating || 0;
 
         const atCoderHistory = contestHistory.map((contest: any) => {
-          const diff = contest.userRatingChange || ((contest.userNewRating || 0) - (contest.userOldRating || 0));
+          const diff =
+            contest.userRatingChange ||
+            (contest.userNewRating || 0) - (contest.userOldRating || 0);
           // Извлекаем короткий ID (abc446 из abc446.contest.atcoder.jp)
           const fullContestId = contest.contestId || '';
           const shortContestId = fullContestId.split('.')[0] || '';
 
           return {
-            date_recorded: new Date(contest.contestEndTime || contest.contest_end_time || Date.now()).toISOString(),
+            date_recorded: new Date(
+              contest.contestEndTime || contest.contest_end_time || Date.now(),
+            ).toISOString(),
             placement: (contest.userRank || contest.rank || '0').toString(),
             mmr_change: diff,
             is_manual: false,
@@ -137,25 +158,36 @@ export async function GET() {
 
         console.log(`[AtCoder] Formatted history:`, atCoderHistory);
         liveHistory = [...liveHistory, ...atCoderHistory];
-        console.log(`[AtCoder] Total history after merge: ${liveHistory.length}`);
+        console.log(
+          `[AtCoder] Total history after merge: ${liveHistory.length}`,
+        );
       } catch (e) {
         console.error('AtCoder Fetch Error:', e);
       }
     }
 
     // Сортируем по дате (новые сверху)
-    liveHistory.sort((a, b) => new Date(b.date_recorded).getTime() - new Date(a.date_recorded).getTime());
+    liveHistory.sort(
+      (a, b) =>
+        new Date(b.date_recorded).getTime() -
+        new Date(a.date_recorded).getTime(),
+    );
 
     // Итоговый рейтинг = MAX(CF, AtCoder)
     const finalRating = Math.max(cfCurrentRating, atcoderCurrentRating);
 
     // Обновляем рейтинг если изменился
     if (userData.bscp_rating !== finalRating && finalRating !== 0) {
-      await db.query(
-        `UPDATE type::thing($id) SET bscp_rating = $newRating`,
-        { id: userId, newRating: finalRating },
-      );
+      await db.query(`UPDATE type::thing($id) SET bscp_rating = $newRating`, {
+        id: userId,
+        newRating: finalRating,
+      });
       userData.bscp_rating = finalRating;
+    }
+
+    // Добавляем codeforces_karma если нет
+    if (!userData.codeforces_karma) {
+      userData.codeforces_karma = 0;
     }
 
     return NextResponse.json({
@@ -165,7 +197,7 @@ export async function GET() {
         history: liveHistory,
       },
     });
-  } catch (err: any) {
+  } catch (err: unknown) {
     console.error('API GET Error:', err);
     return NextResponse.json(
       { ok: false, error: 'Ошибка сервера' },
@@ -200,7 +232,7 @@ export async function PUT(req: Request) {
       return NextResponse.json({ ok: true, new_rating: 0 });
     }
 
-    const updateData: any = {};
+    const updateData: Record<string, unknown> = {};
     if (full_name !== undefined) updateData.full_name = full_name;
     if (phone !== undefined) updateData.phone = phone;
 
@@ -209,8 +241,9 @@ export async function PUT(req: Request) {
         'SELECT password_hash FROM type::thing($id)',
         { id: userId },
       );
-      const userDataInDb = (userRes[0] as any)?.[0];
-      const currentHash = userDataInDb?.password_hash;
+      const userDataInDb = (userRes[0] as Record<string, unknown>[])?.[0];
+      const currentHash = (userDataInDb as Record<string, unknown>)
+        ?.password_hash;
 
       if (!currentHash)
         return NextResponse.json(
@@ -218,7 +251,7 @@ export async function PUT(req: Request) {
           { status: 404 },
         );
 
-      const isMatch = await verifyPassword(oldPassword, currentHash);
+      const isMatch = await verifyPassword(oldPassword, currentHash as string);
       if (!isMatch)
         return NextResponse.json(
           { ok: false, error: 'Старый пароль неверный' },
@@ -234,7 +267,7 @@ export async function PUT(req: Request) {
     });
 
     return NextResponse.json({ ok: true });
-  } catch (err: any) {
+  } catch (err: unknown) {
     console.error('API PUT Error:', err);
     return NextResponse.json(
       { ok: false, error: 'Ошибка сохранения' },

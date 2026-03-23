@@ -32,6 +32,59 @@
       font-size: 0.9em;
       color: #666;
     }
+    
+    // Контейнер для нескольких рейтингов
+    .ratings-container {
+      display: flex;
+      justify-content: center;
+      align-items: flex-start;
+      gap: 30px;
+      margin-top: 15px;
+      margin-bottom: 15px;
+      
+      .rating-block {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        
+        .rating {
+          margin-bottom: 5px;
+          
+          &.karma-loading {
+            color: #999;
+          }
+          
+          &.karma-rating {
+            font-weight: bold;
+            transition: color 0.3s ease;
+          }
+        }
+        
+        .rating-label {
+          text-align: center;
+          
+          .karma-level {
+            font-weight: 500;
+            white-space: nowrap;
+          }
+          
+          .cf-stats-btn {
+            background: none;
+            border: none;
+            cursor: pointer;
+            font-size: 16px;
+            margin-left: 8px;
+            padding: 4px 8px;
+            border-radius: 4px;
+            transition: background-color 0.2s;
+            
+            &:hover {
+              background-color: rgba(0, 0, 0, 0.1);
+            }
+          }
+        }
+      }
+    }
   }
 
   h1 {
