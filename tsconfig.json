@@ -26,10 +26,7 @@
       }
     ],
     "paths": {
-      "@/*": ["./src/*"],
-      // 🌟 ДОБАВЛЕНО: Алиас для папки lib
-      // Это позволяет вам писать import ... from '@/lib/surreal/auth'
-      "@/lib/*": ["./src/lib/*"] 
+      "@/*": ["./src/*"]
     }
   },
   "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx", ".next/types/**/*.ts"],

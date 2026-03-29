@@ -111,3 +111,40 @@ docker exec -it it-eco-dev sh
 - Монтирование локальной директории
 - Сохранение node_modules и .next в volumes
 - Порт: 3001
+
+### Cron Worker (`worker`)
+- Изолированный процесс для фоновых задач
+- Автоматическое обновление календаря Codeforces
+- Запускается отдельно от основного приложения
+- Расписание: каждый час (настраивается через `CRON_UPDATE_INTERVAL`)
+
+## Cron Worker
+
+### Запуск worker
+
+```bash
+# Запуск worker вместе с app
+docker compose up -d app worker
+
+# Просмотр логов worker
+docker compose logs -f worker
+
+# Остановка worker
+docker compose stop worker
+```
+
+### Переменные окружения для worker
+
+| Переменная | По умолчанию | Описание |
+|------------|--------------|----------|
+| `CRON_API_URL` | `http://app:3000` | URL API для вызова endpoints |
+| `CRON_UPDATE_INTERVAL` | `0 * * * *` | Cron schedule (каждый час) |
+
+### Примеры расписаний
+
+- `0 * * * *` — каждый час
+- `0 */2 * * *` — каждые 2 часа
+- `0 0 * * *` — каждый день в полночь
+- `*/15 * * * *` — каждые 15 минут
+
+Подробная документация: [docs/CRON_WORKER.md](./docs/CRON_WORKER.md)

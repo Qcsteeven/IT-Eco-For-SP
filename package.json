@@ -9,6 +9,8 @@
     "build:docker": "docker compose build app",
     "start": "next start",
     "start:docker": "docker compose up app",
+    "worker": "tsx src/worker/cron-worker.ts",
+    "worker:prod": "NODE_ENV=production tsx src/worker/cron-worker.ts",
     "lint": "eslint . --ext .ts,.tsx --max-warnings 0",
     "format": "prettier --write \"src/**/*.{ts,tsx}\"",
     "type-check": "tsc --noEmit",

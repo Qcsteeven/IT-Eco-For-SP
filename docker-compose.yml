@@ -14,6 +14,22 @@ services:
       - app_data:/app/data
     restart: unless-stopped
 
+  # Cron Worker - изолированный сервис для фоновых задач
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile.worker
+    container_name: it-eco-worker
+    environment:
+      - NODE_ENV=production
+      - CRON_API_URL=http://app:3000
+      - CRON_UPDATE_INTERVAL=0 * * * *
+    volumes:
+      - app_data:/app/data
+    depends_on:
+      - app
+    restart: unless-stopped
+
   # Dev service with hot reload (опционально)
   dev:
     image: node:20-alpine
