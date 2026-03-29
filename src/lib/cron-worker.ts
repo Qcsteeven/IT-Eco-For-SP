@@ -9,7 +9,9 @@ const runCalendarUpdate = async () => {
   try {
     // Вызываем твой же API эндпоинт локально
     // Важно: в dev режиме порт обычно 3000
-    const response = await axios.get('http://localhost:3000/api/codeforces/update-calendar');
+    const response = await axios.get(
+      'http://localhost:3000/api/codeforces/update-calendar',
+    );
     console.log('[CRON] Success:', response.data);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);

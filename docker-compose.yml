@@ -1,0 +1,35 @@
+version: '3.8'
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: it-eco-app
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+    volumes:
+      - app_data:/app/data
+    restart: unless-stopped
+
+  # Dev service with hot reload (опционально)
+  dev:
+    image: node:20-alpine
+    container_name: it-eco-dev
+    working_dir: /app
+    ports:
+      - "3001:3000"
+    volumes:
+      - .:/app
+      - /app/node_modules
+      - /app/.next
+    environment:
+      - NODE_ENV=development
+      - WATCHPACK_POLLING=false
+    command: sh -c "npm install && npm run dev"
+    restart: unless-stopped
+
+volumes:
+  app_data:
