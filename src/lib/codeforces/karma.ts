@@ -1,77 +1,24 @@
-import type {
-  CodeforcesSubmission,
-  KarmaResult,
-  KarmaWeights,
-} from '@/types/codeforces';
+import type { CodeforcesSubmission } from '@/types/codeforces';
 
 /**
  * Конфигурация весов по умолчанию для расчета кармы
  *
  * Логика расчета:
  * 1. Базовая карма за каждую решенную задачу в зависимости от сложности
- * 2. Множители за важные теги (DP, графы, математика и т.д.)
- * 3. Бонус за разнообразие решенных задач
- * 4. Бонус за задачи с контестов
  */
-export const DEFAULT_KARMA_WEIGHTS: KarmaWeights = {
+export const DEFAULT_KARMA_WEIGHTS = {
   // Базовые веса за сложность (за каждую задачу)
   easyWeight: 1, // < 1200 rating
   mediumWeight: 3, // 1200-2000 rating
   hardWeight: 10, // 2000+ rating
-
-  // Множители за теги (умножают базовый вес задачи)
-  dpMultiplier: 1.5, // Динамическое программирование
-  graphsMultiplier: 1.5, // Графы
-  mathMultiplier: 1.3, // Математика
-  dataStructuresMultiplier: 1.4, // Структуры данных
-  greedyMultiplier: 1.2, // Жадные алгоритмы
-  defaultMultiplier: 1.0, // Остальные теги
-
-  // Бонусы
-  uniqueProblemTagBonus: 2, // Бонус за каждый уникальный тег
-  contestProblemBonus: 1, // Бонус за задачу с контеста
-};
-
-/**
- * Приоритетные теги и их множители
- */
-const TAG_MULTIPLIERS: Record<string, number> = {
-  dp: DEFAULT_KARMA_WEIGHTS.dpMultiplier,
-  'dynamic programming': DEFAULT_KARMA_WEIGHTS.dpMultiplier,
-  graphs: DEFAULT_KARMA_WEIGHTS.graphsMultiplier,
-  graph: DEFAULT_KARMA_WEIGHTS.graphsMultiplier,
-  math: DEFAULT_KARMA_WEIGHTS.mathMultiplier,
-  mathematics: DEFAULT_KARMA_WEIGHTS.mathMultiplier,
-  'number theory': DEFAULT_KARMA_WEIGHTS.mathMultiplier,
-  combinatorics: DEFAULT_KARMA_WEIGHTS.mathMultiplier,
-  'data structures': DEFAULT_KARMA_WEIGHTS.dataStructuresMultiplier,
-  trees: DEFAULT_KARMA_WEIGHTS.dataStructuresMultiplier,
-  'segment tree': DEFAULT_KARMA_WEIGHTS.dataStructuresMultiplier,
-  greedy: DEFAULT_KARMA_WEIGHTS.greedyMultiplier,
 };
 
 /**
  * Получить множитель для задачи на основе её тегов
+ * Всегда возвращает 1.0 (теги не влияют на карму)
  */
-function getTagMultiplier(tags: string[]): number {
-  if (!tags || tags.length === 0) {
-    return DEFAULT_KARMA_WEIGHTS.defaultMultiplier;
-  }
-
-  // Находим максимальный множитель среди всех тегов задачи
-  let maxMultiplier = DEFAULT_KARMA_WEIGHTS.defaultMultiplier;
-
-  for (const tag of tags) {
-    const tagLower = tag.toLowerCase();
-    for (const [key, multiplier] of Object.entries(TAG_MULTIPLIERS)) {
-      if (tagLower.includes(key) && multiplier > maxMultiplier) {
-        maxMultiplier = multiplier;
-        break;
-      }
-    }
-  }
-
-  return maxMultiplier;
+export function getTagMultiplier(_tags: string[]): number {
+  return 1.0;
 }
 
 /**

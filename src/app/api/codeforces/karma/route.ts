@@ -7,6 +7,7 @@ import {
   calculateSimpleKarma,
   getKarmaLevel,
   getKarmaColor,
+  getTagMultiplier,
 } from '@/lib/codeforces/karma';
 import type { CodeforcesSubmission } from '@/types/codeforces';
 
@@ -159,44 +160,49 @@ export async function GET() {
     uniqueSubmissions.forEach((sub) => {
       const problemIndex = sub.problem?.index || sub.problemIndex;
       const problemRating = sub.problem?.rating;
+      const problemTags = sub.problem?.tags || [];
       if (!problemIndex) return;
 
-      // Определяем сложность и карму
+      // Определяем сложность и базовую карму
       // Если есть рейтинг - используем его (точно), иначе - unknown
       let difficulty: 'easy' | 'medium' | 'hard' | 'unknown' = 'unknown';
-      let karma = 1;
+      let baseKarma = 1;
 
       if (problemRating) {
         // Если есть рейтинг задачи, используем его (точно)
         if (problemRating < 1200) {
           easyCount++;
           difficulty = 'easy';
-          karma = 1;
+          baseKarma = 1;
         } else if (problemRating < 2000) {
           mediumCount++;
           difficulty = 'medium';
-          karma = 3;
+          baseKarma = 3;
         } else {
           hardCount++;
           difficulty = 'hard';
-          karma = 10;
+          baseKarma = 10;
         }
       } else {
         // Если рейтинга нет - unknown
         unknownCount++;
         difficulty = 'unknown';
-        // Карму считаем приблизительно по индексу
+        // Базовую карму считаем приблизительно по индексу
         if (problemIndex.startsWith('A')) {
-          karma = 1;
+          baseKarma = 1;
         } else if (
           problemIndex.startsWith('B') ||
           problemIndex.startsWith('C')
         ) {
-          karma = 3;
+          baseKarma = 3;
         } else {
-          karma = 10;
+          baseKarma = 10;
         }
       }
+
+      // Применяем множитель тега
+      const tagMultiplier = getTagMultiplier(problemTags);
+      const karma = Math.round(baseKarma * tagMultiplier);
 
       // Добавляем задачу в список с полной информацией
       problemsList.push({
@@ -207,7 +213,7 @@ export async function GET() {
         solvedAt: sub.creationTimeSeconds,
         difficulty,
         karma,
-        tags: sub.problem?.tags || [],
+        tags: problemTags,
         rating: problemRating,
       });
     });
