@@ -1,4 +1,12 @@
-export async function buildContestEmbeddingText(contest: any): Promise<string> {
+interface ContestRaw {
+  name?: string;
+  type?: string;
+  startTimeSeconds: number;
+  durationSeconds: number;
+  [key: string]: unknown;
+}
+
+export async function buildContestEmbeddingText(contest: ContestRaw): Promise<string> {
   const start = new Date(contest.startTimeSeconds * 1000);
   const durationMinutes = Math.floor(contest.durationSeconds / 60);
   const durationHours = Math.floor(durationMinutes / 60);

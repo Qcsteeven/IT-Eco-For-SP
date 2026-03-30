@@ -40,7 +40,7 @@ export async function GET() {
       { id: userId },
     );
 
-    const resultArr = userQuery[0] as any;
+    const resultArr = userQuery[0] as Record<string, unknown> | Record<string, unknown>[];
     const userData = Array.isArray(resultArr) ? resultArr[0] : resultArr;
 
     if (!userData) {
@@ -50,7 +50,18 @@ export async function GET() {
       );
     }
 
-    let liveHistory: any[] = [];
+    let liveHistory: {
+      date_recorded: string;
+      placement: string;
+      mmr_change: number;
+      is_manual: boolean;
+      source_rating_change: string;
+      contest: {
+        title: string;
+        platform: string;
+        id: string;
+      };
+    }[] = [];
     let cfCurrentRating = 0;
     let atcoderCurrentRating = 0;
 
@@ -115,7 +126,20 @@ export async function GET() {
         // Текущий рейтинг из userInfo
         atcoderCurrentRating = userInfo.userRating || 0;
 
-        const atCoderHistory = contestHistory.map((contest: any) => {
+        interface AtCoderContest {
+          contestId?: string;
+          contestName?: string;
+          contestEndTime?: string;
+          contest_end_time?: string;
+          userRank?: number;
+          rank?: number;
+          userRatingChange?: number;
+          userNewRating?: number;
+          userOldRating?: number;
+          [key: string]: unknown;
+        }
+
+        const atCoderHistory = contestHistory.map((contest: AtCoderContest) => {
           const diff = contest.userRatingChange || ((contest.userNewRating || 0) - (contest.userOldRating || 0));
           // Извлекаем короткий ID (abc446 из abc446.contest.atcoder.jp)
           const fullContestId = contest.contestId || '';
@@ -165,8 +189,9 @@ export async function GET() {
         history: liveHistory,
       },
     });
-  } catch (err: any) {
-    console.error('API GET Error:', err);
+  } catch (err: unknown) {
+    const errorMessage = err instanceof Error ? err.message : String(err);
+    console.error('API GET Error:', errorMessage);
     return NextResponse.json(
       { ok: false, error: 'Ошибка сервера' },
       { status: 500 },
@@ -200,7 +225,7 @@ export async function PUT(req: Request) {
       return NextResponse.json({ ok: true, new_rating: 0 });
     }
 
-    const updateData: any = {};
+    const updateData: Record<string, unknown> = {};
     if (full_name !== undefined) updateData.full_name = full_name;
     if (phone !== undefined) updateData.phone = phone;
 
@@ -209,8 +234,8 @@ export async function PUT(req: Request) {
         'SELECT password_hash FROM type::thing($id)',
         { id: userId },
       );
-      const userDataInDb = (userRes[0] as any)?.[0];
-      const currentHash = userDataInDb?.password_hash;
+      const userDataInDb = (userRes[0] as Record<string, unknown>[])?.[0];
+      const currentHash = userDataInDb?.password_hash as string | undefined;
 
       if (!currentHash)
         return NextResponse.json(
@@ -234,8 +259,9 @@ export async function PUT(req: Request) {
     });
 
     return NextResponse.json({ ok: true });
-  } catch (err: any) {
-    console.error('API PUT Error:', err);
+  } catch (err: unknown) {
+    const errorMessage = err instanceof Error ? err.message : String(err);
+    console.error('API PUT Error:', errorMessage);
     return NextResponse.json(
       { ok: false, error: 'Ошибка сохранения' },
       { status: 500 },

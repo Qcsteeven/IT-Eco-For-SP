@@ -40,7 +40,7 @@ export async function GET(req: NextRequest) {
       { id: userId },
     );
 
-    const resultArr = userQuery[0] as any;
+    const resultArr = userQuery[0] as Record<string, unknown> | Record<string, unknown>[];
     const userData = Array.isArray(resultArr) ? resultArr[0] : resultArr;
 
     if (!userData) {
@@ -68,21 +68,43 @@ export async function GET(req: NextRequest) {
     // Получаем данные с AtCoder через API клиент
     try {
       // Получаем информацию о пользователе
-      const userInfo = await fetchUserInfo(userData.atcoder_username);
+      const userInfo = await fetchUserInfo(userData.atcoder_username as string);
 
       // Получаем contest history
-      const contestHistory = await fetchUserContestList(userData.atcoder_username);
-      
+      const contestHistory = await fetchUserContestList(userData.atcoder_username as string);
+
       console.log('[AtCoder] Raw contest history:', JSON.stringify(contestHistory, null, 2).substring(0, 1000));
 
+      interface AtCoderContestRaw {
+        contestId?: string;
+        contest_id?: string;
+        contestName?: string;
+        contest_name?: string;
+        userRank?: number;
+        user_rank?: number;
+        userOldRating?: number;
+        user_old_rating?: number;
+        userNewRating?: number;
+        user_new_rating?: number;
+        userRatingChange?: number;
+        user_rating_change?: number;
+        userPerformance?: number;
+        user_performance?: number;
+        contestEndTime?: string;
+        contest_end_time?: string;
+        isRated?: boolean;
+        is_rated?: boolean;
+        [key: string]: unknown;
+      }
+
       // Форматируем данные
-      const formattedSubmissions = contestHistory.map((contest: any) => {
+      const formattedSubmissions = contestHistory.map((contest: AtCoderContestRaw) => {
         // Пробуем разные варианты названий полей
         const contestId = contest.contestId || contest.contest_id || contest.contestId || '';
         const contestName = contest.contestName || contest.contest_name || contestId || '';
-        
+
         console.log('[AtCoder] Mapped contest:', { contestId, contestName });
-        
+
         return ({
           contest_id: contestId,
           contest_name: contestName,
@@ -110,8 +132,9 @@ export async function GET(req: NextRequest) {
           submissions: formattedSubmissions,
         },
       });
-    } catch (apiError: any) {
-      console.error('AtCoder API Error:', apiError);
+    } catch (apiError: unknown) {
+      const errorMessage = apiError instanceof Error ? apiError.message : String(apiError);
+      console.error('AtCoder API Error:', errorMessage);
       return NextResponse.json({
         ok: false,
         error: 'Ошибка при получении данных с AtCoder',
@@ -122,8 +145,9 @@ export async function GET(req: NextRequest) {
         },
       });
     }
-  } catch (err: any) {
-    console.error('API GET Error:', err);
+  } catch (err: unknown) {
+    const errorMessage = err instanceof Error ? err.message : String(err);
+    console.error('API GET Error:', errorMessage);
     return NextResponse.json(
       { ok: false, error: 'Ошибка сервера' },
       { status: 500 },
@@ -167,8 +191,9 @@ export async function POST(req: NextRequest) {
           { status: 404 },
         );
       }
-    } catch (apiError: any) {
-      console.error('AtCoder API validation Error:', apiError);
+    } catch (apiError: unknown) {
+      const errorMessage = apiError instanceof Error ? apiError.message : String(apiError);
+      console.error('AtCoder API validation Error:', errorMessage);
       return NextResponse.json(
         { ok: false, error: 'Ошибка при проверке пользователя на AtCoder' },
         { status: 400 },
@@ -181,8 +206,8 @@ export async function POST(req: NextRequest) {
       { username: atcoder_username.trim() },
     );
 
-    if (existingBinding && existingBinding[0] && (existingBinding[0] as any[]).length > 0) {
-      const existingUserId = (existingBinding[0] as any)[0]?.user_id;
+    if (existingBinding && existingBinding[0] && Array.isArray(existingBinding[0]) && existingBinding[0].length > 0) {
+      const existingUserId = (existingBinding[0] as Record<string, unknown>[])?.[0]?.user_id as string | undefined;
       if (existingUserId && existingUserId.toString() !== userId) {
         return NextResponse.json(
           { ok: false, error: 'Этот аккаунт AtCoder уже привязан к другому пользователю' },
@@ -197,7 +222,7 @@ export async function POST(req: NextRequest) {
       { user_id: userId },
     );
 
-    const existingPendingArr = existingPending[0] as any;
+    const existingPendingArr = existingPending[0] as Record<string, unknown> | Record<string, unknown>[];
     const existingPendingRecord = Array.isArray(existingPendingArr) ? existingPendingArr[0] : existingPendingArr;
 
     if (existingPendingRecord) {
@@ -236,8 +261,9 @@ export async function POST(req: NextRequest) {
       atcoder_username: atcoder_username.trim(),
       verification_code: verificationCode,
     });
-  } catch (err: any) {
-    console.error('API POST Error:', err);
+  } catch (err: unknown) {
+    const errorMessage = err instanceof Error ? err.message : String(err);
+    console.error('API POST Error:', errorMessage);
     return NextResponse.json(
       { ok: false, error: 'Ошибка сервера' },
       { status: 500 },
@@ -267,7 +293,7 @@ export async function PUT(req: NextRequest) {
       { id: userId },
     );
 
-    const resultArr = verificationQuery[0] as any;
+    const resultArr = verificationQuery[0] as Record<string, unknown> | Record<string, unknown>[];
     const verificationRecord = Array.isArray(resultArr) ? resultArr[0] : resultArr;
 
     if (!verificationRecord) {
@@ -277,8 +303,8 @@ export async function PUT(req: NextRequest) {
       );
     }
 
-    const atcoderUsername = verificationRecord.handle_username;
-    const expectedCode = verificationRecord.verification_code;
+    const atcoderUsername = verificationRecord.handle_username as string;
+    const expectedCode = verificationRecord.verification_code as string;
 
     // Проверяем, что код есть в профиле AtCoder (в поле Affiliation) через парсинг HTML
     try {
@@ -335,10 +361,11 @@ export async function PUT(req: NextRequest) {
           { status: 400 },
         );
       }
-    } catch (apiError: any) {
-      console.error('AtCoder profile parsing Error:', apiError);
+    } catch (apiError: unknown) {
+      const errorMessage = apiError instanceof Error ? apiError.message : String(apiError);
+      console.error('AtCoder profile parsing Error:', errorMessage);
       return NextResponse.json(
-        { ok: false, error: 'Ошибка при проверке профиля AtCoder: ' + (apiError?.message || 'Неизвестная ошибка') },
+        { ok: false, error: 'Ошибка при проверке профиля AtCoder: ' + (errorMessage || 'Неизвестная ошибка') },
         { status: 500 },
       );
     }
@@ -360,8 +387,8 @@ export async function PUT(req: NextRequest) {
         `SELECT (SELECT VALUE handle_username FROM external_accounts WHERE user_id = type::thing($user_id) AND platform_name = 'codeforces' AND is_verified = true LIMIT 1)[0] AS cf_username FROM type::thing($user_id)`,
         { user_id: userId },
       );
-      const cfResult = (cfQuery[0] as any)?.[0];
-      const cfUsername = cfResult?.cf_username;
+      const cfResult = (cfQuery[0] as Record<string, unknown>[])?.[0];
+      const cfUsername = cfResult?.cf_username as string | undefined;
 
       if (cfUsername) {
         const cfRes = await axios.get(`https://codeforces.com/api/user.info?handles=${cfUsername}`);
@@ -393,8 +420,9 @@ export async function PUT(req: NextRequest) {
       message: 'Аккаунт AtCoder успешно привязан',
       atcoder_username: atcoderUsername,
     });
-  } catch (err: any) {
-    console.error('API PUT Error:', err);
+  } catch (err: unknown) {
+    const errorMessage = err instanceof Error ? err.message : String(err);
+    console.error('API PUT Error:', errorMessage);
     return NextResponse.json(
       { ok: false, error: 'Ошибка сервера' },
       { status: 500 },
@@ -425,8 +453,8 @@ export async function DELETE(req: NextRequest) {
         `SELECT (SELECT VALUE handle_username FROM external_accounts WHERE user_id = type::thing($user_id) AND platform_name = 'codeforces' AND is_verified = true LIMIT 1)[0] AS cf_username FROM type::thing($user_id)`,
         { user_id: userId },
       );
-      const cfResult = (cfQuery[0] as any)?.[0];
-      const cfUsername = cfResult?.cf_username;
+      const cfResult = (cfQuery[0] as Record<string, unknown>[])?.[0];
+      const cfUsername = cfResult?.cf_username as string | undefined;
 
       if (cfUsername) {
         const cfRes = await axios.get(`https://codeforces.com/api/user.info?handles=${cfUsername}`);
@@ -458,8 +486,9 @@ export async function DELETE(req: NextRequest) {
       ok: true,
       message: 'Аккаунт AtCoder успешно отвязан',
     });
-  } catch (err: any) {
-    console.error('API DELETE Error:', err);
+  } catch (err: unknown) {
+    const errorMessage = err instanceof Error ? err.message : String(err);
+    console.error('API DELETE Error:', errorMessage);
     return NextResponse.json(
       { ok: false, error: 'Ошибка сервера' },
       { status: 500 },
