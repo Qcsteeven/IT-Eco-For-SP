@@ -233,6 +233,7 @@ export async function PUT(req: Request) {
     }
 
     const updateData: Record<string, unknown> = {};
+    const updateData: Record<string, unknown> = {};
     if (full_name !== undefined) updateData.full_name = full_name;
     if (phone !== undefined) updateData.phone = phone;
 

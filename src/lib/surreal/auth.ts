@@ -1,16 +1,16 @@
 import { getDB } from './surreal';
-import * as bcrypt from 'bcrypt';
+import * as bcrypt from 'bcryptjs';
 
 
 export interface User {
   id: string;
   email: string;
-  password: string; 
-  [key: string]: any;
+  password: string;
+  [key: string]: unknown;
 }
 
 
-type SurrealQueryResult = [User[], ...any[]];
+type SurrealQueryResult = [User[], ...unknown[]];
 
 
 export async function getUserByEmail(email: string): Promise<User | null> {
@@ -23,11 +23,12 @@ export async function getUserByEmail(email: string): Promise<User | null> {
     queryResult = await db.query<SurrealQueryResult>('SELECT * FROM users WHERE email = $email', {
       email,
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
     console.error('--- ❌ КРИТИЧЕСКАЯ ОШИБКА DB ---');
     console.error(
       '[DB/ERROR] Ошибка при выполнении запроса к SurrealDB:',
-      error.message || String(error),
+      errorMessage,
     );
     return null;
   }
@@ -51,8 +52,8 @@ export async function getUserByEmail(email: string): Promise<User | null> {
 
   
   const idString =
-    typeof userRecord.id === 'object'
-      ? (userRecord.id as any).toString()
+    typeof userRecord.id === 'object' && userRecord.id !== null
+      ? String(userRecord.id)
       : String(userRecord.id);
 
   const finalUser: User = {

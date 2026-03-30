@@ -85,11 +85,18 @@ export async function GET(
   }
 }
 
-function processSubmissions(submissions: any[], contestId: string) {
+interface AtCoderSubmission {
+  problem_id?: string;
+  contest_id?: string;
+  result?: string;
+  [key: string]: unknown;
+}
+
+function processSubmissions(submissions: AtCoderSubmission[], contestId: string) {
   // Фильтруем submission'ы по контесту и статусу AC
   const solvedProblemIds = new Set<string>();
 
-  submissions.forEach((sub: any) => {
+  submissions.forEach((sub) => {
     if (sub.problem_id && sub.contest_id === contestId && sub.result === 'AC') {
       solvedProblemIds.add(sub.problem_id);
     }

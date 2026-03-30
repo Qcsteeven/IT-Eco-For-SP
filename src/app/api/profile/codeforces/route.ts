@@ -40,7 +40,7 @@ export async function GET(req: NextRequest) {
       { id: userId },
     );
 
-    const resultArr = userQuery[0] as any;
+    const resultArr = userQuery[0] as Record<string, unknown> | Record<string, unknown>[];
     const userData = Array.isArray(resultArr) ? resultArr[0] : resultArr;
 
     console.log(`[CF GET] userId: ${userId}, query result:`, JSON.stringify(userData, null, 2));
@@ -64,15 +64,40 @@ export async function GET(req: NextRequest) {
     }
 
     // Получаем данные с Codeforces API
-    let userInfo = null;
-    let formattedHistory = [];
-    
+    let userInfo: {
+      rating: number;
+      rank: string;
+      max_rating: number;
+      attended_contests_count: number;
+    } | null = null;
+
+    interface CodeforcesRatingEntry {
+      contestId?: number;
+      contestName?: string;
+      rank?: number;
+      oldRating?: number;
+      newRating?: number;
+      ratingUpdateTimeSeconds?: number;
+      [key: string]: unknown;
+    }
+
+    let formattedHistory: {
+      contest_id: number | string;
+      contest_name: string;
+      user_rank: number;
+      user_old_rating: number;
+      user_new_rating: number;
+      user_rating_change: number;
+      contest_end_time: string;
+      is_rated: boolean;
+    }[] = [];
+
     try {
       const cfRes = await axios.get(`https://codeforces.com/api/user.info?handles=${userData.cf_username}`);
 
       if (cfRes.data.status === 'OK' && cfRes.data.result && cfRes.data.result.length > 0) {
         const cfUser = cfRes.data.result[0];
-        
+
         userInfo = {
           rating: cfUser.rating || 0,
           rank: cfUser.rank || '',
@@ -82,9 +107,9 @@ export async function GET(req: NextRequest) {
 
         // Получаем историю рейтинга
         const ratingRes = await axios.get(`https://codeforces.com/api/user.rating?handle=${userData.cf_username}`);
-        const ratingHistory = ratingRes.data.status === 'OK' ? ratingRes.data.result : [];
+        const ratingHistory: CodeforcesRatingEntry[] = ratingRes.data.status === 'OK' ? ratingRes.data.result : [];
 
-        formattedHistory = ratingHistory.map((item: any) => ({
+        formattedHistory = ratingHistory.map((item) => ({
           contest_id: item.contestId || '',
           contest_name: item.contestName || '',
           user_rank: item.rank || 0,
@@ -95,8 +120,9 @@ export async function GET(req: NextRequest) {
           is_rated: true,
         }));
       }
-    } catch (apiError: any) {
-      console.error('Codeforces API Error:', apiError);
+    } catch (apiError: unknown) {
+      const errorMessage = apiError instanceof Error ? apiError.message : String(apiError);
+      console.error('Codeforces API Error:', errorMessage);
     }
 
     return NextResponse.json({
@@ -105,8 +131,9 @@ export async function GET(req: NextRequest) {
       user_info: userInfo,
       submissions: formattedHistory,
     });
-  } catch (err: any) {
-    console.error('API GET Error:', err);
+  } catch (err: unknown) {
+    const errorMessage = err instanceof Error ? err.message : String(err);
+    console.error('API GET Error:', errorMessage);
     return NextResponse.json(
       { ok: false, error: 'Ошибка сервера' },
       { status: 500 },
@@ -151,8 +178,9 @@ export async function POST(req: NextRequest) {
           { status: 404 },
         );
       }
-    } catch (apiError: any) {
-      console.error('Codeforces API validation Error:', apiError);
+    } catch (apiError: unknown) {
+      const errorMessage = apiError instanceof Error ? apiError.message : String(apiError);
+      console.error('Codeforces API validation Error:', errorMessage);
       return NextResponse.json(
         { ok: false, error: 'Ошибка при проверке пользователя на Codeforces' },
         { status: 400 },
@@ -165,8 +193,8 @@ export async function POST(req: NextRequest) {
       { handle: cf_handle.trim() },
     );
 
-    if (existingBinding && existingBinding[0] && (existingBinding[0] as any[]).length > 0) {
-      const existingUserId = (existingBinding[0] as any)[0]?.user_id;
+    if (existingBinding && existingBinding[0] && Array.isArray(existingBinding[0]) && existingBinding[0].length > 0) {
+      const existingUserId = (existingBinding[0] as Record<string, unknown>[])?.[0]?.user_id;
       if (existingUserId && existingUserId.toString() !== userId) {
         return NextResponse.json(
           { ok: false, error: 'Этот аккаунт Codeforces уже привязан к другому пользователю' },
@@ -181,7 +209,7 @@ export async function POST(req: NextRequest) {
       { user_id: userId },
     );
 
-    const existingPendingArr = existingPending[0] as any;
+    const existingPendingArr = existingPending[0] as Record<string, unknown> | Record<string, unknown>[];
     const existingPendingRecord = Array.isArray(existingPendingArr) ? existingPendingArr[0] : existingPendingArr;
 
     if (existingPendingRecord) {
@@ -224,8 +252,9 @@ export async function POST(req: NextRequest) {
       cf_handle: cf_handle.trim(),
       verification_code: verificationCode,
     });
-  } catch (err: any) {
-    console.error('API POST Error:', err);
+  } catch (err: unknown) {
+    const errorMessage = err instanceof Error ? err.message : String(err);
+    console.error('API POST Error:', errorMessage);
     return NextResponse.json(
       { ok: false, error: 'Ошибка сервера' },
       { status: 500 },
@@ -255,7 +284,7 @@ export async function PUT(req: NextRequest) {
       { id: userId },
     );
 
-    const resultArr = verificationQuery[0] as any;
+    const resultArr = verificationQuery[0] as Record<string, unknown> | Record<string, unknown>[];
     const verificationRecord = Array.isArray(resultArr) ? resultArr[0] : resultArr;
 
     if (!verificationRecord) {
@@ -265,8 +294,8 @@ export async function PUT(req: NextRequest) {
       );
     }
 
-    const cfHandle = verificationRecord.handle_username;
-    const expectedCode = verificationRecord.verification_code;
+    const cfHandle = verificationRecord.handle_username as string;
+    const expectedCode = verificationRecord.verification_code as string;
 
     // Проверяем, что код есть в профиле Codeforces (в поле firstName)
     try {
@@ -294,10 +323,11 @@ export async function PUT(req: NextRequest) {
           { status: 400 },
         );
       }
-    } catch (apiError: any) {
-      console.error('Codeforces API verification Error:', apiError);
+    } catch (apiError: unknown) {
+      const errorMessage = apiError instanceof Error ? apiError.message : String(apiError);
+      console.error('Codeforces API verification Error:', errorMessage);
       return NextResponse.json(
-        { ok: false, error: 'Ошибка при проверке профиля Codeforces: ' + (apiError?.message || 'Неизвестная ошибка') },
+        { ok: false, error: 'Ошибка при проверке профиля Codeforces: ' + (errorMessage || 'Неизвестная ошибка') },
         { status: 500 },
       );
     }
@@ -320,8 +350,8 @@ export async function PUT(req: NextRequest) {
         `SELECT (SELECT VALUE handle_username FROM external_accounts WHERE user_id = type::thing($user_id) AND platform_name = 'atcoder' AND is_verified = true LIMIT 1)[0] AS atcoder_username FROM type::thing($user_id)`,
         { user_id: userId },
       );
-      const atcoderResult = (atcoderQuery[0] as any)?.[0];
-      const atcoderUsername = atcoderResult?.atcoder_username;
+      const atcoderResult = (atcoderQuery[0] as Record<string, unknown>[])?.[0];
+      const atcoderUsername = atcoderResult?.atcoder_username as string | undefined;
 
       if (atcoderUsername) {
         const userInfo = await fetchUserInfo(atcoderUsername);
@@ -354,8 +384,9 @@ export async function PUT(req: NextRequest) {
       message: 'Аккаунт Codeforces успешно привязан',
       cf_handle: cfHandle,
     });
-  } catch (err: any) {
-    console.error('API PUT Error:', err);
+  } catch (err: unknown) {
+    const errorMessage = err instanceof Error ? err.message : String(err);
+    console.error('API PUT Error:', errorMessage);
     return NextResponse.json(
       { ok: false, error: 'Ошибка сервера' },
       { status: 500 },
@@ -386,8 +417,8 @@ export async function DELETE(req: NextRequest) {
         `SELECT (SELECT VALUE handle_username FROM external_accounts WHERE user_id = type::thing($user_id) AND platform_name = 'atcoder' AND is_verified = true LIMIT 1)[0] AS atcoder_username FROM type::thing($user_id)`,
         { user_id: userId },
       );
-      const atcoderResult = (atcoderQuery[0] as any)?.[0];
-      const atcoderUsername = atcoderResult?.atcoder_username;
+      const atcoderResult = (atcoderQuery[0] as Record<string, unknown>[])?.[0];
+      const atcoderUsername = atcoderResult?.atcoder_username as string | undefined;
 
       if (atcoderUsername) {
         const userInfo = await fetchUserInfo(atcoderUsername);
@@ -417,8 +448,9 @@ export async function DELETE(req: NextRequest) {
       ok: true,
       message: 'Аккаунт Codeforces успешно отвязан',
     });
-  } catch (err: any) {
-    console.error('API DELETE Error:', err);
+  } catch (err: unknown) {
+    const errorMessage = err instanceof Error ? err.message : String(err);
+    console.error('API DELETE Error:', errorMessage);
     return NextResponse.json(
       { ok: false, error: 'Ошибка сервера' },
       { status: 500 },

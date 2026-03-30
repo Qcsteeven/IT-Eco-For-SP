@@ -2,48 +2,78 @@
 
 ## Быстрый старт
 
-### Production режим
-
-```bash
-# Сборка и запуск
-docker compose up app
-
-# Или в фоновом режиме
-docker compose up -d app
-
-# Просмотр логов
-docker compose logs -f app
-```
-
-Приложение доступно по адресу: http://localhost:3000
-
 ### Development режим (с hot-reload)
 
 ```bash
 # Запуск dev-сервера
-docker compose up dev
+docker-compose up dev
 
 # Или в фоновом режиме
-docker compose up -d dev
+docker-compose up -d dev
 
 # Просмотр логов
-docker compose logs -f dev
+docker-compose logs -f dev
 ```
 
-Приложение доступно по адресу: http://localhost:3001
+**Приложение доступно по адресу:** http://localhost:3000
 
-## npm скрипты для Docker
+> ⚠️ **Важно:** Используйте `docker-compose` (с дефисом), а не `docker compose`.
+> Проверьте версию: `docker-compose --version` (требуется v2+)
+
+### Production режим
 
 ```bash
-# Сборка production образа
-npm run build:docker
+# Сборка и запуск
+docker-compose up app
 
-# Запуск production контейнера
-npm run start:docker
+# Или в фоновом режиме
+docker-compose up -d app
 
-# Запуск dev контейнера
-npm run dev:docker
+# Просмотр логов
+docker-compose logs -f app
 ```
+
+**Приложение доступно по адресу:** http://localhost:3000
+
+---
+
+## 🔧 Настройка портов
+
+### Изменение порта
+
+Порт по умолчанию: **3000**. Для изменения создайте файл `.env` в корне проекта:
+
+```bash
+# .env — для Docker Compose (не путать с .env.local!)
+
+# Порт для dev-режима
+DEV_PORT=3001
+
+# Порт для production-режима
+APP_PORT=3001
+```
+
+Или передайте переменную в командной строке:
+
+```bash
+# Запуск на порту 3001
+DEV_PORT=3001 docker-compose up dev
+
+# Запуск на порту 3001 (production)
+APP_PORT=3001 docker-compose up app
+```
+
+### Если порт занят
+
+```bash
+# Освободить порт 3000
+lsof -ti:3000 | xargs kill -9
+
+# Или используйте другой порт
+DEV_PORT=3002 docker-compose up dev
+```
+
+---
 
 ## Переменные окружения
 
@@ -52,6 +82,13 @@ npm run dev:docker
 
 ```bash
 cp .env.example .env.local
+```
+
+**Важно:** `NEXTAUTH_URL` в `.env.local` должен совпадать с портом Docker:
+
+```bash
+# Если DEV_PORT=3001
+NEXTAUTH_URL=http://localhost:3001
 ```
 
 ## Остановка контейнеров

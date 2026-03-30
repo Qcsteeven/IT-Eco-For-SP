@@ -41,8 +41,9 @@ export default function UpcomingEvents() {
         } else {
           setError(result.error || 'Не удалось загрузить события.');
         }
-      } catch (err: any) {
-        console.error('Fetch error:', err);
+      } catch (err: unknown) {
+        const errorMessage = err instanceof Error ? err.message : String(err);
+        console.error('Fetch error:', errorMessage);
         setError('Сетевая ошибка при загрузке событий.');
       } finally {
         setLoading(false);

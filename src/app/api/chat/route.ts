@@ -13,7 +13,7 @@ export async function POST(req: Request) {
     const { messages }: { messages: UIMessage[] } = await req.json();
 
     // Извлекаем текст из последнего сообщения пользователя
-    const userMessages = messages.filter((m: any) => m.role === 'user');
+    const userMessages = messages.filter((m) => m.role === 'user');
     const lastUserMessage = userMessages.pop();
 
     let userMessage = '';
@@ -39,9 +39,15 @@ export async function POST(req: Request) {
     const systemPrompt = createSystemPrompt({ ragContext, agentRole, mode });
 
     // Конвертируем сообщения в простой формат для RouterAI
+    interface MessagePart {
+      type: string;
+      text?: string;
+      [key: string]: unknown;
+    }
+
     const simpleMessages = messages.map(m => {
-      const textParts = m.parts?.filter(p => p.type === 'text') || [];
-      const text = textParts.map((p: any) => p.text).join('');
+      const textParts = (m.parts as MessagePart[] | undefined)?.filter(p => p.type === 'text') || [];
+      const text = textParts.map((p) => p.text || '').join('');
       return { role: m.role, content: text };
     });
 
