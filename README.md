@@ -1,17 +1,48 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# IT-Eco-For-SP
 
-## Quick Start
+Образовательная экосистема с ИИ-ассистентом, интеграцией с Codeforces/AtCoder и системой рейтингов.
 
-### Local Development
+## 🚀 Quick Start
+
+### 1. Настройка окружения
+
+```bash
+# Скопируйте шаблон переменных окружения
+cp .env.example .env.local
+
+# Заполните .env.local (обязательно!)
+# См. подробную инструкцию: ENV_SETUP.md
+```
+
+**Минимальный набор:**
+```bash
+NEXTAUTH_SECRET=$(openssl rand -base64 32)
+NEXTAUTH_URL=http://localhost:3000
+SURREAL_HOST=ws://localhost:8000
+SURREAL_USER=admin
+SURREAL_PASSWORD=ваш_пароль
+ROUTERAI_API_KEY=ваш_api_ключ
+```
+
+### 2. Установка и запуск
 
 ```bash
 npm install
 npm run dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000)
+Откройте [http://localhost:3000](http://localhost:3000)
 
-### Docker (рекомендуется)
+---
+
+## 📋 Документация
+
+- **[ENV_SETUP.md](./ENV_SETUP.md)** — Настройка переменных окружения
+- **[README.docker.md](./README.docker.md)** — Docker инструкция
+
+---
+
+## 🐳 Docker
 
 ```bash
 # Production
@@ -23,21 +54,52 @@ docker compose up dev
 
 См. [README.docker.md](./README.docker.md) для подробной документации.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+---
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## 🛠️ Скрипты
 
-## Learn More
+```bash
+npm run dev          # Запуск dev-сервера
+npm run build        # Production сборка
+npm run start        # Запуск production
+npm run lint         # Проверка кода
+npm run type-check   # Проверка типов TypeScript
+npm run validate     # Все проверки сразу
+```
 
-To learn more about Next.js, take a look at the following resources:
+---
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## 📁 Структура проекта
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+```
+src/
+├── app/              # Next.js App Router
+│   ├── api/          # API endpoints
+│   └── (otherpage)/  # Страницы приложения
+├── components/       # React компоненты
+└── lib/              # Утилиты и конфигурации
+    ├── surreal/      # SurrealDB клиент
+    ├── email/        # Отправка писем
+    └── cron-worker.ts # Фоновые задачи
+```
 
-## Deploy on Vercel
+---
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+## 🔐 Безопасность
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+⚠️ **Никогда не коммитьте `.env.local` в Git!**
+
+В проекте используется:
+- NextAuth.js для аутентификации
+- bcrypt для хеширования паролей
+- Email верификация пользователей
+- Защищённые API endpoints
+
+---
+
+## 📚 Ресурсы
+
+- [Next.js Documentation](https://nextjs.org/docs)
+- [NextAuth.js Documentation](https://next-auth.js.org)
+- [SurrealDB Documentation](https://surrealdb.com/docs)
+- [RouterAI API](https://routerai.ru/docs)
