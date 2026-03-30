@@ -1,267 +1,28 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { getDB } from '@/lib/surreal/surreal';
 import { authOptions } from '@/lib/authOptions';
 import axios from 'axios';
 import {
-  calculateKarma,
+  calculateSimpleKarma,
   getKarmaLevel,
   getKarmaColor,
 } from '@/lib/codeforces/karma';
-import type { CodeforcesSubmission, CodeforcesUser } from '@/types/codeforces';
+import type { CodeforcesSubmission } from '@/types/codeforces';
 
 /**
  * GET /api/codeforces/karma
- * Получает карму пользователя и детальную статистику
+ * Быстрый расчет кармы + список всех задач
+ *
+ * Логика фильтрации:
+ * - Извлекаем только решения где verdict === 'OK'
+ * - Решенной задачей считается уникальная комбинация contestId + index
+ * - Игнорируем повторные решения одной задачи
+ *
+ * Производительность:
+ * - Используем 1 запрос к API (лимит Codeforces: 1 запрос в 2 секунды)
  */
 export async function GET() {
-  try {
-    console.log('[CF Karma API] Starting...');
-    const session = await getServerSession(authOptions);
-    if (!session?.user?.id) {
-      console.log('[CF Karma API] Not authenticated');
-      return NextResponse.json(
-        { ok: false, error: 'Неавторизован' },
-        { status: 401 },
-      );
-    }
-
-    const db = await getDB();
-    if (!db) throw new Error('Ошибка подключения к БД');
-
-    const userId = session.user.id.toString();
-    console.log('[CF Karma API] User ID:', userId);
-
-    // Получаем верифицированный CF username и текущую карму пользователя
-    const userQuery = await db.query(
-      `
-      SELECT
-        id,
-        codeforces_karma,
-        (SELECT VALUE handle_username FROM external_accounts WHERE user_id = type::thing($id) AND platform_name = 'codeforces' AND is_verified = true LIMIT 1)[0] AS cf_username
-      FROM type::thing($id);
-      `,
-      { id: userId },
-    );
-
-    console.log('[CF Karma API] DB query result:', userQuery);
-
-    const resultArr = userQuery[0] as Record<string, unknown>[];
-    const userData = Array.isArray(resultArr) ? resultArr[0] : resultArr;
-
-    console.log('[CF Karma API] User data:', userData);
-
-    if (!userData || !(userData as Record<string, unknown>).cf_username) {
-      console.log('[CF Karma API] CF username not found');
-      return NextResponse.json(
-        { ok: false, error: 'Codeforces аккаунт не привязан' },
-        { status: 400 },
-      );
-    }
-
-    const cfHandle = (userData as Record<string, string>).cf_username;
-    console.log('[CF Karma API] CF Handle:', cfHandle);
-
-    const existingKarma =
-      (userData as Record<string, number>).codeforces_karma || 0;
-    console.log('[CF Karma API] Existing Karma:', existingKarma);
-
-    // Получаем информацию о пользователе
-    let cfUser: CodeforcesUser | null = null;
-    try {
-      const userRes = await axios.get(
-        `https://codeforces.com/api/user.info?handles=${cfHandle}`,
-      );
-      if (userRes.data.status === 'OK' && userRes.data.result?.length > 0) {
-        cfUser = userRes.data.result[0] as CodeforcesUser;
-      }
-    } catch (e) {
-      console.error('Error fetching CF user info:', e);
-    }
-
-    // Получаем все submission'ы пользователя
-    let allSubmissions: CodeforcesSubmission[] = [];
-    let offset = 0;
-    const count = 10000;
-
-    try {
-      while (true) {
-        const submissionsRes = await axios.get(
-          `https://codeforces.com/api/user.status?handle=${cfHandle}&from=${offset + 1}&count=${count}`,
-        );
-
-        if (submissionsRes.data.status !== 'OK') {
-          break;
-        }
-
-        const submissions: CodeforcesSubmission[] = submissionsRes.data.result;
-
-        if (submissions.length === 0) {
-          break;
-        }
-
-        // Фильтруем только решенные задачи
-        const solvedSubmissions = submissions.filter((s) => s.verdict === 'OK');
-        allSubmissions = [...allSubmissions, ...solvedSubmissions];
-
-        if (submissions.length < count) {
-          break;
-        }
-
-        offset += count;
-
-        if (offset > 100000) {
-          break;
-        }
-      }
-    } catch (e) {
-      console.error('Error fetching CF submissions:', e);
-    }
-
-    // Убираем дубликаты задач
-    const uniqueProblems = new Map<string, CodeforcesSubmission>();
-    allSubmissions.forEach((sub) => {
-      const problemIndex = sub.problem?.index || sub.problemIndex;
-      if (!problemIndex) return; // Пропускаем задачи без индекса
-
-      const key =
-        sub.contestId && problemIndex
-          ? `${sub.contestId}-${problemIndex}`
-          : problemIndex;
-      if (!uniqueProblems.has(key)) {
-        uniqueProblems.set(key, sub);
-      }
-    });
-
-    const uniqueSubmissions = Array.from(uniqueProblems.values());
-
-    // Получаем информацию о задачах (рейтинг и теги)
-    const contestIds = [
-      ...new Set(
-        uniqueSubmissions.filter((s) => s.contestId).map((s) => s.contestId!),
-      ),
-    ];
-    const problemRatings = new Map<string, number>();
-    const problemTags = new Map<string, string[]>();
-
-    // Получаем информацию о задачах из контестов (ограничение на количество запросов)
-    for (const contestId of contestIds.slice(0, 50)) {
-      try {
-        const contestRes = await axios.get(
-          `https://codeforces.com/api/contest.standings?contestId=${contestId}&from=1&count=1`,
-        );
-
-        if (
-          contestRes.data.status === 'OK' &&
-          contestRes.data.result?.problems
-        ) {
-          const problems = contestRes.data.result.problems;
-          problems.forEach(
-            (problem: { index: string; rating?: number; tags?: string[] }) => {
-              const key = `${contestId}-${problem.index}`;
-              if (problem.rating) {
-                problemRatings.set(key, problem.rating);
-              }
-              if (problem.tags && Array.isArray(problem.tags)) {
-                problemTags.set(key, problem.tags);
-              }
-            },
-          );
-        }
-
-        await new Promise((resolve) => setTimeout(resolve, 500));
-      } catch (e) {
-        console.error(`Error fetching contest ${contestId}:`, e);
-      }
-    }
-
-    // Рассчитываем карму
-    const karmaResult = calculateKarma(
-      uniqueSubmissions,
-      problemRatings,
-      problemTags,
-    );
-
-    // Считаем статистику по тегам
-    const tagStatsMap = new Map<
-      string,
-      { count: number; averageRating: number; totalRating: number }
-    >();
-    uniqueSubmissions.forEach((sub) => {
-      const problemIndex = sub.problem?.index || sub.problemIndex;
-      const key =
-        sub.contestId && problemIndex
-          ? `${sub.contestId}-${problemIndex}`
-          : problemIndex;
-      const tags = problemTags.get(key) || [];
-      const rating = problemRatings.get(key) || 0;
-
-      tags.forEach((tag) => {
-        const existing = tagStatsMap.get(tag) || {
-          count: 0,
-          averageRating: 0,
-          totalRating: 0,
-        };
-        existing.count++;
-        if (rating > 0) {
-          existing.totalRating += rating;
-          existing.averageRating = Math.round(
-            existing.totalRating / existing.count,
-          );
-        }
-        tagStatsMap.set(tag, existing);
-      });
-    });
-
-    const tagStats = Array.from(tagStatsMap.entries())
-      .map(([tag, data]) => ({
-        tag,
-        solvedCount: data.count,
-        averageRating: data.averageRating,
-      }))
-      .sort((a, b) => b.solvedCount - a.solvedCount)
-      .slice(0, 20); // Топ-20 тегов
-
-    // Считаем распределение по сложности
-    const difficultyDistribution = {
-      easy: karmaResult.details.easyCount,
-      medium: karmaResult.details.mediumCount,
-      hard: karmaResult.details.hardCount,
-    };
-
-    return NextResponse.json({
-      ok: true,
-      data: {
-        karma: karmaResult.totalKarma,
-        karmaLevel: getKarmaLevel(karmaResult.totalKarma),
-        karmaColor: getKarmaColor(karmaResult.totalKarma),
-        breakdown: karmaResult.breakdown,
-        details: karmaResult.details,
-        difficultyDistribution,
-        tagStats,
-        cfUser,
-        existingKarma,
-      },
-    });
-  } catch (err: unknown) {
-    console.error('API GET Error:', err);
-    return NextResponse.json(
-      {
-        ok: false,
-        error:
-          'Ошибка сервера: ' +
-          (err instanceof Error ? err.message : 'Неизвестная ошибка'),
-      },
-      { status: 500 },
-    );
-  }
-}
-
-/**
- * POST /api/codeforces/karma
- * Пересчитывает и обновляет карму пользователя в БД
- */
-export async function POST(req: NextRequest) {
   try {
     const session = await getServerSession(authOptions);
     if (!session?.user?.id) {
@@ -281,6 +42,7 @@ export async function POST(req: NextRequest) {
       `
       SELECT
         id,
+        codeforces_karma,
         (SELECT VALUE handle_username FROM external_accounts WHERE user_id = type::thing($id) AND platform_name = 'codeforces' AND is_verified = true LIMIT 1)[0] AS cf_username
       FROM type::thing($id);
       `,
@@ -298,133 +60,214 @@ export async function POST(req: NextRequest) {
     }
 
     const cfHandle = (userData as Record<string, string>).cf_username;
+    console.log('[CF Karma] Handle:', cfHandle);
 
-    // Получаем все submission'ы пользователя
+    // Получаем все submission'ы пользователя (максимум 5000 за 1 запрос)
+    // Лимит Codeforces API: 1 запрос в 2 секунды
     let allSubmissions: CodeforcesSubmission[] = [];
-    let offset = 0;
-    const count = 10000;
 
     try {
-      while (true) {
-        const submissionsRes = await axios.get(
-          `https://codeforces.com/api/user.status?handle=${cfHandle}&from=${offset + 1}&count=${count}`,
+      console.log('[CF Karma] Fetching submissions...');
+      const submissionsRes = await axios.get(
+        `https://codeforces.com/api/user.status?handle=${cfHandle}&from=1&count=5000`,
+        { timeout: 10000 }, // Таймаут 10 секунд
+      );
+
+      if (submissionsRes.data.status === 'OK') {
+        const submissions: CodeforcesSubmission[] = submissionsRes.data.result;
+        console.log(
+          '[CF Karma] Total submissions received:',
+          submissions.length,
         );
 
-        if (submissionsRes.data.status !== 'OK') {
-          break;
-        }
-
-        const submissions: CodeforcesSubmission[] = submissionsRes.data.result;
-
-        if (submissions.length === 0) {
-          break;
-        }
-
-        const solvedSubmissions = submissions.filter((s) => s.verdict === 'OK');
-        allSubmissions = [...allSubmissions, ...solvedSubmissions];
-
-        if (submissions.length < count) {
-          break;
-        }
-
-        offset += count;
-
-        if (offset > 100000) {
-          break;
-        }
+        // Фильтруем только решенные задачи (verdict === 'OK')
+        allSubmissions = submissions.filter((s) => s.verdict === 'OK');
+        console.log('[CF Karma] Solved submissions:', allSubmissions.length);
+      } else {
+        console.error('[CF Karma] API Error:', submissionsRes.data);
       }
     } catch (e) {
-      console.error('Error fetching CF submissions:', e);
+      console.error('[CF Karma] Error fetching submissions:', e);
+      return NextResponse.json(
+        {
+          ok: false,
+          error: 'Ошибка при получении данных с Codeforces. Попробуйте позже.',
+        },
+        { status: 500 },
+      );
     }
 
     // Убираем дубликаты задач
+    // Решенной задачей считается уникальная комбинация contestId + index
     const uniqueProblems = new Map<string, CodeforcesSubmission>();
-    allSubmissions.forEach((sub) => {
-      const problemIndex = sub.problem?.index || sub.problemIndex;
-      if (!problemIndex) return; // Пропускаем задачи без индекса
 
-      const key =
-        sub.contestId && problemIndex
-          ? `${sub.contestId}-${problemIndex}`
-          : problemIndex;
+    console.log('[CF Karma] Processing submissions...');
+    let skippedCount = 0;
+
+    // Проходим с конца, чтобы сохранить самые свежие submission'ы
+    for (let i = allSubmissions.length - 1; i >= 0; i--) {
+      const sub = allSubmissions[i];
+
+      // Получаем problemIndex из problem.index или problemIndex
+      const problemIndex = sub.problem?.index || sub.problemIndex;
+
+      // Пропускаем задачи без contestId или problemIndex
+      if (!sub.contestId || !problemIndex) {
+        skippedCount++;
+        continue;
+      }
+
+      // Уникальный ключ: contestId + problemIndex
+      const key = `${sub.contestId}-${problemIndex}`;
+
+      // Сохраняем только первое вхождение (самое свежее решение)
       if (!uniqueProblems.has(key)) {
         uniqueProblems.set(key, sub);
       }
-    });
-
-    const uniqueSubmissions = Array.from(uniqueProblems.values());
-
-    // Получаем информацию о задачах (рейтинг и теги)
-    const contestIds = [
-      ...new Set(
-        uniqueSubmissions.filter((s) => s.contestId).map((s) => s.contestId!),
-      ),
-    ];
-    const problemRatings = new Map<string, number>();
-    const problemTags = new Map<string, string[]>();
-
-    for (const contestId of contestIds.slice(0, 50)) {
-      try {
-        const contestRes = await axios.get(
-          `https://codeforces.com/api/contest.standings?contestId=${contestId}&from=1&count=1`,
-        );
-
-        if (
-          contestRes.data.status === 'OK' &&
-          contestRes.data.result?.problems
-        ) {
-          const problems = contestRes.data.result.problems;
-          problems.forEach(
-            (problem: { index: string; rating?: number; tags?: string[] }) => {
-              const key = `${contestId}-${problem.index}`;
-              if (problem.rating) {
-                problemRatings.set(key, problem.rating);
-              }
-              if (problem.tags && Array.isArray(problem.tags)) {
-                problemTags.set(key, problem.tags);
-              }
-            },
-          );
-        }
-
-        await new Promise((resolve) => setTimeout(resolve, 500));
-      } catch (e) {
-        console.error(`Error fetching contest ${contestId}:`, e);
-      }
     }
 
-    // Рассчитываем карму
-    const karmaResult = calculateKarma(
-      uniqueSubmissions,
-      problemRatings,
-      problemTags,
+    const uniqueSubmissions = Array.from(uniqueProblems.values());
+    console.log(
+      '[CF Karma] Unique problems solved:',
+      uniqueSubmissions.length,
+      '| Skipped:',
+      skippedCount,
     );
-    const newKarma = karmaResult.totalKarma;
 
-    // Обновляем карму в БД
-    await db.query(`UPDATE type::thing($id) SET codeforces_karma = $karma`, {
-      id: userId,
-      karma: newKarma,
+    // Оцениваем сложность по рейтингу ИЛИ индексу задачи
+    // Если рейтинг < 1200 = easy (1 балл)
+    // Если рейтинг 1200-1999 = medium (3 балла)
+    // Если рейтинг ≥ 2000 = hard (10 баллов)
+    // Если рейтинга нет = unknown
+    let easyCount = 0;
+    let mediumCount = 0;
+    let hardCount = 0;
+    let unknownCount = 0; // Задачи без рейтинга
+
+    // Список задач для модального окна с полной информацией
+    const problemsList: Array<{
+      contestId: number;
+      problemIndex: string;
+      problemName?: string;
+      solvedAt: number; // timestamp
+      difficulty: 'easy' | 'medium' | 'hard' | 'unknown';
+      karma: number;
+      tags?: string[];
+      rating?: number;
+    }> = [];
+
+    uniqueSubmissions.forEach((sub) => {
+      const problemIndex = sub.problem?.index || sub.problemIndex;
+      const problemRating = sub.problem?.rating;
+      if (!problemIndex) return;
+
+      // Определяем сложность и карму
+      // Если есть рейтинг - используем его (точно), иначе - unknown
+      let difficulty: 'easy' | 'medium' | 'hard' | 'unknown' = 'unknown';
+      let karma = 1;
+
+      if (problemRating) {
+        // Если есть рейтинг задачи, используем его (точно)
+        if (problemRating < 1200) {
+          easyCount++;
+          difficulty = 'easy';
+          karma = 1;
+        } else if (problemRating < 2000) {
+          mediumCount++;
+          difficulty = 'medium';
+          karma = 3;
+        } else {
+          hardCount++;
+          difficulty = 'hard';
+          karma = 10;
+        }
+      } else {
+        // Если рейтинга нет - unknown
+        unknownCount++;
+        difficulty = 'unknown';
+        // Карму считаем приблизительно по индексу
+        if (problemIndex.startsWith('A')) {
+          karma = 1;
+        } else if (
+          problemIndex.startsWith('B') ||
+          problemIndex.startsWith('C')
+        ) {
+          karma = 3;
+        } else {
+          karma = 10;
+        }
+      }
+
+      // Добавляем задачу в список с полной информацией
+      problemsList.push({
+        contestId: sub.contestId!,
+        problemIndex: problemIndex,
+        problemName:
+          sub.problem?.name || sub.problemName || `Задача ${problemIndex}`,
+        solvedAt: sub.creationTimeSeconds,
+        difficulty,
+        karma,
+        tags: sub.problem?.tags || [],
+        rating: problemRating,
+      });
     });
+
+    // Сортируем задачи по дате решения (новые сверху)
+    problemsList.sort((a, b) => b.solvedAt - a.solvedAt);
+
+    console.log('[CF Karma] Difficulty breakdown:', {
+      easy: easyCount,
+      medium: mediumCount,
+      hard: hardCount,
+      unknown: unknownCount,
+    });
+
+    // Рассчитываем карму
+    const totalKarma = calculateSimpleKarma(easyCount, mediumCount, hardCount);
+    console.log('[CF Karma] Total karma:', totalKarma);
+
+    // Считаем распределение по сложности
+    const difficultyDistribution = {
+      easy: easyCount,
+      medium: mediumCount,
+      hard: hardCount,
+      unknown: unknownCount,
+    };
 
     return NextResponse.json({
       ok: true,
       data: {
-        karma: newKarma,
-        karmaLevel: getKarmaLevel(newKarma),
-        karmaColor: getKarmaColor(newKarma),
-        details: karmaResult.details,
+        karma: totalKarma,
+        karmaLevel: getKarmaLevel(totalKarma),
+        karmaColor: getKarmaColor(totalKarma),
+        breakdown: {
+          easyKarma: easyCount * 1,
+          mediumKarma: mediumCount * 3,
+          hardKarma: hardCount * 10,
+          tagBonusKarma: 0,
+          diversityBonus: 0,
+        },
+        details: {
+          totalSolved: uniqueSubmissions.length,
+          easyCount,
+          mediumCount,
+          hardCount,
+          unknownCount,
+          averageRating: 0,
+          uniqueTags: 0,
+        },
+        difficultyDistribution,
+        tagStats: [],
+        problems: problemsList, // Список всех задач для модального окна
       },
-      message: 'Карма успешно обновлена',
+      fast: true, // Флаг, что это быстрый расчет
     });
   } catch (err: unknown) {
-    console.error('API POST Error:', err);
+    console.error('[CF Karma] API Error:', err);
     return NextResponse.json(
       {
         ok: false,
-        error:
-          'Ошибка сервера: ' +
-          (err instanceof Error ? err.message : 'Неизвестная ошибка'),
+        error: err instanceof Error ? err.message : 'Неизвестная ошибка',
       },
       { status: 500 },
     );

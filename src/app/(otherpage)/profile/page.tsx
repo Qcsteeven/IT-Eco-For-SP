@@ -5,6 +5,7 @@ import { useSession, signOut } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
 import './profile.scss';
 import CodeforcesStats from '@/components/CodeforcesStats';
+import CodeforcesProblems from '@/components/CodeforcesProblems';
 
 interface UserData {
   full_name: string;
@@ -195,6 +196,7 @@ const ProfilePage: React.FC = () => {
   } | null>(null);
   const [cfKarmaLoading, setCfKarmaLoading] = useState(false);
   const [showCFStats, setShowCFStats] = useState(false);
+  const [showCFProblems, setShowCFProblems] = useState(false);
 
   // Редирект при неавторизованном доступе
   useEffect(() => {
@@ -296,19 +298,19 @@ const ProfilePage: React.FC = () => {
     }
   }, [status]);
 
-  // Загрузка данных кармы Codeforces (БЫСТРЫЙ вариант)
+  // Загрузка данных кармы Codeforces
   useEffect(() => {
     if (status === 'authenticated' && cfData?.connected) {
       const fetchCFKarma = async () => {
         try {
           setCfKarmaLoading(true);
-          const response = await fetch('/api/codeforces/karma-fast');
+          const response = await fetch('/api/codeforces/karma');
           const result = await response.json();
 
-          console.log('[CF Karma Fast] Response:', response.status, result);
+          console.log('[CF Karma] Response:', response.status, result);
 
           if (response.ok && result.ok && result.data) {
-            console.log('[CF Karma Fast] Data:', result.data);
+            console.log('[CF Karma] Data:', result.data);
             setCfKarmaData(result.data);
 
             // Обновляем codeforces_karma в userData если есть
@@ -316,10 +318,10 @@ const ProfilePage: React.FC = () => {
               setUserData({ ...userData, codeforces_karma: result.data.karma });
             }
           } else {
-            console.error('[CF Karma Fast] Error:', result);
+            console.error('[CF Karma] Error:', result);
           }
         } catch (err) {
-          console.error('[CF Karma Fast] Fetch error:', err);
+          console.error('[CF Karma] Fetch error:', err);
         } finally {
           setCfKarmaLoading(false);
         }
@@ -966,8 +968,8 @@ const ProfilePage: React.FC = () => {
                   {cfKarmaData && (
                     <button
                       className="cf-stats-btn"
-                      onClick={() => setShowCFStats(true)}
-                      title="Показать подробную статистику"
+                      onClick={() => setShowCFProblems(true)}
+                      title="Показать все решённые задачи"
                     >
                       📊
                     </button>
@@ -1855,6 +1857,18 @@ const ProfilePage: React.FC = () => {
           difficultyDistribution={cfKarmaData.difficultyDistribution}
           tagStats={cfKarmaData.tagStats}
           onClose={() => setShowCFStats(false)}
+        />
+      )}
+
+      {/* Модальное окно со списком задач */}
+      {showCFProblems && cfKarmaData && cfKarmaData.problems && (
+        <CodeforcesProblems
+          problems={cfKarmaData.problems}
+          karma={cfKarmaData.karma}
+          karmaLevel={cfKarmaData.karmaLevel}
+          karmaColor={cfKarmaData.karmaColor}
+          details={cfKarmaData.details}
+          onClose={() => setShowCFProblems(false)}
         />
       )}
     </main>
