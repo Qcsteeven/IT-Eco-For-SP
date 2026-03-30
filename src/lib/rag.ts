@@ -2,7 +2,7 @@ import { getDB } from "@/lib/surreal/surreal";
 import { getEmbedding } from "@/lib/embedding"; // ваша функция Fireworks
 
 interface NewsItem {
-  id: any;
+  id: string | Record<string, unknown>;
   title: string;
   content: string;
   publish_date: string;
@@ -10,14 +10,14 @@ interface NewsItem {
 }
 
 interface Contest {
-  id: any;
+  id: string | Record<string, unknown>;
   title: string;
   platform: string;
   status: string;
   start_time_utc: string;
   end_time_utc: string;
   registration_link: string;
-  similarity?: number; // добавим для удобства
+  similarity?: number;
 }
 
 export async function getRagContext(query: string | undefined): Promise<string> {

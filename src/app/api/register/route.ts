@@ -22,7 +22,7 @@ interface UserRecord {
   registration_date: Date;
   role: 'user' | 'admin';
 
-  [key: string]: any;
+  [key: string]: unknown;
 }
 
 export async function POST(request: NextRequest) {
@@ -38,12 +38,14 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const queryResult: any = await db.query(
+    const queryResult: unknown = await db.query(
       'SELECT id FROM users WHERE email = $email',
       { email },
     );
 
-    const existingUsersArray = queryResult?.[0]?.result || [];
+    const existingUsersArray = queryResult && typeof queryResult === 'object' && '0' in queryResult
+      ? (queryResult as Record<string, { result?: unknown[] }>)['0']?.result || []
+      : [];
 
     if (existingUsersArray.length > 0) {
       return NextResponse.json(
@@ -103,10 +105,10 @@ export async function POST(request: NextRequest) {
       },
       { status: 201 },
     );
-  } catch (error: any) {
-    console.error('Ошибка регистрации API:', error);
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    console.error('Ошибка регистрации API:', errorMessage);
 
-    const errorMessage = error.message || String(error);
     const isDuplicateError =
       errorMessage.includes('Database index `unique_email`') ||
       errorMessage.includes('constraint failed on table users');
