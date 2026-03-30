@@ -13,6 +13,10 @@ cp .env.example .env.local
 **Минимальный набор для запуска:**
 
 ```bash
+# Порт приложения (должен совпадать с NEXTAUTH_URL)
+DEV_PORT=3000
+APP_PORT=3000
+
 # Секрет для сессий (сгенерируйте новый!)
 NEXTAUTH_SECRET=$(openssl rand -base64 32)
 NEXTAUTH_URL=http://localhost:3000
@@ -30,9 +34,45 @@ ROUTERAI_API_KEY=ваш_api_ключ
 
 ### 3. Запустите проект
 
+**Docker (рекомендуется):**
+```bash
+docker-compose up dev
+```
+
+**Локально:**
 ```bash
 npm install
 npm run dev
+```
+
+---
+
+## 🔧 Настройка портов
+
+### Изменение порта
+
+Если порт 3000 занят, измените порт в `.env.local`:
+
+```bash
+# Для Docker dev-режима
+DEV_PORT=3001
+NEXTAUTH_URL=http://localhost:3001
+
+# Для Docker production-режима
+APP_PORT=3001
+
+# Для локального запуска (в package.json порт задаётся в команде)
+# npm run dev использует порт 3000 по умолчанию
+```
+
+### Запуск на случайном порту
+
+```bash
+# Docker автоматически выберет свободный порт
+docker-compose up dev
+
+# Узнать назначенный порт
+docker-compose port dev 3000
 ```
 
 ---
