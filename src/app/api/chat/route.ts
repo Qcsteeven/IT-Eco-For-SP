@@ -1,7 +1,6 @@
 import { UIMessage } from 'ai';
 import { createSystemPrompt } from '@/lib/prompts';
 import { getRagContext } from '@/lib/rag';
-import { apiBaseUrl } from 'next-auth/client/_utils';
 
 export const maxDuration = 30;
 

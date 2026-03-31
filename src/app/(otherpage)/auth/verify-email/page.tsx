@@ -32,7 +32,7 @@ const safeFetch = async (
 
   try {
     data = JSON.parse(responseText) as ApiResponse;
-  } catch (e) {
+  } catch {
     console.error(
       `Сервер вернул не JSON (HTTP ${response.status}):`,
       responseText.substring(0, 100) + '...',

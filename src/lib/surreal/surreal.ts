@@ -2,7 +2,6 @@ import Surreal from "surrealdb";
 
 let db: Surreal | null = null;
 let isConnecting = false;
-let connectionAttempts = 0;
 
 const MAX_RETRIES = 3;
 const RETRY_DELAY_MS = 1000;

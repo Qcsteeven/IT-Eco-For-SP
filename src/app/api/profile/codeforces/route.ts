@@ -12,7 +12,7 @@ function generateVerificationCode(): string {
 }
 
 // GET - получение данных Codeforces пользователя
-export async function GET(req: NextRequest) {
+export async function GET() {
   try {
     const session = await getServerSession(authOptions);
     if (!session?.user?.id) {
@@ -142,7 +142,7 @@ export async function GET(req: NextRequest) {
 }
 
 // POST - начало процесса привязки (создание кода верификации)
-export async function POST(req: NextRequest) {
+export async function POST() {
   try {
     const session = await getServerSession(authOptions);
     if (!session?.user?.id) {
@@ -395,7 +395,7 @@ export async function PUT(req: NextRequest) {
 }
 
 // DELETE - отвязка аккаунта Codeforces
-export async function DELETE(req: NextRequest) {
+export async function DELETE() {
   try {
     const session = await getServerSession(authOptions);
     if (!session?.user?.id) {
