@@ -142,7 +142,7 @@ export async function GET() {
 }
 
 // POST - начало процесса привязки (создание кода верификации)
-export async function POST() {
+export async function POST(req: Request) {
   try {
     const session = await getServerSession(authOptions);
     if (!session?.user?.id) {

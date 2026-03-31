@@ -69,7 +69,6 @@ async function connectWithRetry(): Promise<Surreal> {
 export async function getDB() {
   if (!db) {
     if (isConnecting) {
-      // Ждем завершения существующего подключения
       await delay(100);
       if (db) return db;
     }
@@ -79,11 +78,7 @@ export async function getDB() {
     try {
       validateEnv();
       db = await connectWithRetry();
-      connectionAttempts = 0;
       return db;
-    } catch (error) {
-      connectionAttempts++;
-      throw error;
     } finally {
       isConnecting = false;
     }
