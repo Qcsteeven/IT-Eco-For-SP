@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, FormEvent, ChangeEvent } from 'react';
+import React, { useState, FormEvent, ChangeEvent, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 // 1. ИМПОРТИРУЕМ СТИЛИ КАК МОДУЛЬ
 import styles from './VerifyEmail.module.scss';
@@ -42,7 +42,7 @@ const safeFetch = async (
   return { response, data };
 };
 
-export default function VerifyEmailPage() {
+function VerifyEmailContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
 
@@ -203,5 +203,13 @@ export default function VerifyEmailPage() {
         </div>
       )}
     </div>
+  );
+}
+
+export default function VerifyEmailPage() {
+  return (
+    <Suspense fallback={<div className={styles.verifyEmailContainer}>Загрузка...</div>}>
+      <VerifyEmailContent />
+    </Suspense>
   );
 }
