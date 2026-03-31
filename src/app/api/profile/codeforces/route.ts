@@ -263,7 +263,7 @@ export async function POST(req: Request) {
 }
 
 // PUT - проверка кода в First Name и подтверждение привязки
-export async function PUT(req: NextRequest) {
+export async function PUT() {
   try {
     const session = await getServerSession(authOptions);
     if (!session?.user?.id) {

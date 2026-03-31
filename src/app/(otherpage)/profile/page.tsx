@@ -71,12 +71,6 @@ interface ContestProblem {
   problemUrl: string;
 }
 
-interface SelectedContest {
-  contestId: string;
-  contestName: string;
-  platform: string;
-}
-
 interface AtCoderData {
   connected: boolean;
   atcoder_username: string | null;
