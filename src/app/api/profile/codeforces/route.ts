@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { getDB } from '@/lib/surreal/surreal';
 import { authOptions } from '@/lib/authOptions';
