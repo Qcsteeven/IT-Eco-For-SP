@@ -39,13 +39,13 @@ async function connectWithRetry(): Promise<Surreal> {
       await newDb.connect(host);
 
       await newDb.signin({
-        username: process.env.SURREAL_USER,
-        password: process.env.SURREAL_PASSWORD,
+        username: process.env.SURREAL_USER!,
+        password: process.env.SURREAL_PASSWORD!,
       });
 
       await newDb.use({
-        namespace: process.env.SURREAL_NAMESPACE,
-        database: process.env.SURREAL_DATABASE,
+        namespace: process.env.SURREAL_NAMESPACE!,
+        database: process.env.SURREAL_DATABASE!,
       });
 
       console.log('[SurrealDB] Подключение успешно установлено');
@@ -93,7 +93,7 @@ export async function getDB() {
 }
 
 // Функция для выполнения запроса с retry
-export async function queryWithRetry<T>(
+export async function queryWithRetry<T extends unknown[]>(
   query: string,
   variables?: Record<string, unknown>,
   retries = MAX_RETRIES

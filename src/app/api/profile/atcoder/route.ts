@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { getDB } from '@/lib/surreal/surreal';
 import { authOptions } from '@/lib/authOptions';
-import { fetchUserInfo, fetchUserContestList } from '@qatadaazzeh/atcoder-api';
+import { fetchUserInfo, fetchUserContestList, type UserContest } from '@qatadaazzeh/atcoder-api';
 import crypto from 'crypto';
 import axios from 'axios';
 
@@ -75,48 +75,18 @@ export async function GET(req: NextRequest) {
 
       console.log('[AtCoder] Raw contest history:', JSON.stringify(contestHistory, null, 2).substring(0, 1000));
 
-      interface AtCoderContestRaw {
-        contestId?: string;
-        contest_id?: string;
-        contestName?: string;
-        contest_name?: string;
-        userRank?: number;
-        user_rank?: number;
-        userOldRating?: number;
-        user_old_rating?: number;
-        userNewRating?: number;
-        user_new_rating?: number;
-        userRatingChange?: number;
-        user_rating_change?: number;
-        userPerformance?: number;
-        user_performance?: number;
-        contestEndTime?: string;
-        contest_end_time?: string;
-        isRated?: boolean;
-        is_rated?: boolean;
-        [key: string]: unknown;
-      }
-
       // Форматируем данные
-      const formattedSubmissions = contestHistory.map((contest: AtCoderContestRaw) => {
-        // Пробуем разные варианты названий полей
-        const contestId = contest.contestId || contest.contest_id || contest.contestId || '';
-        const contestName = contest.contestName || contest.contest_name || contestId || '';
-
-        console.log('[AtCoder] Mapped contest:', { contestId, contestName });
-
-        return ({
-          contest_id: contestId,
-          contest_name: contestName,
-          user_rank: contest.userRank || contest.user_rank || 0,
-          user_old_rating: contest.userOldRating || contest.user_old_rating || 0,
-          user_new_rating: contest.userNewRating || contest.user_new_rating || 0,
-          user_rating_change: contest.userRatingChange || contest.user_rating_change || 0,
-          user_performance: contest.userPerformance || contest.user_performance || 0,
-          contest_end_time: contest.contestEndTime || contest.contest_end_time || '',
-          is_rated: contest.isRated || contest.is_rated || false,
-        });
-      });
+      const formattedSubmissions = contestHistory.map((contest: UserContest) => ({
+        contest_id: contest.contestId,
+        contest_name: contest.contestName,
+        user_rank: contest.userRank,
+        user_old_rating: contest.userOldRating,
+        user_new_rating: contest.userNewRating,
+        user_rating_change: contest.userRatingChange,
+        user_performance: contest.userPerformance,
+        contest_end_time: contest.contestEndTime,
+        is_rated: contest.isRated,
+      }));
 
       return NextResponse.json({
         ok: true,

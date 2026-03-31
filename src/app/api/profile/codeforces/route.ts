@@ -116,7 +116,7 @@ export async function GET(req: NextRequest) {
           user_old_rating: item.oldRating || 0,
           user_new_rating: item.newRating || 0,
           user_rating_change: (item.newRating || 0) - (item.oldRating || 0),
-          contest_end_time: new Date(item.ratingUpdateTimeSeconds * 1000).toISOString(),
+          contest_end_time: new Date((item.ratingUpdateTimeSeconds || 0) * 1000).toISOString(),
           is_rated: true,
         }));
       }

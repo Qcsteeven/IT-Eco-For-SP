@@ -3,7 +3,7 @@ import { getServerSession } from 'next-auth';
 import { getDB } from '@/lib/surreal/surreal';
 import { authOptions } from '@/lib/authOptions';
 import { hashPassword, verifyPassword } from '@/lib/surreal/auth';
-import { fetchUserInfo, fetchUserContestList } from '@qatadaazzeh/atcoder-api';
+import { fetchUserInfo, fetchUserContestList, type UserContest } from '@qatadaazzeh/atcoder-api';
 
 interface CF_RatingResult {
   contestId: number;
@@ -113,7 +113,7 @@ export async function GET() {
     }
 
     // Получаем историю с AtCoder и текущий рейтинг
-    if (userData.atcoder_username) {
+    if (userData.atcoder_username && typeof userData.atcoder_username === 'string') {
       console.log(`[AtCoder] Fetching history for: ${userData.atcoder_username}`);
 
       try {
@@ -126,33 +126,20 @@ export async function GET() {
         // Текущий рейтинг из userInfo
         atcoderCurrentRating = userInfo.userRating || 0;
 
-        interface AtCoderContest {
-          contestId?: string;
-          contestName?: string;
-          contestEndTime?: string;
-          contest_end_time?: string;
-          userRank?: number;
-          rank?: number;
-          userRatingChange?: number;
-          userNewRating?: number;
-          userOldRating?: number;
-          [key: string]: unknown;
-        }
-
-        const atCoderHistory = contestHistory.map((contest: AtCoderContest) => {
+        const atCoderHistory = contestHistory.map((contest: UserContest) => {
           const diff = contest.userRatingChange || ((contest.userNewRating || 0) - (contest.userOldRating || 0));
           // Извлекаем короткий ID (abc446 из abc446.contest.atcoder.jp)
           const fullContestId = contest.contestId || '';
           const shortContestId = fullContestId.split('.')[0] || '';
 
           return {
-            date_recorded: new Date(contest.contestEndTime || contest.contest_end_time || Date.now()).toISOString(),
-            placement: (contest.userRank || contest.rank || '0').toString(),
+            date_recorded: new Date(contest.contestEndTime || Date.now()).toISOString(),
+            placement: (contest.userRank || 0).toString(),
             mmr_change: diff,
             is_manual: false,
             source_rating_change: diff >= 0 ? `+${diff}` : `${diff}`,
             contest: {
-              title: contest.contestName || contest.contest_id || '',
+              title: contest.contestName || '',
               platform: 'AtCoder',
               id: shortContestId,
             },
