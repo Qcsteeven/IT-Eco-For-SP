@@ -1,18 +1,39 @@
-import { NextResponse } from "next/server";
-import { getDB } from "@/lib/surreal";
+import { NextResponse } from 'next/server';
+
+import { getDB } from '@/lib/surreal/surreal';
+
+type Contest = {
+  id: string;
+  title: string;
+  platform: string;
+  status: string;
+  start_time_utc: string;
+  end_time_utc: string;
+  registration_link: string;
+  platform_contest_id: string;
+};
 
 export async function GET() {
   try {
     const db = await getDB();
 
-    // Получаем все события напрямую
-    const events = await db.query("SELECT * FROM event;");
+    if (!db) {
+      throw new Error('Не удалось подключиться к базе данных SurrealDB');
+    }
 
-    // Если вдруг SurrealDB вернёт null/undefined, фильтруем
-    const allEvents = (events ?? []).filter(Boolean);
+    const result = await db.query<Contest[][]>(
+      'SELECT * FROM contests ORDER BY start_time_utc ASC;',
+    );
 
-    return NextResponse.json({ ok: true, data: allEvents }, { status: 200 });
-  } catch (err: any) {
-    return NextResponse.json({ ok: false, error: err?.message || String(err) }, { status: 500 });
+    const contests = result[0];
+
+    return NextResponse.json({ ok: true, data: contests }, { status: 200 });
+  } catch (err: unknown) {
+    const errorMessage = err instanceof Error ? err.message : String(err);
+    console.error('API Error:', errorMessage);
+    return NextResponse.json(
+      { ok: false, error: errorMessage },
+      { status: 500 },
+    );
   }
 }

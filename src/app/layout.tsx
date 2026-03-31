@@ -1,6 +1,11 @@
+// src/app/layout.tsx
+
 import type { Metadata } from 'next';
 import { Geist, Geist_Mono } from 'next/font/google';
 import './globals.css';
+// 👈 Импортируем наш клиентский компонент-обертку
+import SessionWrapper from '../components/SessionWrapper';
+import { initCron } from '@/lib/cron-worker';
 
 const geistSans = Geist({
   variable: '--font-geist-sans',
@@ -22,12 +27,19 @@ export default function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  // 2. Добавляем инициализацию крона.
+  // Проверка на development гарантирует, что это будет работать только при npm run dev
+  if (process.env.NODE_ENV === 'development') {
+    initCron();
+  }
+
   return (
     <html lang="en">
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
-        {children}
+        {/* 👈 Оборачиваем здесь: SessionProvider теперь доступен для всех дочерних элементов */}
+        <SessionWrapper>{children}</SessionWrapper>
       </body>
     </html>
   );

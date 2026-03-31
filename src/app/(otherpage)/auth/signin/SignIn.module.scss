@@ -1,0 +1,130 @@
+.signinWrapper {
+  // Растягиваем на всю доступную высоту между Header и Footer
+  flex: 1;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  background-color: #f8fafc;
+  padding: 40px 20px;
+}
+
+.signinBox {
+  width: 100%;
+  max-width: 450px; // Немного увеличим для солидности
+  padding: 3rem;   // Больше внутренних отступов
+  background-color: white;
+  border-radius: 16px;
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+}
+
+.title {
+  font-size: 2.4rem; // Увеличиваем, так как база 10px
+  font-weight: 700;
+  text-align: center;
+  color: #1a1a1a;
+  margin-bottom: 2.5rem;
+}
+
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: 2rem; // Увеличиваем расстояние между полями
+}
+
+.formGroup {
+  display: flex;
+  flex-direction: column;
+  gap: 0.8rem;
+}
+
+.label {
+  font-size: 1.4rem; // Соответствует ~14px
+  font-weight: 600;
+  color: #334155;
+}
+
+.passwordInputWrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.input {
+  width: 100%;
+  padding: 1.2rem 1.6rem; // Более "пухлые" инпуты
+  border: 1px solid #cbd5e1;
+  border-radius: 10px;
+  font-size: 1.6rem; // Крупный текст внутри
+  background-color: #fff;
+  transition: all 0.2s ease;
+
+  &:focus {
+    outline: none;
+    border-color: #0066cc;
+    box-shadow: 0 0 0 4px rgba(0, 102, 204, 0.1);
+  }
+
+  &::placeholder {
+    font-size: 1.4rem;
+    color: #94a3b8;
+  }
+}
+
+.eyeBtn {
+  position: absolute;
+  right: 1.2rem;
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: #64748b;
+  display: flex;
+  padding: 8px;
+  transition: color 0.2s;
+
+  &:hover { color: #0066cc; }
+
+  svg {
+    width: 2rem;
+    height: 2rem;
+  }
+}
+
+.submitButton {
+  width: 100%;
+  padding: 1.4rem;
+  margin-top: 1rem;
+  border-radius: 10px;
+  background-color: #0066cc;
+  color: white;
+  font-size: 1.6rem;
+  font-weight: 600;
+  border: none;
+  cursor: pointer;
+  transition: transform 0.1s active, background 0.2s;
+
+  &:hover {
+    background-color: #0052a3;
+  }
+
+  &:active {
+    transform: scale(0.98);
+  }
+}
+
+.signupText {
+  text-align: center;
+  font-size: 1.4rem;
+  color: #64748b;
+  margin-top: 1rem;
+}
+
+.signupLink {
+  color: #0066cc;
+  font-weight: 600;
+  cursor: pointer;
+  text-decoration: none;
+
+  &:hover {
+    text-decoration: underline;
+  }
+}

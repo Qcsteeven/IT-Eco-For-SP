@@ -1,0 +1,48 @@
+.contest-card {
+  padding: 28px 25px;
+  border-radius: 20px;
+  box-shadow: 0px 1px 20px #0000002a;
+}
+.contest-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.contest-title {
+  font-size: 24px;
+}
+.contest-platform {
+  padding: 2px 16px;
+  border-radius: 30px;
+  background-color: #0066CC;
+  color: #fff;
+}
+.contest-status {
+  width: max-content;
+  padding: 0 4px;
+  border-radius: 4px;
+  margin-bottom: 11px;
+  background-color: #EFFFEB;
+  color: #5DC36C;
+  
+}
+
+.contest-dates {
+  margin-bottom: 30px;
+  font-size: 16px;
+  color: #8C8C8C;
+}
+
+.btn-register {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  width: 180px;
+  height: 40px;
+  margin-left: auto;
+  border-radius: 10px;
+  background-color: #28A745;
+  font-size: 15px;
+  color: #fff;
+  box-shadow: 1px 4px 18px #0000005c;
+}

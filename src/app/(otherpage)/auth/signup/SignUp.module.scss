@@ -1,0 +1,121 @@
+.signupWrapper {
+  flex: 1;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  background-color: #f8fafc;
+  padding: 40px 20px;
+}
+
+.signupBox {
+  width: 100%;
+  max-width: 450px;
+  padding: 3rem;
+  background-color: white;
+  border-radius: 16px;
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1);
+}
+
+.title {
+  font-size: 2.4rem; // 24px
+  font-weight: 700;
+  text-align: center;
+  color: #1a1a1a;
+  margin-bottom: 2rem;
+}
+
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.formGroup {
+  display: flex;
+  flex-direction: column;
+  gap: 0.8rem;
+}
+
+.label {
+  font-size: 1.4rem; // 14px
+  font-weight: 600;
+  color: #334155;
+}
+
+.passwordWrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.input {
+  width: 100%;
+  padding: 1.2rem 1.6rem;
+  padding-right: 4rem; // Место для иконки
+  border: 1px solid #cbd5e1;
+  border-radius: 10px;
+  font-size: 1.6rem;
+  background-color: #fff;
+
+  &:focus {
+    outline: none;
+    border-color: #0066cc;
+    box-shadow: 0 0 0 4px rgba(0, 102, 204, 0.1);
+  }
+}
+
+.passwordToggle {
+  position: absolute;
+  right: 1.2rem;
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: #64748b;
+  display: flex;
+  padding: 5px;
+
+  svg {
+    width: 2rem;
+    height: 2rem;
+  }
+}
+
+.submitButton {
+  width: 100%;
+  padding: 1.4rem;
+  margin-top: 1rem;
+  border-radius: 10px;
+  background-color: #0066cc;
+  color: white;
+  font-size: 1.6rem;
+  font-weight: 600;
+  border: none;
+  cursor: pointer;
+
+  &:disabled {
+    background-color: #9ca3af;
+    cursor: not-allowed;
+  }
+}
+
+.error {
+  padding: 1.2rem;
+  background: #fee2e2;
+  color: #dc2626;
+  border-radius: 8px;
+  font-size: 1.4rem;
+  text-align: center;
+}
+
+.signinText {
+  text-align: center;
+  font-size: 1.4rem;
+  color: #64748b;
+}
+
+.signinLink {
+  color: #0066cc;
+  font-weight: 600;
+  cursor: pointer;
+  &:hover { text-decoration: underline; }
+}
