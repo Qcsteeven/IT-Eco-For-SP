@@ -63,6 +63,31 @@ export async function GET() {
     const cfHandle = (userData as Record<string, string>).cf_username;
     console.log('[CF Karma] Handle:', cfHandle);
 
+    // Проверяем кэш кармы (TTL 1 час)
+    const CACHE_TTL = 60 * 60 * 1000;
+    const now = Date.now();
+    const cfAccountQuery = await db.query(
+      `SELECT id, updated_at, cached_karma FROM external_accounts WHERE user_id = type::thing($user_id) AND platform_name = 'codeforces' AND is_verified = true LIMIT 1`,
+      { user_id: userId },
+    );
+    const cfAccountArr = cfAccountQuery[0] as Record<string, unknown>[];
+    const cfAccountData = cfAccountArr[0];
+
+    const lastKarmaUpdate = cfAccountData?.updated_at
+      ? new Date(cfAccountData.updated_at as string).getTime()
+      : 0;
+    const karmaCacheValid =
+      lastKarmaUpdate && now - lastKarmaUpdate < CACHE_TTL;
+
+    if (karmaCacheValid && cfAccountData?.cached_karma) {
+      console.log('[CF Karma] Using cached data');
+      return NextResponse.json(
+        JSON.parse(cfAccountData.cached_karma as string),
+      );
+    }
+
+    console.log('[CF Karma] Fetching submissions...');
+
     // Получаем все submission'ы пользователя (максимум 5000 за 1 запрос)
     // Лимит Codeforces API: 1 запрос в 2 секунды
     let allSubmissions: CodeforcesSubmission[] = [];
@@ -229,7 +254,7 @@ export async function GET() {
       unknown: unknownCount,
     };
 
-    return NextResponse.json({
+    const response = {
       ok: true,
       data: {
         karma: totalKarma,
@@ -256,7 +281,25 @@ export async function GET() {
         problems: problemsList, // Список всех задач для модального окна
       },
       fast: true, // Флаг, что это быстрый расчет
-    });
+    };
+
+    // Сохраняем в кэш
+    if (cfAccountData?.id) {
+      try {
+        await db.query(
+          `UPDATE type::thing($id) SET cached_karma = $karma, updated_at = time::now() WHERE platform_name = 'codeforces'`,
+          {
+            id: cfAccountData.id,
+            karma: JSON.stringify(response),
+          },
+        );
+        console.log('[CF Karma] Cache saved');
+      } catch (e) {
+        console.error('[CF Karma] Cache save error:', e);
+      }
+    }
+
+    return NextResponse.json(response);
   } catch (err: unknown) {
     console.error('[CF Karma] API Error:', err);
     return NextResponse.json(

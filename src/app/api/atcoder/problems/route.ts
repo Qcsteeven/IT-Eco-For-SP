@@ -66,6 +66,34 @@ export async function GET() {
     const atcoderHandle = (userData as Record<string, string>).atcoder_username;
     console.log('[AtCoder Problems] Handle:', atcoderHandle);
 
+    // Проверяем кэш кармы AtCoder (TTL 1 час)
+    const CACHE_TTL = 60 * 60 * 1000;
+    const now = Date.now();
+    const atcoderAccountQuery = await db.query(
+      `SELECT id, updated_at, cached_karma FROM external_accounts WHERE user_id = type::thing($user_id) AND platform_name = 'atcoder' AND is_verified = true LIMIT 1`,
+      { user_id: userId },
+    );
+    const atcoderAccountArr = atcoderAccountQuery[0] as Record<
+      string,
+      unknown
+    >[];
+    const atcoderAccountData = atcoderAccountArr[0];
+
+    const lastKarmaUpdate = atcoderAccountData?.updated_at
+      ? new Date(atcoderAccountData.updated_at as string).getTime()
+      : 0;
+    const karmaCacheValid =
+      lastKarmaUpdate && now - lastKarmaUpdate < CACHE_TTL;
+
+    if (karmaCacheValid && atcoderAccountData?.cached_karma) {
+      console.log('[AtCoder Problems] Using cached data');
+      return NextResponse.json(
+        JSON.parse(atcoderAccountData.cached_karma as string),
+      );
+    }
+
+    console.log('[AtCoder Problems] Fetching from AtCoder API...');
+
     // Получаем все submission'ы пользователя с AtCoder
     // Используем неофициальное API или парсинг
     let allSubmissions: AtCoderProblem[] = [];
@@ -196,7 +224,7 @@ export async function GET() {
     const totalKarma = calculateSimpleKarma(easyCount, mediumCount, hardCount);
     console.log('[AtCoder Problems] Total karma:', totalKarma);
 
-    return NextResponse.json({
+    const response = {
       ok: true,
       data: {
         karma: totalKarma,
@@ -211,7 +239,25 @@ export async function GET() {
         },
         problems: uniqueSubmissions,
       },
-    });
+    };
+
+    // Сохраняем в кэш
+    if (atcoderAccountData?.id) {
+      try {
+        await db.query(
+          `UPDATE type::thing($id) SET cached_karma = $karma, updated_at = time::now() WHERE platform_name = 'atcoder'`,
+          {
+            id: atcoderAccountData.id,
+            karma: JSON.stringify(response),
+          },
+        );
+        console.log('[AtCoder Problems] Cache saved');
+      } catch (e) {
+        console.error('[AtCoder Problems] Cache save error:', e);
+      }
+    }
+
+    return NextResponse.json(response);
   } catch (err: unknown) {
     console.error('[AtCoder Problems] API Error:', err);
     return NextResponse.json(
