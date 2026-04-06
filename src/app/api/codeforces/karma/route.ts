@@ -163,8 +163,7 @@ export async function GET() {
       const problemTags = sub.problem?.tags || [];
       if (!problemIndex) return;
 
-      // Определяем сложность и базовую карму
-      // Если есть рейтинг - используем его (точно), иначе - unknown
+      // Определяем сложность и карму ТОЛЬКО по рейтингу
       let difficulty: 'easy' | 'medium' | 'hard' | 'unknown' = 'unknown';
       let baseKarma = 1;
 
@@ -184,23 +183,13 @@ export async function GET() {
           baseKarma = 10;
         }
       } else {
-        // Если рейтинга нет - unknown
+        // Если рейтинга нет - unknown (НЕ определяем по индексу!)
         unknownCount++;
         difficulty = 'unknown';
-        // Базовую карму считаем приблизительно по индексу
-        if (problemIndex.startsWith('A')) {
-          baseKarma = 1;
-        } else if (
-          problemIndex.startsWith('B') ||
-          problemIndex.startsWith('C')
-        ) {
-          baseKarma = 3;
-        } else {
-          baseKarma = 10;
-        }
+        baseKarma = 1; // Базовая карма без рейтинга
       }
 
-      // Применяем множитель тега
+      // Применяем множитель тега (всегда 1.0)
       const tagMultiplier = getTagMultiplier(problemTags);
       const karma = Math.round(baseKarma * tagMultiplier);
 

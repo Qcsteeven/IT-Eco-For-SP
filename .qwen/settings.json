@@ -1,0 +1,16 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(docker compose logs *)",
+      "Bash(select-string *)",
+      "Bash(select-object *)",
+      "Bash(findstr *)",
+      "Bash(timeout *)",
+      "Bash(netstat *)",
+      "Bash(tasklist)",
+      "Bash(docker compose ps)",
+      "Bash(curl *)"
+    ]
+  },
+  "$version": 3
+}
