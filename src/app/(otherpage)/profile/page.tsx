@@ -591,15 +591,6 @@ const ProfilePage: React.FC = () => {
 
       if (response.ok && result.ok) {
         alert('Аккаунт AtCoder отвязан.');
-        setUserData((prev) =>
-          prev ? { ...prev, atcoder_username: null } : null,
-        );
-        setAtCoderData({
-          connected: false,
-          atcoder_username: null,
-          submissions: [],
-        });
-        setShowAtCoderSubmissions(false);
 
         // Очищаем историю рейтинга AtCoder
         setHistoryData((prev) =>
@@ -608,6 +599,22 @@ const ProfilePage: React.FC = () => {
 
         // Сбрасываем карму AtCoder
         setAtcoderKarmaData(null);
+        setAtCoderData({
+          connected: false,
+          atcoder_username: null,
+          submissions: [],
+        });
+        setShowAtCoderSubmissions(false);
+
+        // Перезагружаем профиль, чтобы получить актуальный рейтинг (из Codeforces, если подключён)
+        const profileResponse = await fetch('/api/profile');
+        const profileResult: ProfileApiResponse = await profileResponse.json();
+
+        if (profileResponse.ok && profileResult.ok && profileResult.data) {
+          setUserData(profileResult.data.user);
+          // Обновляем историю (без AtCoder)
+          setHistoryData(profileResult.data.history);
+        }
       } else {
         alert(result.error || 'Ошибка при отвязке аккаунта');
       }
@@ -728,11 +735,6 @@ const ProfilePage: React.FC = () => {
 
       if (response.ok && result.ok) {
         alert('Аккаунт Codeforces отвязан. Рейтинг обновлен.');
-        setUserData((prev) =>
-          prev ? { ...prev, cf_username: null, bscp_rating: 0 } : null,
-        );
-        setCfData({ connected: false, cf_username: null, submissions: [] });
-        setShowCFSubmissions(false);
 
         // Очищаем историю рейтинга Codeforces
         setHistoryData((prev) =>
@@ -741,6 +743,18 @@ const ProfilePage: React.FC = () => {
 
         // Сбрасываем карму
         setCfKarmaData(null);
+        setCfData({ connected: false, cf_username: null, submissions: [] });
+        setShowCFSubmissions(false);
+
+        // Перезагружаем профиль, чтобы получить актуальный рейтинг (из AtCoder, если подключён)
+        const profileResponse = await fetch('/api/profile');
+        const profileResult: ProfileApiResponse = await profileResponse.json();
+
+        if (profileResponse.ok && profileResult.ok && profileResult.data) {
+          setUserData(profileResult.data.user);
+          // Обновляем историю (без Codeforces)
+          setHistoryData(profileResult.data.history);
+        }
       } else {
         alert(result.error || 'Ошибка при отвязке аккаунта');
       }
