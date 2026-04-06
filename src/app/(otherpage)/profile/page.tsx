@@ -555,11 +555,20 @@ const ProfilePage: React.FC = () => {
         setGeneratedVerificationCode('');
         setVerificationStep('input_username');
 
-        // Сразу обновляем данные
+        // Обновляем данные AtCoder
         const atCoderResponse = await fetch('/api/profile/atcoder');
         const atCoderResult = await atCoderResponse.json();
         if (atCoderResponse.ok && atCoderResult.ok && atCoderResult.data) {
           setAtCoderData(atCoderResult.data);
+        }
+
+        // Перезагружаем профиль, чтобы обновить bscp_rating (MAX из CF и AtCoder)
+        const profileResponse = await fetch('/api/profile');
+        const profileResult: ProfileApiResponse = await profileResponse.json();
+
+        if (profileResponse.ok && profileResult.ok && profileResult.data) {
+          setUserData(profileResult.data.user);
+          setHistoryData(profileResult.data.history);
         }
       } else {
         setAtCoderError(result.error || 'Код не найден в Affiliation');
@@ -700,11 +709,20 @@ const ProfilePage: React.FC = () => {
         setCfGeneratedCode('');
         setCfVerificationStep('input_username');
 
-        // Сразу обновляем данные
+        // Обновляем данные Codeforces
         const cfResponse = await fetch('/api/profile/codeforces');
         const cfResult = await cfResponse.json();
         if (cfResponse.ok && cfResult) {
           setCfData(cfResult);
+        }
+
+        // Перезагружаем профиль, чтобы обновить bscp_rating (MAX из CF и AtCoder)
+        const profileResponse = await fetch('/api/profile');
+        const profileResult: ProfileApiResponse = await profileResponse.json();
+
+        if (profileResponse.ok && profileResult.ok && profileResult.data) {
+          setUserData(profileResult.data.user);
+          setHistoryData(profileResult.data.history);
         }
       } else {
         setCfError(result.error || 'Код не найден в First Name');
