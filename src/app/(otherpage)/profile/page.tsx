@@ -600,6 +600,14 @@ const ProfilePage: React.FC = () => {
           submissions: [],
         });
         setShowAtCoderSubmissions(false);
+
+        // Очищаем историю рейтинга AtCoder
+        setHistoryData((prev) =>
+          prev.filter((item) => item.contest.platform !== 'AtCoder'),
+        );
+
+        // Сбрасываем карму AtCoder
+        setAtcoderKarmaData(null);
       } else {
         alert(result.error || 'Ошибка при отвязке аккаунта');
       }
@@ -725,6 +733,14 @@ const ProfilePage: React.FC = () => {
         );
         setCfData({ connected: false, cf_username: null, submissions: [] });
         setShowCFSubmissions(false);
+
+        // Очищаем историю рейтинга Codeforces
+        setHistoryData((prev) =>
+          prev.filter((item) => item.contest.platform !== 'Codeforces'),
+        );
+
+        // Сбрасываем карму
+        setCfKarmaData(null);
       } else {
         alert(result.error || 'Ошибка при отвязке аккаунта');
       }
