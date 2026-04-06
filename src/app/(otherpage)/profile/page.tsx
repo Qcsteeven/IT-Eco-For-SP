@@ -487,17 +487,19 @@ const ProfilePage: React.FC = () => {
       // Если уже подключен - показываем/скрываем сабмишены
       setShowAtCoderSubmissions(!showAtCoderSubmissions);
     } else if (atCoderData?.pending_verification) {
-      // Если ожидается верификация - показываем шаг проверки
-      setVerificationStep('verifying');
+      // Если есть активная верификация — показываем код
+      setVerificationStep('show_code');
       setAtCoderInput(atCoderData.pending_atcoder_username || '');
-      setShowAtCoderModal(true);
+      setGeneratedVerificationCode(atCoderData.verification_code || '');
       setAtCoderError(null);
+      setShowAtCoderModal(true);
     } else {
       // Если не подключен - открываем модальное окно с вводом username
       setVerificationStep('input_username');
-      setAtCoderInput(userData?.atcoder_username || '');
-      setShowAtCoderModal(true);
+      setAtCoderInput('');
+      setGeneratedVerificationCode('');
       setAtCoderError(null);
+      setShowAtCoderModal(true);
     }
   };
 
@@ -646,15 +648,18 @@ const ProfilePage: React.FC = () => {
     if (cfData?.connected) {
       setShowCFSubmissions(!showCFSubmissions);
     } else if (cfData?.pending_verification) {
-      setCfVerificationStep('verifying');
+      // Если есть активная верификация — показываем код
+      setCfVerificationStep('show_code');
       setCfInput(cfData.pending_cf_username || '');
-      setShowCFModal(true);
+      setCfGeneratedCode(cfData.verification_code || '');
       setCfError(null);
+      setShowCFModal(true);
     } else {
       setCfVerificationStep('input_username');
       setCfInput('');
-      setShowCFModal(true);
+      setCfGeneratedCode('');
       setCfError(null);
+      setShowCFModal(true);
     }
   };
 
@@ -1305,7 +1310,8 @@ const ProfilePage: React.FC = () => {
                     </ol>
                     <div className="code-box">{cfGeneratedCode}</div>
                     <p className="code-warning">
-                      ⚠️ Код будет показан только один раз!
+                      💡 Если вы забыли код — нажмите кнопку ниже для генерации
+                      нового
                     </p>
                   </div>
                   <div className="modal-buttons">
@@ -1316,6 +1322,22 @@ const ProfilePage: React.FC = () => {
                       className="btn-cancel"
                     >
                       Отмена
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setCfGeneratedCode('');
+                        setCfVerificationStep('input_username');
+                      }}
+                      disabled={cfLoading}
+                      className="btn-secondary"
+                      style={{
+                        backgroundColor: '#f59e0b',
+                        color: '#fff',
+                        marginRight: '10px',
+                      }}
+                    >
+                      Новый код
                     </button>
                     <button
                       type="button"
@@ -1446,7 +1468,8 @@ const ProfilePage: React.FC = () => {
                     </ol>
                     <div className="code-box">{generatedVerificationCode}</div>
                     <p className="code-warning">
-                      ⚠️ Код будет показан только один раз!
+                      💡 Если вы забыли код — нажмите кнопку ниже для генерации
+                      нового
                     </p>
                   </div>
                   <div className="modal-buttons">
@@ -1457,6 +1480,22 @@ const ProfilePage: React.FC = () => {
                       className="btn-cancel"
                     >
                       Отмена
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setGeneratedVerificationCode('');
+                        setVerificationStep('input_username');
+                      }}
+                      disabled={atCoderLoading}
+                      className="btn-secondary"
+                      style={{
+                        backgroundColor: '#f59e0b',
+                        color: '#fff',
+                        marginRight: '10px',
+                      }}
+                    >
+                      Новый код
                     </button>
                     <button
                       type="button"
