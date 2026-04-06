@@ -143,6 +143,7 @@ const ProfilePage: React.FC = () => {
   const [cfVerificationStep, setCfVerificationStep] = useState<
     'input_username' | 'show_code' | 'verifying'
   >('input_username');
+  const [cfAutoVerifyCountdown, setCfAutoVerifyCountdown] = useState<number>(5);
 
   // Состояния для задач соревнования
   const [expandedContestId, setExpandedContestId] = useState<string | null>(
@@ -197,6 +198,31 @@ const ProfilePage: React.FC = () => {
   const [cfKarmaLoading, setCfKarmaLoading] = useState(false);
   const [showCFStats, setShowCFStats] = useState(false);
   const [showCFProblems, setShowCFProblems] = useState(false);
+
+  // AtCoder Karma состояния
+  const [atcoderKarmaData, setAtcoderKarmaData] = useState<{
+    karma: number;
+    karmaLevel: string;
+    karmaColor: string;
+    details: {
+      totalSolved: number;
+      easyCount: number;
+      mediumCount: number;
+      hardCount: number;
+      unknownCount: number;
+    };
+    problems?: Array<{
+      contestId: string;
+      contestName: string;
+      taskIndex: string;
+      taskName: string;
+      solvedAt: number;
+      difficulty?: number;
+      karma: number;
+    }>;
+  } | null>(null);
+  const [atcoderKarmaLoading, setAtcoderKarmaLoading] = useState(false);
+  const [showAtCoderProblems, setShowAtCoderProblems] = useState(false);
 
   // Редирект при неавторизованном доступе
   useEffect(() => {
@@ -330,6 +356,62 @@ const ProfilePage: React.FC = () => {
       fetchCFKarma();
     }
   }, [status, cfData?.connected]);
+
+  // Загрузка данных кармы AtCoder
+  useEffect(() => {
+    if (status === 'authenticated' && atCoderData?.connected) {
+      const fetchAtCoderKarma = async () => {
+        try {
+          setAtcoderKarmaLoading(true);
+          const response = await fetch('/api/atcoder/problems');
+          const result = await response.json();
+
+          console.log('[AtCoder Karma] Response:', response.status, result);
+
+          if (response.ok && result.ok && result.data) {
+            console.log('[AtCoder Karma] Data:', result.data);
+            setAtcoderKarmaData(result.data);
+          } else {
+            console.error('[AtCoder Karma] Error:', result);
+          }
+        } catch (err) {
+          console.error('[AtCoder Karma] Fetch error:', err);
+        } finally {
+          setAtcoderKarmaLoading(false);
+        }
+      };
+
+      fetchAtCoderKarma();
+    }
+  }, [status, atCoderData?.connected]);
+
+  // Автоматическая проверка кода верификации Codeforces
+  useEffect(() => {
+    if (cfVerificationStep === 'verifying' && cfGeneratedCode) {
+      setCfAutoVerifyCountdown(5);
+
+      // Обратный отсчёт
+      const countdownInterval = setInterval(() => {
+        setCfAutoVerifyCountdown((prev) => {
+          if (prev <= 1) {
+            clearInterval(countdownInterval);
+            return 0;
+          }
+          return prev - 1;
+        });
+      }, 1000);
+
+      // Ждём 5 секунд, затем проверяем
+      const timer = setTimeout(() => {
+        handleVerifyCFFirstName();
+      }, 5000);
+
+      return () => {
+        clearTimeout(timer);
+        clearInterval(countdownInterval);
+      };
+    }
+  }, [cfVerificationStep]);
 
   // Уникальные платформы
   const platforms = useMemo(() => {
@@ -656,6 +738,7 @@ const ProfilePage: React.FC = () => {
     setCfError(null);
     setCfGeneratedCode('');
     setCfVerificationStep('input_username');
+    setCfAutoVerifyCountdown(5);
   };
 
   // Загрузка задач соревнования
@@ -1156,7 +1239,7 @@ const ProfilePage: React.FC = () => {
                       <li>
                         Перейдите на{' '}
                         <a
-                          href="https://codeforces.com/settings"
+                          href="https://codeforces.com/settings/social"
                           target="_blank"
                           rel="noopener noreferrer"
                         >
@@ -1200,8 +1283,12 @@ const ProfilePage: React.FC = () => {
                 <>
                   <h2>Проверка привязки</h2>
                   <p className="verification-instructions">
-                    Проверяем, что код размещён в поле{' '}
-                    <strong>First Name</strong> на Codeforces...
+                    Автоматическая проверка через{' '}
+                    <strong>{cfAutoVerifyCountdown} сек...</strong>
+                  </p>
+                  <p className="verification-hint">
+                    Убедитесь, что код размещён в поле{' '}
+                    <strong>First Name</strong> на Codeforces
                   </p>
                   <div className="checking-status">
                     <div className="spinner"></div>
@@ -1222,10 +1309,14 @@ const ProfilePage: React.FC = () => {
                     <button
                       type="button"
                       onClick={handleVerifyCFFirstName}
-                      disabled={cfLoading}
+                      disabled={cfLoading || cfAutoVerifyCountdown > 0}
                       className="btn-submit"
                     >
-                      {cfLoading ? 'Проверка...' : 'Проверить'}
+                      {cfLoading
+                        ? 'Проверка...'
+                        : cfAutoVerifyCountdown > 0
+                          ? `Проверить (${cfAutoVerifyCountdown})`
+                          : 'Проверить сейчас'}
                     </button>
                   </div>
                 </>

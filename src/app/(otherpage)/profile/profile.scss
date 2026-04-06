@@ -520,6 +520,20 @@
       }
     }
 
+    .verification-hint {
+      background-color: #e7f3ff;
+      border-left: 4px solid #007bff;
+      border-radius: 4px;
+      padding: 12px 15px;
+      margin-bottom: 15px;
+      font-size: 0.9em;
+      color: #004085;
+
+      strong {
+        font-weight: 600;
+      }
+    }
+
     .verification-code-display {
       background-color: #f8f9fa;
       border: 2px solid #007bff;
