@@ -2,6 +2,7 @@
   "permissions": {
     "allow": [
       "Bash(docker compose logs *)"
+      "Bash(mv *)"
     ]
   }
 }
