@@ -514,25 +514,52 @@ export async function PUT() {
     try {
       const cfQuery = await db.query(
         `SELECT
-          (SELECT VALUE handle_username FROM external_accounts WHERE user_id = type::thing($user_id) AND platform_name = 'codeforces' AND is_verified = true LIMIT 1)[0] AS cf_username,
-          (SELECT VALUE codeforces_karma FROM users WHERE id = type::thing($user_id) LIMIT 1)[0] AS cf_karma
+          (SELECT VALUE handle_username FROM external_accounts WHERE user_id = type::thing($user_id) AND platform_name = 'codeforces' AND is_verified = true LIMIT 1)[0] AS cf_username
         FROM type::thing($user_id)`,
         { user_id: userId },
       );
       const cfResult = (cfQuery[0] as Record<string, unknown>[])?.[0];
       const cfUsername = cfResult?.cf_username as string | undefined;
-      cfKarma = (cfResult?.cf_karma as number) || 0;
 
       if (cfUsername) {
         const cfRes = await axios.get(
+          `https://codeforces.com/api/user.status?handle=${cfUsername}&from=1&count=5000`,
+          { timeout: 10000 },
+        );
+        if (cfRes.data.status === 'OK') {
+          const submissions = cfRes.data.result;
+          const okSubmissions = submissions.filter(
+            (s: { verdict: string }) => s.verdict === 'OK',
+          );
+          const uniqueProblems = new Map<string, unknown>();
+          for (let i = okSubmissions.length - 1; i >= 0; i--) {
+            const sub = okSubmissions[i];
+            const problemIndex = sub.problem?.index || sub.problemIndex;
+            if (!sub.contestId || !problemIndex) continue;
+            const key = `${sub.contestId}-${problemIndex}`;
+            if (!uniqueProblems.has(key)) uniqueProblems.set(key, sub);
+          }
+          let easyCount = 0,
+            mediumCount = 0,
+            hardCount = 0;
+          uniqueProblems.forEach((sub: unknown) => {
+            const s = sub as Record<string, unknown>;
+            const problem = s.problem as Record<string, unknown> | undefined;
+            const rating = problem?.rating as number | undefined;
+            if (rating) {
+              if (rating < 1200) easyCount++;
+              else if (rating < 2000) mediumCount++;
+              else hardCount++;
+            }
+          });
+          cfKarma = easyCount * 1 + mediumCount * 3 + hardCount * 10;
+        }
+
+        const cfInfo = await axios.get(
           `https://codeforces.com/api/user.info?handles=${cfUsername}`,
         );
-        if (
-          cfRes.data.status === 'OK' &&
-          cfRes.data.result &&
-          cfRes.data.result.length > 0
-        ) {
-          cfRating = cfRes.data.result[0].rating || 0;
+        if (cfInfo.data.status === 'OK' && cfInfo.data.result?.length > 0) {
+          cfRating = cfInfo.data.result[0].rating || 0;
         }
       }
     } catch (e) {
@@ -598,33 +625,60 @@ export async function DELETE() {
     try {
       const cfQuery = await db.query(
         `SELECT
-          (SELECT VALUE handle_username FROM external_accounts WHERE user_id = type::thing($user_id) AND platform_name = 'codeforces' AND is_verified = true LIMIT 1)[0] AS cf_username,
-          (SELECT VALUE codeforces_karma FROM users WHERE id = type::thing($user_id) LIMIT 1)[0] AS cf_karma
+          (SELECT VALUE handle_username FROM external_accounts WHERE user_id = type::thing($user_id) AND platform_name = 'codeforces' AND is_verified = true LIMIT 1)[0] AS cf_username
         FROM type::thing($user_id)`,
         { user_id: userId },
       );
       const cfResult = (cfQuery[0] as Record<string, unknown>[])?.[0];
       const cfUsername = cfResult?.cf_username as string | undefined;
-      cfKarma = (cfResult?.cf_karma as number) || 0;
 
       if (cfUsername) {
         const cfRes = await axios.get(
+          `https://codeforces.com/api/user.status?handle=${cfUsername}&from=1&count=5000`,
+          { timeout: 10000 },
+        );
+        if (cfRes.data.status === 'OK') {
+          const submissions = cfRes.data.result;
+          const okSubmissions = submissions.filter(
+            (s: { verdict: string }) => s.verdict === 'OK',
+          );
+          const uniqueProblems = new Map<string, unknown>();
+          for (let i = okSubmissions.length - 1; i >= 0; i--) {
+            const sub = okSubmissions[i];
+            const problemIndex = sub.problem?.index || sub.problemIndex;
+            if (!sub.contestId || !problemIndex) continue;
+            const key = `${sub.contestId}-${problemIndex}`;
+            if (!uniqueProblems.has(key)) uniqueProblems.set(key, sub);
+          }
+          let easyCount = 0,
+            mediumCount = 0,
+            hardCount = 0;
+          uniqueProblems.forEach((sub: unknown) => {
+            const s = sub as Record<string, unknown>;
+            const problem = s.problem as Record<string, unknown> | undefined;
+            const rating = problem?.rating as number | undefined;
+            if (rating) {
+              if (rating < 1200) easyCount++;
+              else if (rating < 2000) mediumCount++;
+              else hardCount++;
+            }
+          });
+          cfKarma = easyCount * 1 + mediumCount * 3 + hardCount * 10;
+        }
+
+        const cfInfo = await axios.get(
           `https://codeforces.com/api/user.info?handles=${cfUsername}`,
         );
-        if (
-          cfRes.data.status === 'OK' &&
-          cfRes.data.result &&
-          cfRes.data.result.length > 0
-        ) {
-          cfRating = cfRes.data.result[0].rating || 0;
+        if (cfInfo.data.status === 'OK' && cfInfo.data.result?.length > 0) {
+          cfRating = cfInfo.data.result[0].rating || 0;
         }
       }
     } catch (e) {
-      console.error('Error getting CF rating:', e);
+      console.error('Error getting CF data:', e);
     }
 
     // Итоговый рейтинг = CF (т.к. AtCoder отвязан)
-    // Итоговая карма = только CF karma
+    // Итоговая карма = только CF karma (т.к. AtCoder отвязан)
     const finalRating = cfRating;
     const totalKarma = cfKarma;
 

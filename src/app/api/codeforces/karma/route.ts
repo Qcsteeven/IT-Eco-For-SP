@@ -43,7 +43,6 @@ export async function GET() {
       `
       SELECT
         id,
-        codeforces_karma,
         total_karma,
         (SELECT VALUE handle_username FROM external_accounts WHERE user_id = type::thing($id) AND platform_name = 'codeforces' AND is_verified = true LIMIT 1)[0] AS cf_username
       FROM type::thing($id);
@@ -82,9 +81,76 @@ export async function GET() {
 
     if (karmaCacheValid && cfAccountData?.cached_karma) {
       console.log('[CF Karma] Using cached data');
-      return NextResponse.json(
-        JSON.parse(cfAccountData.cached_karma as string),
-      );
+      const cachedResponse = JSON.parse(cfAccountData.cached_karma as string);
+
+      // Даже при кэшированном ответе — синхронизируем карма в users
+      try {
+        const rawUserData = userData as Record<string, unknown>;
+        const savedTotalKarma = rawUserData?.total_karma as number | undefined;
+        const cachedKarma = cachedResponse?.data?.karma as number | undefined;
+
+        if (cachedKarma) {
+          // Получаем карму AtCoder (если привязан)
+          let atcoderKarma = 0;
+          try {
+            const { fetchUserContestList, fetchUserInfo } = await import(
+              '@qatadaazzeh/atcoder-api'
+            );
+            const atcoderQuery = await db.query(
+              `SELECT (SELECT VALUE handle_username FROM external_accounts WHERE user_id = type::thing($user_id) AND platform_name = 'atcoder' AND is_verified = true LIMIT 1)[0] AS atcoder_username FROM type::thing($user_id)`,
+              { user_id: userId },
+            );
+            const atcoderResult = (
+              atcoderQuery[0] as Record<string, unknown>[]
+            )?.[0];
+            const atcoderUsername = atcoderResult?.atcoder_username as
+              | string
+              | undefined;
+            if (atcoderUsername) {
+              const userInfo = await fetchUserInfo(atcoderUsername);
+              if (userInfo.userRating) {
+                const contestHistory =
+                  await fetchUserContestList(atcoderUsername);
+                atcoderKarma = contestHistory.reduce(
+                  (sum: number, contest: unknown) => {
+                    const c = contest as Record<string, unknown>;
+                    const change =
+                      (c.userRatingChange as number) ||
+                      ((c.userNewRating as number) || 0) -
+                        ((c.userOldRating as number) || 0);
+                    return sum + change;
+                  },
+                  0,
+                );
+              }
+            }
+          } catch (e) {
+            console.error(
+              '[CF Karma] Error getting AtCoder karma (cache path):',
+              e,
+            );
+          }
+
+          const newTotalKarma = cachedKarma + atcoderKarma;
+          const totalKarmaChanged =
+            savedTotalKarma === undefined || savedTotalKarma !== newTotalKarma;
+
+          if (totalKarmaChanged) {
+            await db.query(
+              `UPDATE type::thing($id) SET total_karma = $totalKarma WHERE id = type::thing($id)`,
+              { id: userId, totalKarma: newTotalKarma },
+            );
+            console.log(
+              '[CF Karma] (cache) Karma synced to users: total=',
+              newTotalKarma,
+            );
+          }
+        }
+      } catch (e) {
+        console.error('[CF Karma] Error syncing karma from cache:', e);
+      }
+
+      return NextResponse.json(cachedResponse);
     }
 
     console.log('[CF Karma] Fetching submissions...');
@@ -306,10 +372,10 @@ export async function GET() {
 
     // Сохраняем карму в users ТОЛЬКО если она изменилась
     try {
-      const savedCfKarma = (userData as Record<string, unknown>)
-        ?.codeforces_karma as number | undefined;
-      const savedTotalKarma = (userData as Record<string, unknown>)
-        ?.total_karma as number | undefined;
+      const rawUserData = userData as Record<string, unknown>;
+      const savedTotalKarma = rawUserData?.total_karma as number | undefined;
+
+      console.log('[CF Karma] Current total_karma=', savedTotalKarma);
 
       // Получаем карму AtCoder (если привязан) для вычисления total_karma
       let atcoderKarma = 0;
@@ -352,22 +418,28 @@ export async function GET() {
 
       const newTotalKarma = cfKarmaValue + atcoderKarma;
 
-      // Обновляем БД только если карма изменилась
-      if (savedCfKarma !== cfKarmaValue || savedTotalKarma !== newTotalKarma) {
+      console.log(
+        '[CF Karma] New values: cf_karma=',
+        cfKarmaValue,
+        ', atcoder_karma=',
+        atcoderKarma,
+        ', total_karma=',
+        newTotalKarma,
+      );
+
+      // Определяем нужно ли обновлять БД
+      const totalKarmaChanged =
+        savedTotalKarma === undefined || savedTotalKarma !== newTotalKarma;
+
+      console.log('[CF Karma] Needs update:', totalKarmaChanged);
+
+      if (totalKarmaChanged) {
         await db.query(
-          `UPDATE type::thing($id) SET codeforces_karma = $cfKarma, total_karma = $totalKarma WHERE id = type::thing($id)`,
-          {
-            id: userId,
-            cfKarma: cfKarmaValue,
-            totalKarma: newTotalKarma,
-          },
+          `UPDATE type::thing($id) SET total_karma = $totalKarma WHERE id = type::thing($id)`,
+          { id: userId, totalKarma: newTotalKarma },
         );
         console.log(
-          '[CF Karma] Karma updated in users: cf_karma=',
-          cfKarmaValue,
-          '(was',
-          savedCfKarma,
-          '), total_karma=',
+          '[CF Karma] Karma synced to users: total_karma=',
           newTotalKarma,
           '(was',
           savedTotalKarma,

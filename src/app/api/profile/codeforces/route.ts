@@ -540,7 +540,7 @@ export async function PUT() {
     const finalRating = Math.max(cfRating, atcoderRating);
     const totalKarma = cfKarma + atcoderKarma;
 
-    // Подтверждаем привязку и обновляем рейтинг + карму
+    // Подтверждаем привязку и обновляем рейтинг
     const updateResult = await db.query(
       `
       BEGIN TRANSACTION;

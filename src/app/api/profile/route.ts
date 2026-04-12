@@ -49,7 +49,7 @@ export async function GET() {
     const userQuery = await db.query(
       `
       SELECT
-        id, full_name, email, bscp_rating, phone, codeforces_karma, total_karma,
+        id, full_name, email, bscp_rating, phone, total_karma,
         (SELECT * FROM external_accounts WHERE user_id = type::thing($id) AND platform_name = 'codeforces' AND is_verified = true LIMIT 1)[0] AS cf_account,
         (SELECT * FROM external_accounts WHERE user_id = type::thing($id) AND platform_name = 'atcoder' AND is_verified = true LIMIT 1)[0] AS atcoder_account
       FROM type::thing($id);
@@ -286,11 +286,6 @@ export async function GET() {
         newRating: finalRating,
       });
       userData.bscp_rating = finalRating;
-    }
-
-    // Добавляем codeforces_karma если нет
-    if (!userData.codeforces_karma) {
-      userData.codeforces_karma = 0;
     }
 
     // Добавляем total_karma если нет
