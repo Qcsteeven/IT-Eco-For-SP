@@ -9,7 +9,8 @@
       "Bash(netstat *)",
       "Bash(tasklist)",
       "Bash(docker compose ps)",
-      "Bash(curl *)"
+      "Bash(curl *)",
+      "Bash(npx *)"
     ]
   },
   "$version": 3
