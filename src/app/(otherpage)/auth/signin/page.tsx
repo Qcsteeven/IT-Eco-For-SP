@@ -1,10 +1,10 @@
 'use client';
 
-import React, { useState, useEffect, FormEvent } from 'react';
+import React, { useState, useEffect, FormEvent, Suspense } from 'react';
 import { signIn, useSession, LiteralUnion } from 'next-auth/react';
 import { BuiltInProviderType } from 'next-auth/providers/index';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { FiEye, FiEyeOff } from 'react-icons/fi'; // Импорт иконок
+import { FiEye, FiEyeOff } from 'react-icons/fi';
 import styles from './SignIn.module.scss';
 
 type AuthErrorType = 'EmailNotVerified' | 'CredentialsSignin' | string;
@@ -16,7 +16,7 @@ interface SignInResult {
   url: string | null;
 }
 
-export default function SignIn() {
+function SignInForm() {
   const [email, setEmail] = useState<string>('');
   const [password, setPassword] = useState<string>('');
   const [showPassword, setShowPassword] = useState<boolean>(false);
@@ -124,5 +124,13 @@ export default function SignIn() {
         </form>
       </div>
     </div>
+  );
+}
+
+export default function SignIn() {
+  return (
+    <Suspense fallback={<div className={styles.loaderFull}>Загрузка...</div>}>
+      <SignInForm />
+    </Suspense>
   );
 }

@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { getDB } from '@/lib/surreal/surreal';
 import { authOptions } from '@/lib/authOptions';
@@ -12,7 +12,7 @@ function generateVerificationCode(): string {
 }
 
 // GET - получение данных Codeforces пользователя
-export async function GET(req: NextRequest) {
+export async function GET() {
   try {
     const session = await getServerSession(authOptions);
     if (!session?.user?.id) {
@@ -198,7 +198,7 @@ export async function GET(req: NextRequest) {
 }
 
 // POST - начало процесса привязки (создание кода верификации)
-export async function POST(req: NextRequest) {
+export async function POST(req: Request) {
   try {
     const session = await getServerSession(authOptions);
     if (!session?.user?.id) {
@@ -349,7 +349,7 @@ export async function POST(req: NextRequest) {
 }
 
 // PUT - проверка кода в First Name и подтверждение привязки
-export async function PUT(req: NextRequest) {
+export async function PUT() {
   try {
     const session = await getServerSession(authOptions);
     if (!session?.user?.id) {
@@ -516,7 +516,7 @@ export async function PUT(req: NextRequest) {
 }
 
 // DELETE - отвязка аккаунта Codeforces
-export async function DELETE(req: NextRequest) {
+export async function DELETE() {
   try {
     const session = await getServerSession(authOptions);
     if (!session?.user?.id) {

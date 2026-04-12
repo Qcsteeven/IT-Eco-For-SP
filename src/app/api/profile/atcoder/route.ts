@@ -2,7 +2,11 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { getDB } from '@/lib/surreal/surreal';
 import { authOptions } from '@/lib/authOptions';
-import { fetchUserInfo, fetchUserContestList } from '@qatadaazzeh/atcoder-api';
+import {
+  fetchUserInfo,
+  fetchUserContestList,
+  type UserContest,
+} from '@qatadaazzeh/atcoder-api';
 import crypto from 'crypto';
 import axios from 'axios';
 
@@ -12,7 +16,7 @@ function generateVerificationCode(): string {
 }
 
 // GET - получение данных AtCoder пользователя
-export async function GET(req: NextRequest) {
+export async function GET() {
   try {
     const session = await getServerSession(authOptions);
     if (!session?.user?.id) {
@@ -360,7 +364,7 @@ export async function POST(req: NextRequest) {
 }
 
 // PUT - проверка кода в Affiliation и подтверждение привязки
-export async function PUT(req: NextRequest) {
+export async function PUT() {
   try {
     const session = await getServerSession(authOptions);
     if (!session?.user?.id) {
@@ -550,7 +554,7 @@ export async function PUT(req: NextRequest) {
 }
 
 // DELETE - отвязка аккаунта AtCoder
-export async function DELETE(req: NextRequest) {
+export async function DELETE() {
   try {
     const session = await getServerSession(authOptions);
     if (!session?.user?.id) {

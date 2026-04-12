@@ -2,7 +2,6 @@ import Surreal from "surrealdb";
 
 let db: Surreal | null = null;
 let isConnecting = false;
-let connectionAttempts = 0;
 
 const MAX_RETRIES = 3;
 const RETRY_DELAY_MS = 1000;
@@ -39,13 +38,13 @@ async function connectWithRetry(): Promise<Surreal> {
       await newDb.connect(host);
 
       await newDb.signin({
-        username: process.env.SURREAL_USER,
-        password: process.env.SURREAL_PASSWORD,
+        username: process.env.SURREAL_USER!,
+        password: process.env.SURREAL_PASSWORD!,
       });
 
       await newDb.use({
-        namespace: process.env.SURREAL_NAMESPACE,
-        database: process.env.SURREAL_DATABASE,
+        namespace: process.env.SURREAL_NAMESPACE!,
+        database: process.env.SURREAL_DATABASE!,
       });
 
       console.log('[SurrealDB] Подключение успешно установлено');
@@ -70,7 +69,6 @@ async function connectWithRetry(): Promise<Surreal> {
 export async function getDB() {
   if (!db) {
     if (isConnecting) {
-      // Ждем завершения существующего подключения
       await delay(100);
       if (db) return db;
     }
@@ -80,11 +78,7 @@ export async function getDB() {
     try {
       validateEnv();
       db = await connectWithRetry();
-      connectionAttempts = 0;
       return db;
-    } catch (error) {
-      connectionAttempts++;
-      throw error;
     } finally {
       isConnecting = false;
     }
@@ -93,7 +87,7 @@ export async function getDB() {
 }
 
 // Функция для выполнения запроса с retry
-export async function queryWithRetry<T>(
+export async function queryWithRetry<T extends unknown[]>(
   query: string,
   variables?: Record<string, unknown>,
   retries = MAX_RETRIES

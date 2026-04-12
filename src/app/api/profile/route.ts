@@ -3,7 +3,11 @@ import { getServerSession } from 'next-auth';
 import { getDB } from '@/lib/surreal/surreal';
 import { authOptions } from '@/lib/authOptions';
 import { hashPassword, verifyPassword } from '@/lib/surreal/auth';
-import { fetchUserInfo, fetchUserContestList } from '@qatadaazzeh/atcoder-api';
+import {
+  fetchUserInfo,
+  fetchUserContestList,
+  type UserContest,
+} from '@qatadaazzeh/atcoder-api';
 
 interface CF_RatingResult {
   contestId: number;

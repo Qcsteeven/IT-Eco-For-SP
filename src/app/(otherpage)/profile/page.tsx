@@ -530,7 +530,7 @@ const ProfilePage: React.FC = () => {
       } else {
         setAtCoderError(result.error || 'Ошибка при привязке аккаунта');
       }
-    } catch (err) {
+    } catch {
       setAtCoderError('Ошибка соединения с сервером.');
     } finally {
       setAtCoderLoading(false);
@@ -575,7 +575,7 @@ const ProfilePage: React.FC = () => {
       } else {
         setAtCoderError(result.error || 'Код не найден в Affiliation');
       }
-    } catch (err) {
+    } catch {
       setAtCoderError('Ошибка соединения с сервером.');
     } finally {
       setAtCoderLoading(false);
@@ -629,7 +629,7 @@ const ProfilePage: React.FC = () => {
       } else {
         alert(result.error || 'Ошибка при отвязке аккаунта');
       }
-    } catch (err) {
+    } catch {
       alert('Ошибка соединения с сервером.');
     }
   };
@@ -688,7 +688,7 @@ const ProfilePage: React.FC = () => {
       } else {
         setCfError(result.error || 'Ошибка при привязке аккаунта');
       }
-    } catch (err) {
+    } catch {
       setCfError('Ошибка соединения с сервером.');
     } finally {
       setCfLoading(false);
@@ -732,7 +732,7 @@ const ProfilePage: React.FC = () => {
       } else {
         setCfError(result.error || 'Код не найден в First Name');
       }
-    } catch (err) {
+    } catch {
       setCfError('Ошибка соединения с сервером.');
     } finally {
       setCfLoading(false);
@@ -781,7 +781,7 @@ const ProfilePage: React.FC = () => {
       } else {
         alert(result.error || 'Ошибка при отвязке аккаунта');
       }
-    } catch (err) {
+    } catch {
       alert('Ошибка соединения с сервером.');
     }
   };
@@ -1014,7 +1014,7 @@ const ProfilePage: React.FC = () => {
       } else {
         alert(result.error || 'Ошибка при сохранении');
       }
-    } catch (err) {
+    } catch {
       alert('Ошибка соединения с сервером.');
     } finally {
       setSaving(false);

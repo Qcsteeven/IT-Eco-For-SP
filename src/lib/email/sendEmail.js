@@ -24,7 +24,7 @@ const transporter = nodemailer.createTransport({
 });
 
 // Проверка подключения SMTP (опционально)
-transporter.verify((error, success) => {
+transporter.verify((error) => {
   if (error) {
     console.error('[Email] Ошибка подключения к SMTP:', error.message);
   } else {

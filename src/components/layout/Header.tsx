@@ -5,7 +5,7 @@ import { useSession } from 'next-auth/react';
 import './header.scss';
 
 export default function Header() {
-  const { data: session, status } = useSession();
+  const { status } = useSession();
 
   return (
     <>
