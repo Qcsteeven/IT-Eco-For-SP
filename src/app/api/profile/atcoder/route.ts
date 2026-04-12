@@ -2,7 +2,11 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { getDB } from '@/lib/surreal/surreal';
 import { authOptions } from '@/lib/authOptions';
-import { fetchUserInfo, fetchUserContestList, type UserContest } from '@qatadaazzeh/atcoder-api';
+import {
+  fetchUserInfo,
+  fetchUserContestList,
+  type UserContest,
+} from '@qatadaazzeh/atcoder-api';
 import crypto from 'crypto';
 import axios from 'axios';
 
@@ -27,12 +31,12 @@ export async function GET() {
 
     const userId = session.user.id.toString();
 
-    // Получаем данные пользователя с AtCoder username
+    // Получаем данные пользователя с AtCoder username и кэшем
     const userQuery = await db.query(
       `
       SELECT
         id,
-        (SELECT VALUE handle_username FROM external_accounts WHERE user_id = type::thing($id) AND platform_name = 'atcoder' AND is_verified = true LIMIT 1)[0] AS atcoder_username,
+        (SELECT * FROM external_accounts WHERE user_id = type::thing($id) AND platform_name = 'atcoder' AND is_verified = true LIMIT 1)[0] AS atcoder_account,
         (SELECT VALUE verification_code FROM external_accounts WHERE user_id = type::thing($id) AND platform_name = 'atcoder' AND is_verified = false LIMIT 1)[0] AS pending_verification_code,
         (SELECT VALUE handle_username FROM external_accounts WHERE user_id = type::thing($id) AND platform_name = 'atcoder' AND is_verified = false LIMIT 1)[0] AS pending_atcoder_username
       FROM type::thing($id);
@@ -40,7 +44,9 @@ export async function GET() {
       { id: userId },
     );
 
-    const resultArr = userQuery[0] as Record<string, unknown> | Record<string, unknown>[];
+    const resultArr = userQuery[0] as
+      | Record<string, unknown>
+      | Record<string, unknown>[];
     const userData = Array.isArray(resultArr) ? resultArr[0] : resultArr;
 
     if (!userData) {
@@ -51,7 +57,7 @@ export async function GET() {
     }
 
     // Если аккаунт не привязан
-    if (!userData.atcoder_username) {
+    if (!userData.atcoder_account) {
       return NextResponse.json({
         ok: true,
         data: {
@@ -65,45 +71,134 @@ export async function GET() {
       });
     }
 
+    const atcoderAccount = userData.atcoder_account as Record<string, unknown>;
+    const atcoderUsername = atcoderAccount.handle_username as string;
+
+    // Проверяем кэш (TTL 1 час)
+    const CACHE_TTL = 60 * 60 * 1000;
+    const now = Date.now();
+    const lastUpdate = atcoderAccount.updated_at
+      ? new Date(atcoderAccount.updated_at as string).getTime()
+      : 0;
+    const cacheValid = lastUpdate && now - lastUpdate < CACHE_TTL;
+
+    // Если кэш валиден, возвращаем его
+    if (cacheValid && atcoderAccount.cached_user_info) {
+      console.log('[AtCoder GET] Using cached data');
+      return NextResponse.json({
+        ok: true,
+        data: {
+          connected: true,
+          atcoder_username: atcoderUsername,
+          user_info: JSON.parse(atcoderAccount.cached_user_info as string),
+          submissions: JSON.parse(atcoderAccount.cached_submissions as string),
+        },
+      });
+    }
+
+    console.log('[AtCoder GET] Fetching from AtCoder API...');
+
     // Получаем данные с AtCoder через API клиент
     try {
       // Получаем информацию о пользователе
       const userInfo = await fetchUserInfo(userData.atcoder_username as string);
 
       // Получаем contest history
-      const contestHistory = await fetchUserContestList(userData.atcoder_username as string);
+      const contestHistory = await fetchUserContestList(
+        userData.atcoder_username as string,
+      );
 
-      console.log('[AtCoder] Raw contest history:', JSON.stringify(contestHistory, null, 2).substring(0, 1000));
+      console.log(
+        '[AtCoder] Raw contest history:',
+        JSON.stringify(contestHistory, null, 2).substring(0, 1000),
+      );
+
+      interface AtCoderContestRaw {
+        contestId?: string;
+        contest_id?: string;
+        contestName?: string;
+        contest_name?: string;
+        userRank?: number;
+        user_rank?: number;
+        userOldRating?: number;
+        user_old_rating?: number;
+        userNewRating?: number;
+        user_new_rating?: number;
+        userRatingChange?: number;
+        user_rating_change?: number;
+        userPerformance?: number;
+        user_performance?: number;
+        contestEndTime?: string;
+        contest_end_time?: string;
+        isRated?: boolean;
+        is_rated?: boolean;
+        [key: string]: unknown;
+      }
 
       // Форматируем данные
-      const formattedSubmissions = contestHistory.map((contest: UserContest) => ({
-        contest_id: contest.contestId,
-        contest_name: contest.contestName,
-        user_rank: contest.userRank,
-        user_old_rating: contest.userOldRating,
-        user_new_rating: contest.userNewRating,
-        user_rating_change: contest.userRatingChange,
-        user_performance: contest.userPerformance,
-        contest_end_time: contest.contestEndTime,
-        is_rated: contest.isRated,
-      }));
+      const formattedSubmissions = contestHistory.map(
+        (contest: AtCoderContestRaw) => {
+          // Пробуем разные варианты названий полей
+          const contestId =
+            contest.contestId || contest.contest_id || contest.contestId || '';
+          const contestName =
+            contest.contestName || contest.contest_name || contestId || '';
+
+          console.log('[AtCoder] Mapped contest:', { contestId, contestName });
+
+          return {
+            contest_id: contestId,
+            contest_name: contestName,
+            user_rank: contest.userRank || contest.user_rank || 0,
+            user_old_rating:
+              contest.userOldRating || contest.user_old_rating || 0,
+            user_new_rating:
+              contest.userNewRating || contest.user_new_rating || 0,
+            user_rating_change:
+              contest.userRatingChange || contest.user_rating_change || 0,
+            user_performance:
+              contest.userPerformance || contest.user_performance || 0,
+            contest_end_time:
+              contest.contestEndTime || contest.contest_end_time || '',
+            is_rated: contest.isRated || contest.is_rated || false,
+          };
+        },
+      );
+
+      const userInfoResponse = {
+        rating: userInfo.userRating || 0,
+        rank: userInfo.currentRank || '',
+        attended_contests_count: userInfo.userContestCount || 0,
+        rated_point_sum: 0,
+      };
+
+      // Сохраняем в кэш
+      try {
+        await db.query(
+          `UPDATE type::thing($id) SET cached_user_info = $userInfo, cached_submissions = $submissions, updated_at = time::now() WHERE platform_name = 'atcoder'`,
+          {
+            id: atcoderAccount.id,
+            userInfo: JSON.stringify(userInfoResponse),
+            submissions: JSON.stringify(formattedSubmissions),
+          },
+        );
+        console.log('[AtCoder GET] Cache saved');
+      } catch (e) {
+        console.error('[AtCoder GET] Cache save error:', e);
+      }
 
       return NextResponse.json({
         ok: true,
         data: {
           connected: true,
-          atcoder_username: userData.atcoder_username,
-          user_info: {
-            rating: userInfo.userRating || 0,
-            rank: userInfo.currentRank || '',
-            attended_contests_count: userInfo.userContestCount || 0,
-            rated_point_sum: 0,
-          },
+          atcoder_username: atcoderUsername,
+          user_info: userInfoResponse,
           submissions: formattedSubmissions,
         },
       });
     } catch (apiError: unknown) {
-      const errorMessage = apiError instanceof Error ? apiError.message : String(apiError);
+      const errorMessage =
+        apiError instanceof Error ? apiError.message : String(apiError);
       console.error('AtCoder API Error:', errorMessage);
       return NextResponse.json({
         ok: false,
@@ -157,12 +252,16 @@ export async function POST(req: NextRequest) {
       const userInfo = await fetchUserInfo(atcoder_username.trim());
       if (!userInfo || !userInfo.userName) {
         return NextResponse.json(
-          { ok: false, error: 'Пользователь с таким именем не найден на AtCoder' },
+          {
+            ok: false,
+            error: 'Пользователь с таким именем не найден на AtCoder',
+          },
           { status: 404 },
         );
       }
     } catch (apiError: unknown) {
-      const errorMessage = apiError instanceof Error ? apiError.message : String(apiError);
+      const errorMessage =
+        apiError instanceof Error ? apiError.message : String(apiError);
       console.error('AtCoder API validation Error:', errorMessage);
       return NextResponse.json(
         { ok: false, error: 'Ошибка при проверке пользователя на AtCoder' },
@@ -176,11 +275,21 @@ export async function POST(req: NextRequest) {
       { username: atcoder_username.trim() },
     );
 
-    if (existingBinding && existingBinding[0] && Array.isArray(existingBinding[0]) && existingBinding[0].length > 0) {
-      const existingUserId = (existingBinding[0] as Record<string, unknown>[])?.[0]?.user_id as string | undefined;
+    if (
+      existingBinding &&
+      existingBinding[0] &&
+      Array.isArray(existingBinding[0]) &&
+      existingBinding[0].length > 0
+    ) {
+      const existingUserId = (
+        existingBinding[0] as Record<string, unknown>[]
+      )?.[0]?.user_id as string | undefined;
       if (existingUserId && existingUserId.toString() !== userId) {
         return NextResponse.json(
-          { ok: false, error: 'Этот аккаунт AtCoder уже привязан к другому пользователю' },
+          {
+            ok: false,
+            error: 'Этот аккаунт AtCoder уже привязан к другому пользователю',
+          },
           { status: 409 },
         );
       }
@@ -192,8 +301,12 @@ export async function POST(req: NextRequest) {
       { user_id: userId },
     );
 
-    const existingPendingArr = existingPending[0] as Record<string, unknown> | Record<string, unknown>[];
-    const existingPendingRecord = Array.isArray(existingPendingArr) ? existingPendingArr[0] : existingPendingArr;
+    const existingPendingArr = existingPending[0] as
+      | Record<string, unknown>
+      | Record<string, unknown>[];
+    const existingPendingRecord = Array.isArray(existingPendingArr)
+      ? existingPendingArr[0]
+      : existingPendingArr;
 
     if (existingPendingRecord) {
       // Обновляем существующую запись
@@ -206,7 +319,12 @@ export async function POST(req: NextRequest) {
           verified = false, 
           created_at = time::now() 
         WHERE id = $id`,
-        { user_id: userId, id: existingPendingRecord.id, username: atcoder_username.trim(), code: verificationCode },
+        {
+          user_id: userId,
+          id: existingPendingRecord.id,
+          username: atcoder_username.trim(),
+          code: verificationCode,
+        },
       );
     } else {
       // Создаём новую запись
@@ -221,7 +339,11 @@ export async function POST(req: NextRequest) {
           verified: false,
           created_at: time::now()
         }`,
-        { user_id: userId, username: atcoder_username.trim(), code: verificationCode },
+        {
+          user_id: userId,
+          username: atcoder_username.trim(),
+          code: verificationCode,
+        },
       );
     }
 
@@ -263,12 +385,19 @@ export async function PUT() {
       { id: userId },
     );
 
-    const resultArr = verificationQuery[0] as Record<string, unknown> | Record<string, unknown>[];
-    const verificationRecord = Array.isArray(resultArr) ? resultArr[0] : resultArr;
+    const resultArr = verificationQuery[0] as
+      | Record<string, unknown>
+      | Record<string, unknown>[];
+    const verificationRecord = Array.isArray(resultArr)
+      ? resultArr[0]
+      : resultArr;
 
     if (!verificationRecord) {
       return NextResponse.json(
-        { ok: false, error: 'Нет активной верификации. Начните процесс привязки заново.' },
+        {
+          ok: false,
+          error: 'Нет активной верификации. Начните процесс привязки заново.',
+        },
         { status: 400 },
       );
     }
@@ -282,22 +411,28 @@ export async function PUT() {
       const profileUrl = `https://atcoder.jp/users/${atcoderUsername}`;
       const response = await fetch(profileUrl, {
         headers: {
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36',
-          'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
+          'User-Agent':
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36',
+          Accept:
+            'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
           'Accept-Language': 'en-US,en;q=0.9',
         },
       });
 
       if (!response.ok) {
-        throw new Error(`Failed to fetch profile: ${response.status} ${response.statusText}`);
+        throw new Error(
+          `Failed to fetch profile: ${response.status} ${response.statusText}`,
+        );
       }
 
       const html = await response.text();
-      
+
       // Сохраняем HTML для отладки (первые 5000 символов)
-      console.log(`[AtCoder] Fetched profile: ${profileUrl}, status: ${response.status}`);
+      console.log(
+        `[AtCoder] Fetched profile: ${profileUrl}, status: ${response.status}`,
+      );
       console.log(`[AtCoder] HTML length: ${html.length}`);
-      
+
       // Ищем поле Affiliation - может быть в разных форматах
       // Формат 1: <th>Affiliation</th><td>VALUE</td>
       // Формат 2: <th class="label">Affiliation</th><td>VALUE</td>
@@ -306,7 +441,7 @@ export async function PUT() {
         /<th[^>]*class="[^"]*label[^"]*"[^>]*>Affiliation<\/th>\s*<td[^>]*>([^<]+)<\/td>/i,
         /"label":"Affiliation"[^}]*"value":"([^"]+)"/i,
       ];
-      
+
       let userAffiliation = '';
       for (const pattern of patterns) {
         const match = html.match(pattern);
@@ -315,16 +450,22 @@ export async function PUT() {
           break;
         }
       }
-      
+
       // Для отладки - ищем весь блок с Affiliation
-      const fullMatch = html.match(/<tr[^>]*>[\s\S]*?Affiliation[\s\S]*?<\/tr>/i);
-      console.log(`[AtCoder] Full TR match: ${fullMatch ? fullMatch[0].substring(0, 300).replace(/\s+/g, ' ') : 'NOT FOUND'}`);
-      console.log(`[AtCoder] Parsed Affiliation: "${userAffiliation}", Expected: "${expectedCode}"`);
-      
+      const fullMatch = html.match(
+        /<tr[^>]*>[\s\S]*?Affiliation[\s\S]*?<\/tr>/i,
+      );
+      console.log(
+        `[AtCoder] Full TR match: ${fullMatch ? fullMatch[0].substring(0, 300).replace(/\s+/g, ' ') : 'NOT FOUND'}`,
+      );
+      console.log(
+        `[AtCoder] Parsed Affiliation: "${userAffiliation}", Expected: "${expectedCode}"`,
+      );
+
       if (!userAffiliation || !userAffiliation.includes(expectedCode)) {
         return NextResponse.json(
-          { 
-            ok: false, 
+          {
+            ok: false,
             error: `Код "${expectedCode}" не найден в поле Affiliation на AtCoder. Проверьте, что вы разместили код точно и сохранили изменения.`,
             current_affiliation: userAffiliation || '(не указано)',
           },
@@ -332,10 +473,16 @@ export async function PUT() {
         );
       }
     } catch (apiError: unknown) {
-      const errorMessage = apiError instanceof Error ? apiError.message : String(apiError);
+      const errorMessage =
+        apiError instanceof Error ? apiError.message : String(apiError);
       console.error('AtCoder profile parsing Error:', errorMessage);
       return NextResponse.json(
-        { ok: false, error: 'Ошибка при проверке профиля AtCoder: ' + (errorMessage || 'Неизвестная ошибка') },
+        {
+          ok: false,
+          error:
+            'Ошибка при проверке профиля AtCoder: ' +
+            (errorMessage || 'Неизвестная ошибка'),
+        },
         { status: 500 },
       );
     }
@@ -361,8 +508,14 @@ export async function PUT() {
       const cfUsername = cfResult?.cf_username as string | undefined;
 
       if (cfUsername) {
-        const cfRes = await axios.get(`https://codeforces.com/api/user.info?handles=${cfUsername}`);
-        if (cfRes.data.status === 'OK' && cfRes.data.result && cfRes.data.result.length > 0) {
+        const cfRes = await axios.get(
+          `https://codeforces.com/api/user.info?handles=${cfUsername}`,
+        );
+        if (
+          cfRes.data.status === 'OK' &&
+          cfRes.data.result &&
+          cfRes.data.result.length > 0
+        ) {
           cfRating = cfRes.data.result[0].rating || 0;
         }
       }
@@ -427,8 +580,14 @@ export async function DELETE() {
       const cfUsername = cfResult?.cf_username as string | undefined;
 
       if (cfUsername) {
-        const cfRes = await axios.get(`https://codeforces.com/api/user.info?handles=${cfUsername}`);
-        if (cfRes.data.status === 'OK' && cfRes.data.result && cfRes.data.result.length > 0) {
+        const cfRes = await axios.get(
+          `https://codeforces.com/api/user.info?handles=${cfUsername}`,
+        );
+        if (
+          cfRes.data.status === 'OK' &&
+          cfRes.data.result &&
+          cfRes.data.result.length > 0
+        ) {
           cfRating = cfRes.data.result[0].rating || 0;
         }
       }

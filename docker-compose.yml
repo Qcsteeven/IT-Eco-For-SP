@@ -18,7 +18,7 @@ services:
     container_name: it-eco-dev
     working_dir: /app
     ports:
-      - "${DEV_PORT:-3000}:3000"
+      - "${DEV_PORT:-3001}:3000"
     volumes:
       - .:/app
       - /app/node_modules
@@ -26,7 +26,7 @@ services:
     environment:
       - NODE_ENV=development
       - WATCHPACK_POLLING=false
-    command: sh -c "npm install && npm run dev"
+    command: sh -c "npm install && npm run dev:docker"
     restart: unless-stopped
 
 volumes:

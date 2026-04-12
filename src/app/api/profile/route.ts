@@ -3,7 +3,11 @@ import { getServerSession } from 'next-auth';
 import { getDB } from '@/lib/surreal/surreal';
 import { authOptions } from '@/lib/authOptions';
 import { hashPassword, verifyPassword } from '@/lib/surreal/auth';
-import { fetchUserInfo, fetchUserContestList, type UserContest } from '@qatadaazzeh/atcoder-api';
+import {
+  fetchUserInfo,
+  fetchUserContestList,
+  type UserContest,
+} from '@qatadaazzeh/atcoder-api';
 
 interface CF_RatingResult {
   contestId: number;
@@ -12,6 +16,19 @@ interface CF_RatingResult {
   ratingUpdateTimeSeconds: number;
   oldRating: number;
   newRating: number;
+}
+
+interface HistoryItem {
+  date_recorded: string;
+  placement: string;
+  mmr_change: number;
+  is_manual: boolean;
+  source_rating_change: string;
+  contest: {
+    title: string;
+    platform: string;
+    id: string;
+  };
 }
 
 export async function GET() {
@@ -32,15 +49,15 @@ export async function GET() {
     const userQuery = await db.query(
       `
       SELECT
-        id, full_name, email, bscp_rating, phone,
-        (SELECT VALUE handle_username FROM external_accounts WHERE user_id = type::thing($id) AND platform_name = 'codeforces' AND is_verified = true LIMIT 1)[0] AS cf_username,
-        (SELECT VALUE handle_username FROM external_accounts WHERE user_id = type::thing($id) AND platform_name = 'atcoder' AND is_verified = true LIMIT 1)[0] AS atcoder_username
+        id, full_name, email, bscp_rating, phone, codeforces_karma,
+        (SELECT * FROM external_accounts WHERE user_id = type::thing($id) AND platform_name = 'codeforces' AND is_verified = true LIMIT 1)[0] AS cf_account,
+        (SELECT * FROM external_accounts WHERE user_id = type::thing($id) AND platform_name = 'atcoder' AND is_verified = true LIMIT 1)[0] AS atcoder_account
       FROM type::thing($id);
       `,
       { id: userId },
     );
 
-    const resultArr = userQuery[0] as Record<string, unknown> | Record<string, unknown>[];
+    const resultArr = userQuery[0] as Record<string, unknown>[];
     const userData = Array.isArray(resultArr) ? resultArr[0] : resultArr;
 
     if (!userData) {
@@ -50,123 +67,230 @@ export async function GET() {
       );
     }
 
-    let liveHistory: {
-      date_recorded: string;
-      placement: string;
-      mmr_change: number;
-      is_manual: boolean;
-      source_rating_change: string;
-      contest: {
-        title: string;
-        platform: string;
-        id: string;
-      };
-    }[] = [];
+    // Извлекаем usernames из аккаунтов
+    const cfAccount = userData.cf_account as
+      | Record<string, unknown>
+      | undefined;
+    const atcoderAccount = userData.atcoder_account as
+      | Record<string, unknown>
+      | undefined;
+
+    const cfUsername = cfAccount?.handle_username as string | undefined;
+    const atcoderUsername = atcoderAccount?.handle_username as
+      | string
+      | undefined;
+
+    // Проверяем кэш (обновляем если прошло больше 1 часа)
+    const CACHE_TTL = 60 * 60 * 1000; // 1 час в миллисекундах
+    const now = Date.now();
+
+    const cfLastUpdate = cfAccount?.updated_at
+      ? new Date(cfAccount.updated_at as string).getTime()
+      : 0;
+    const atcoderLastUpdate = atcoderAccount?.updated_at
+      ? new Date(atcoderAccount.updated_at as string).getTime()
+      : 0;
+
+    const cfCacheValid = cfLastUpdate && now - cfLastUpdate < CACHE_TTL;
+    const atcoderCacheValid =
+      atcoderLastUpdate && now - atcoderLastUpdate < CACHE_TTL;
+
+    let liveHistory: HistoryItem[] = [];
     let cfCurrentRating = 0;
     let atcoderCurrentRating = 0;
 
-    // Получаем историю с Codeforces и текущий рейтинг
-    if (userData.cf_username) {
-      try {
-        const cfRes = await fetch(
-          `https://codeforces.com/api/user.rating?handle=${userData.cf_username}`,
-          { cache: 'no-store' },
-        );
-        const cfData = await cfRes.json();
+    // Параллельные запросы к Codeforces и AtCoder для ускорения
+    // Используем кэш если он валиден
+    const [cfResult, atCoderResult] = await Promise.allSettled([
+      // Запрос к Codeforces
+      (async () => {
+        if (!cfUsername) return { history: [], rating: 0 };
 
-        if (cfData.status === 'OK') {
-          const cfResults: CF_RatingResult[] = cfData.result;
+        // Если кэш валиден, используем его
+        if (cfCacheValid && cfAccount?.cached_history) {
+          console.log('[CF] Using cached data');
+          return {
+            history: JSON.parse(
+              cfAccount.cached_history as string,
+            ) as HistoryItem[],
+            rating: (cfAccount.cached_rating as number) || 0,
+          };
+        }
 
-          // Текущий рейтинг - последний newRating в списке (самый свежий)
-          if (cfResults.length > 0) {
-            const lastContest = cfResults[cfResults.length - 1];
-            cfCurrentRating = lastContest.newRating;
+        try {
+          console.log('[CF] Fetching from API...');
+          const cfRes = await fetch(
+            `https://codeforces.com/api/user.rating?handle=${cfUsername}`,
+            { cache: 'no-store' },
+          );
+          const cfData = await cfRes.json();
+
+          if (cfData.status === 'OK') {
+            const cfResults: CF_RatingResult[] = cfData.result;
+
+            let currentRating = 0;
+            if (cfResults.length > 0) {
+              const lastContest = cfResults[cfResults.length - 1];
+              currentRating = lastContest.newRating;
+            }
+
+            const cfHistory = cfResults
+              .slice()
+              .reverse()
+              .map((item) => {
+                const diff = item.newRating - item.oldRating;
+
+                return {
+                  date_recorded: new Date(
+                    item.ratingUpdateTimeSeconds * 1000,
+                  ).toISOString(),
+                  placement: item.rank.toString(),
+                  mmr_change: diff,
+                  is_manual: false,
+                  source_rating_change: diff >= 0 ? `+${diff}` : `${diff}`,
+                  contest: {
+                    title: item.contestName,
+                    platform: 'Codeforces',
+                    id: item.contestId.toString(),
+                  },
+                };
+              });
+
+            // Сохраняем в кэш
+            try {
+              await db.query(
+                `UPDATE type::thing($id) SET cached_history = $history, cached_rating = $rating, updated_at = time::now() WHERE platform_name = 'codeforces'`,
+                {
+                  id: cfAccount.id,
+                  history: JSON.stringify(cfHistory),
+                  rating: currentRating,
+                },
+              );
+            } catch (e) {
+              console.error('[CF] Cache save error:', e);
+            }
+
+            return { history: cfHistory, rating: currentRating };
+          }
+        } catch (e) {
+          console.error('CF Fetch Error:', e);
+        }
+
+        return { history: [], rating: 0 };
+      })(),
+
+      // Запрос к AtCoder
+      (async () => {
+        if (!atcoderUsername) return { history: [], rating: 0 };
+
+        // Если кэш валиден, используем его
+        if (atcoderCacheValid && atcoderAccount?.cached_history) {
+          console.log('[AtCoder] Using cached data');
+          return {
+            history: JSON.parse(
+              atcoderAccount.cached_history as string,
+            ) as HistoryItem[],
+            rating: (atcoderAccount.cached_rating as number) || 0,
+          };
+        }
+
+        console.log(`[AtCoder] Fetching history for: ${atcoderUsername}`);
+
+        try {
+          const [userInfo, contestHistory] = await Promise.all([
+            fetchUserInfo(atcoderUsername),
+            fetchUserContestList(atcoderUsername),
+          ]);
+
+          console.log(`[AtCoder] Contests fetched: ${contestHistory.length}`);
+
+          const currentRating = userInfo.userRating || 0;
+
+          const atCoderHistory = contestHistory.map((contest: any) => {
+            const diff =
+              contest.userRatingChange ||
+              (contest.userNewRating || 0) - (contest.userOldRating || 0);
+            const fullContestId = contest.contestId || '';
+            const shortContestId = fullContestId.split('.')[0] || '';
+
+            return {
+              date_recorded: new Date(
+                contest.contestEndTime ||
+                  contest.contest_end_time ||
+                  Date.now(),
+              ).toISOString(),
+              placement: (contest.userRank || contest.rank || '0').toString(),
+              mmr_change: diff,
+              is_manual: false,
+              source_rating_change: diff >= 0 ? `+${diff}` : `${diff}`,
+              contest: {
+                title: contest.contestName || contest.contest_id || '',
+                platform: 'AtCoder',
+                id: shortContestId,
+              },
+            };
+          });
+
+          console.log(`[AtCoder] Formatted history:`, atCoderHistory);
+          console.log(
+            `[AtCoder] Total history after merge: ${atCoderHistory.length}`,
+          );
+
+          // Сохраняем в кэш
+          try {
+            await db.query(
+              `UPDATE type::thing($id) SET cached_history = $history, cached_rating = $rating, updated_at = time::now() WHERE platform_name = 'atcoder'`,
+              {
+                id: atcoderAccount.id,
+                history: JSON.stringify(atCoderHistory),
+                rating: currentRating,
+              },
+            );
+          } catch (e) {
+            console.error('[AtCoder] Cache save error:', e);
           }
 
-          const cfHistory = cfResults
-            .slice()
-            .reverse()
-            .map((item) => {
-              const diff = item.newRating - item.oldRating;
-
-              return {
-                date_recorded: new Date(
-                  item.ratingUpdateTimeSeconds * 1000,
-                ).toISOString(),
-                placement: item.rank.toString(),
-                mmr_change: diff,
-                is_manual: false,
-                source_rating_change: diff >= 0 ? `+${diff}` : `${diff}`,
-                contest: {
-                  title: item.contestName,
-                  platform: 'Codeforces',
-                  id: item.contestId.toString(),
-                },
-              };
-            });
-
-          liveHistory = [...liveHistory, ...cfHistory];
+          return { history: atCoderHistory, rating: currentRating };
+        } catch (e) {
+          console.error('AtCoder Fetch Error:', e);
+          return { history: [], rating: 0 };
         }
-      } catch (e) {
-        console.error('CF Fetch Error:', e);
-      }
+      })(),
+    ]);
+
+    // Обрабатываем результаты
+    if (cfResult.status === 'fulfilled') {
+      liveHistory = [...liveHistory, ...cfResult.value.history];
+      cfCurrentRating = cfResult.value.rating;
     }
 
-    // Получаем историю с AtCoder и текущий рейтинг
-    if (userData.atcoder_username && typeof userData.atcoder_username === 'string') {
-      console.log(`[AtCoder] Fetching history for: ${userData.atcoder_username}`);
-
-      try {
-        // Используем @qatadaazzeh/atcoder-api для получения данных
-        const userInfo = await fetchUserInfo(userData.atcoder_username);
-        const contestHistory = await fetchUserContestList(userData.atcoder_username);
-
-        console.log(`[AtCoder] Contests fetched: ${contestHistory.length}`);
-
-        // Текущий рейтинг из userInfo
-        atcoderCurrentRating = userInfo.userRating || 0;
-
-        const atCoderHistory = contestHistory.map((contest: UserContest) => {
-          const diff = contest.userRatingChange || ((contest.userNewRating || 0) - (contest.userOldRating || 0));
-          // Извлекаем короткий ID (abc446 из abc446.contest.atcoder.jp)
-          const fullContestId = contest.contestId || '';
-          const shortContestId = fullContestId.split('.')[0] || '';
-
-          return {
-            date_recorded: new Date(contest.contestEndTime || Date.now()).toISOString(),
-            placement: (contest.userRank || 0).toString(),
-            mmr_change: diff,
-            is_manual: false,
-            source_rating_change: diff >= 0 ? `+${diff}` : `${diff}`,
-            contest: {
-              title: contest.contestName || '',
-              platform: 'AtCoder',
-              id: shortContestId,
-            },
-          };
-        });
-
-        console.log(`[AtCoder] Formatted history:`, atCoderHistory);
-        liveHistory = [...liveHistory, ...atCoderHistory];
-        console.log(`[AtCoder] Total history after merge: ${liveHistory.length}`);
-      } catch (e) {
-        console.error('AtCoder Fetch Error:', e);
-      }
+    if (atCoderResult.status === 'fulfilled') {
+      liveHistory = [...liveHistory, ...atCoderResult.value.history];
+      atcoderCurrentRating = atCoderResult.value.rating;
     }
 
     // Сортируем по дате (новые сверху)
-    liveHistory.sort((a, b) => new Date(b.date_recorded).getTime() - new Date(a.date_recorded).getTime());
+    liveHistory.sort(
+      (a, b) =>
+        new Date(b.date_recorded).getTime() -
+        new Date(a.date_recorded).getTime(),
+    );
 
     // Итоговый рейтинг = MAX(CF, AtCoder)
     const finalRating = Math.max(cfCurrentRating, atcoderCurrentRating);
 
     // Обновляем рейтинг если изменился
     if (userData.bscp_rating !== finalRating && finalRating !== 0) {
-      await db.query(
-        `UPDATE type::thing($id) SET bscp_rating = $newRating`,
-        { id: userId, newRating: finalRating },
-      );
+      await db.query(`UPDATE type::thing($id) SET bscp_rating = $newRating`, {
+        id: userId,
+        newRating: finalRating,
+      });
       userData.bscp_rating = finalRating;
+    }
+
+    // Добавляем codeforces_karma если нет
+    if (!userData.codeforces_karma) {
+      userData.codeforces_karma = 0;
     }
 
     return NextResponse.json({
@@ -177,8 +301,7 @@ export async function GET() {
       },
     });
   } catch (err: unknown) {
-    const errorMessage = err instanceof Error ? err.message : String(err);
-    console.error('API GET Error:', errorMessage);
+    console.error('API GET Error:', err);
     return NextResponse.json(
       { ok: false, error: 'Ошибка сервера' },
       { status: 500 },
@@ -222,7 +345,8 @@ export async function PUT(req: Request) {
         { id: userId },
       );
       const userDataInDb = (userRes[0] as Record<string, unknown>[])?.[0];
-      const currentHash = userDataInDb?.password_hash as string | undefined;
+      const currentHash = (userDataInDb as Record<string, unknown>)
+        ?.password_hash;
 
       if (!currentHash)
         return NextResponse.json(
@@ -230,7 +354,7 @@ export async function PUT(req: Request) {
           { status: 404 },
         );
 
-      const isMatch = await verifyPassword(oldPassword, currentHash);
+      const isMatch = await verifyPassword(oldPassword, currentHash as string);
       if (!isMatch)
         return NextResponse.json(
           { ok: false, error: 'Старый пароль неверный' },
@@ -247,8 +371,7 @@ export async function PUT(req: Request) {
 
     return NextResponse.json({ ok: true });
   } catch (err: unknown) {
-    const errorMessage = err instanceof Error ? err.message : String(err);
-    console.error('API PUT Error:', errorMessage);
+    console.error('API PUT Error:', err);
     return NextResponse.json(
       { ok: false, error: 'Ошибка сохранения' },
       { status: 500 },

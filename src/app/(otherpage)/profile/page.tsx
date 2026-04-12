@@ -4,11 +4,14 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { useSession, signOut } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
 import './profile.scss';
+import CodeforcesStats from '@/components/CodeforcesStats';
+import CodeforcesProblems from '@/components/CodeforcesProblems';
 
 interface UserData {
   full_name: string;
   email: string;
   bscp_rating: number;
+  codeforces_karma?: number;
   phone?: string;
   cf_username?: string | null;
   atcoder_username?: string | null;
@@ -123,8 +126,11 @@ const ProfilePage: React.FC = () => {
   const [atCoderLoading, setAtCoderLoading] = useState(false);
   const [atCoderError, setAtCoderError] = useState<string | null>(null);
   const [showAtCoderSubmissions, setShowAtCoderSubmissions] = useState(false);
-  const [generatedVerificationCode, setGeneratedVerificationCode] = useState('');
-  const [verificationStep, setVerificationStep] = useState<'input_username' | 'show_code' | 'verifying'>('input_username');
+  const [generatedVerificationCode, setGeneratedVerificationCode] =
+    useState('');
+  const [verificationStep, setVerificationStep] = useState<
+    'input_username' | 'show_code' | 'verifying'
+  >('input_username');
 
   // Codeforces состояния
   const [cfData, setCfData] = useState<CFData | null>(null);
@@ -134,12 +140,21 @@ const ProfilePage: React.FC = () => {
   const [cfError, setCfError] = useState<string | null>(null);
   const [showCFSubmissions, setShowCFSubmissions] = useState(false);
   const [cfGeneratedCode, setCfGeneratedCode] = useState('');
-  const [cfVerificationStep, setCfVerificationStep] = useState<'input_username' | 'show_code' | 'verifying'>('input_username');
+  const [cfVerificationStep, setCfVerificationStep] = useState<
+    'input_username' | 'show_code' | 'verifying'
+  >('input_username');
+  const [cfAutoVerifyCountdown, setCfAutoVerifyCountdown] = useState<number>(5);
 
   // Состояния для задач соревнования
-  const [expandedContestId, setExpandedContestId] = useState<string | null>(null);
-  const [contestProblems, setContestProblems] = useState<Record<string, ContestProblem[]>>({});
-  const [contestProblemsLoading, setContestProblemsLoading] = useState<Record<string, boolean>>({});
+  const [expandedContestId, setExpandedContestId] = useState<string | null>(
+    null,
+  );
+  const [contestProblems, setContestProblems] = useState<
+    Record<string, ContestProblem[]>
+  >({});
+  const [contestProblemsLoading, setContestProblemsLoading] = useState<
+    Record<string, boolean>
+  >({});
 
   // Фильтры
   const [dateFrom, setDateFrom] = useState<string>('');
@@ -148,6 +163,66 @@ const ProfilePage: React.FC = () => {
   const [placeFrom, setPlaceFrom] = useState<string>('');
   const [placeTo, setPlaceTo] = useState<string>('');
   const [ratingSort, setRatingSort] = useState<'none' | 'asc' | 'desc'>('none');
+
+  // Codeforces Karma состояния
+  const [cfKarmaData, setCfKarmaData] = useState<{
+    karma: number;
+    karmaLevel: string;
+    karmaColor: string;
+    breakdown: {
+      easyKarma: number;
+      mediumKarma: number;
+      hardKarma: number;
+      tagBonusKarma: number;
+      diversityBonus: number;
+    };
+    details: {
+      totalSolved: number;
+      easyCount: number;
+      mediumCount: number;
+      hardCount: number;
+      averageRating: number;
+      uniqueTags: number;
+    };
+    difficultyDistribution: {
+      easy: number;
+      medium: number;
+      hard: number;
+    };
+    tagStats: Array<{
+      tag: string;
+      solvedCount: number;
+      averageRating: number;
+    }>;
+  } | null>(null);
+  const [cfKarmaLoading, setCfKarmaLoading] = useState(false);
+  const [showCFStats, setShowCFStats] = useState(false);
+  const [showCFProblems, setShowCFProblems] = useState(false);
+
+  // AtCoder Karma состояния
+  const [atcoderKarmaData, setAtcoderKarmaData] = useState<{
+    karma: number;
+    karmaLevel: string;
+    karmaColor: string;
+    details: {
+      totalSolved: number;
+      easyCount: number;
+      mediumCount: number;
+      hardCount: number;
+      unknownCount: number;
+    };
+    problems?: Array<{
+      contestId: string;
+      contestName: string;
+      taskIndex: string;
+      taskName: string;
+      solvedAt: number;
+      difficulty?: number;
+      karma: number;
+    }>;
+  } | null>(null);
+  const [atcoderKarmaLoading, setAtcoderKarmaLoading] = useState(false);
+  const [showAtCoderProblems, setShowAtCoderProblems] = useState(false);
 
   // Редирект при неавторизованном доступе
   useEffect(() => {
@@ -170,8 +245,18 @@ const ProfilePage: React.FC = () => {
           if (response.ok && result.ok && result.data) {
             setUserData(result.data.user);
             setHistoryData(result.data.history);
-            console.log('[Profile] History loaded:', result.data.history.length, 'items');
-            console.log('[Profile] Platforms:', [...new Set(result.data.history.map((item: HistoryItem) => item.contest.platform))]);
+            console.log(
+              '[Profile] History loaded:',
+              result.data.history.length,
+              'items',
+            );
+            console.log('[Profile] Platforms:', [
+              ...new Set(
+                result.data.history.map(
+                  (item: HistoryItem) => item.contest.platform,
+                ),
+              ),
+            ]);
           } else {
             setError(result.error || 'Не удалось загрузить данные профиля.');
             if (response.status === 401) signOut();
@@ -219,11 +304,16 @@ const ProfilePage: React.FC = () => {
           const response = await fetch('/api/profile/codeforces');
           const result: CFData = await response.json();
 
+          console.log('[CF Data] Response:', response.status, result);
+
           if (response.ok && result) {
             setCfData(result);
-
-            // Codeforces история теперь загружается через основной API /api/profile
-            // Здесь ничего не делаем, данные уже есть в historyData
+            console.log(
+              '[CF Data] Connected:',
+              result.connected,
+              'Username:',
+              result.cf_username,
+            );
           }
         } catch (err) {
           console.error('Codeforces fetch error:', err);
@@ -233,6 +323,95 @@ const ProfilePage: React.FC = () => {
       fetchCFData();
     }
   }, [status]);
+
+  // Загрузка данных кармы Codeforces
+  useEffect(() => {
+    if (status === 'authenticated' && cfData?.connected) {
+      const fetchCFKarma = async () => {
+        try {
+          setCfKarmaLoading(true);
+          const response = await fetch('/api/codeforces/karma');
+          const result = await response.json();
+
+          console.log('[CF Karma] Response:', response.status, result);
+
+          if (response.ok && result.ok && result.data) {
+            console.log('[CF Karma] Data:', result.data);
+            setCfKarmaData(result.data);
+
+            // Обновляем codeforces_karma в userData если есть
+            if (userData && result.data.karma !== userData.codeforces_karma) {
+              setUserData({ ...userData, codeforces_karma: result.data.karma });
+            }
+          } else {
+            console.error('[CF Karma] Error:', result);
+          }
+        } catch (err) {
+          console.error('[CF Karma] Fetch error:', err);
+        } finally {
+          setCfKarmaLoading(false);
+        }
+      };
+
+      fetchCFKarma();
+    }
+  }, [status, cfData?.connected]);
+
+  // Загрузка данных кармы AtCoder
+  useEffect(() => {
+    if (status === 'authenticated' && atCoderData?.connected) {
+      const fetchAtCoderKarma = async () => {
+        try {
+          setAtcoderKarmaLoading(true);
+          const response = await fetch('/api/atcoder/problems');
+          const result = await response.json();
+
+          console.log('[AtCoder Karma] Response:', response.status, result);
+
+          if (response.ok && result.ok && result.data) {
+            console.log('[AtCoder Karma] Data:', result.data);
+            setAtcoderKarmaData(result.data);
+          } else {
+            console.error('[AtCoder Karma] Error:', result);
+          }
+        } catch (err) {
+          console.error('[AtCoder Karma] Fetch error:', err);
+        } finally {
+          setAtcoderKarmaLoading(false);
+        }
+      };
+
+      fetchAtCoderKarma();
+    }
+  }, [status, atCoderData?.connected]);
+
+  // Автоматическая проверка кода верификации Codeforces
+  useEffect(() => {
+    if (cfVerificationStep === 'verifying' && cfGeneratedCode) {
+      setCfAutoVerifyCountdown(5);
+
+      // Обратный отсчёт
+      const countdownInterval = setInterval(() => {
+        setCfAutoVerifyCountdown((prev) => {
+          if (prev <= 1) {
+            clearInterval(countdownInterval);
+            return 0;
+          }
+          return prev - 1;
+        });
+      }, 1000);
+
+      // Ждём 5 секунд, затем проверяем
+      const timer = setTimeout(() => {
+        handleVerifyCFFirstName();
+      }, 5000);
+
+      return () => {
+        clearTimeout(timer);
+        clearInterval(countdownInterval);
+      };
+    }
+  }, [cfVerificationStep]);
 
   // Уникальные платформы
   const platforms = useMemo(() => {
@@ -308,17 +487,19 @@ const ProfilePage: React.FC = () => {
       // Если уже подключен - показываем/скрываем сабмишены
       setShowAtCoderSubmissions(!showAtCoderSubmissions);
     } else if (atCoderData?.pending_verification) {
-      // Если ожидается верификация - показываем шаг проверки
-      setVerificationStep('verifying');
+      // Если есть активная верификация — показываем код
+      setVerificationStep('show_code');
       setAtCoderInput(atCoderData.pending_atcoder_username || '');
-      setShowAtCoderModal(true);
+      setGeneratedVerificationCode(atCoderData.verification_code || '');
       setAtCoderError(null);
+      setShowAtCoderModal(true);
     } else {
       // Если не подключен - открываем модальное окно с вводом username
       setVerificationStep('input_username');
-      setAtCoderInput(userData?.atcoder_username || '');
-      setShowAtCoderModal(true);
+      setAtCoderInput('');
+      setGeneratedVerificationCode('');
       setAtCoderError(null);
+      setShowAtCoderModal(true);
     }
   };
 
@@ -375,12 +556,21 @@ const ProfilePage: React.FC = () => {
         setAtCoderInput('');
         setGeneratedVerificationCode('');
         setVerificationStep('input_username');
-        
-        // Сразу обновляем данные
+
+        // Обновляем данные AtCoder
         const atCoderResponse = await fetch('/api/profile/atcoder');
         const atCoderResult = await atCoderResponse.json();
         if (atCoderResponse.ok && atCoderResult.ok && atCoderResult.data) {
           setAtCoderData(atCoderResult.data);
+        }
+
+        // Перезагружаем профиль, чтобы обновить bscp_rating (MAX из CF и AtCoder)
+        const profileResponse = await fetch('/api/profile');
+        const profileResult: ProfileApiResponse = await profileResponse.json();
+
+        if (profileResponse.ok && profileResult.ok && profileResult.data) {
+          setUserData(profileResult.data.user);
+          setHistoryData(profileResult.data.history);
         }
       } else {
         setAtCoderError(result.error || 'Код не найден в Affiliation');
@@ -412,9 +602,30 @@ const ProfilePage: React.FC = () => {
 
       if (response.ok && result.ok) {
         alert('Аккаунт AtCoder отвязан.');
-        setUserData((prev) => (prev ? { ...prev, atcoder_username: null } : null));
-        setAtCoderData({ connected: false, atcoder_username: null, submissions: [] });
+
+        // Очищаем историю рейтинга AtCoder
+        setHistoryData((prev) =>
+          prev.filter((item) => item.contest.platform !== 'AtCoder'),
+        );
+
+        // Сбрасываем карму AtCoder
+        setAtcoderKarmaData(null);
+        setAtCoderData({
+          connected: false,
+          atcoder_username: null,
+          submissions: [],
+        });
         setShowAtCoderSubmissions(false);
+
+        // Перезагружаем профиль, чтобы получить актуальный рейтинг (из Codeforces, если подключён)
+        const profileResponse = await fetch('/api/profile');
+        const profileResult: ProfileApiResponse = await profileResponse.json();
+
+        if (profileResponse.ok && profileResult.ok && profileResult.data) {
+          setUserData(profileResult.data.user);
+          // Обновляем историю (без AtCoder)
+          setHistoryData(profileResult.data.history);
+        }
       } else {
         alert(result.error || 'Ошибка при отвязке аккаунта');
       }
@@ -437,15 +648,18 @@ const ProfilePage: React.FC = () => {
     if (cfData?.connected) {
       setShowCFSubmissions(!showCFSubmissions);
     } else if (cfData?.pending_verification) {
-      setCfVerificationStep('verifying');
+      // Если есть активная верификация — показываем код
+      setCfVerificationStep('show_code');
       setCfInput(cfData.pending_cf_username || '');
-      setShowCFModal(true);
+      setCfGeneratedCode(cfData.verification_code || '');
       setCfError(null);
+      setShowCFModal(true);
     } else {
       setCfVerificationStep('input_username');
       setCfInput('');
-      setShowCFModal(true);
+      setCfGeneratedCode('');
       setCfError(null);
+      setShowCFModal(true);
     }
   };
 
@@ -499,12 +713,21 @@ const ProfilePage: React.FC = () => {
         setCfInput('');
         setCfGeneratedCode('');
         setCfVerificationStep('input_username');
-        
-        // Сразу обновляем данные
+
+        // Обновляем данные Codeforces
         const cfResponse = await fetch('/api/profile/codeforces');
         const cfResult = await cfResponse.json();
         if (cfResponse.ok && cfResult) {
           setCfData(cfResult);
+        }
+
+        // Перезагружаем профиль, чтобы обновить bscp_rating (MAX из CF и AtCoder)
+        const profileResponse = await fetch('/api/profile');
+        const profileResult: ProfileApiResponse = await profileResponse.json();
+
+        if (profileResponse.ok && profileResult.ok && profileResult.data) {
+          setUserData(profileResult.data.user);
+          setHistoryData(profileResult.data.history);
         }
       } else {
         setCfError(result.error || 'Код не найден в First Name');
@@ -535,11 +758,26 @@ const ProfilePage: React.FC = () => {
 
       if (response.ok && result.ok) {
         alert('Аккаунт Codeforces отвязан. Рейтинг обновлен.');
-        setUserData((prev) =>
-          prev ? { ...prev, cf_username: null, bscp_rating: 0 } : null,
+
+        // Очищаем историю рейтинга Codeforces
+        setHistoryData((prev) =>
+          prev.filter((item) => item.contest.platform !== 'Codeforces'),
         );
+
+        // Сбрасываем карму
+        setCfKarmaData(null);
         setCfData({ connected: false, cf_username: null, submissions: [] });
         setShowCFSubmissions(false);
+
+        // Перезагружаем профиль, чтобы получить актуальный рейтинг (из AtCoder, если подключён)
+        const profileResponse = await fetch('/api/profile');
+        const profileResult: ProfileApiResponse = await profileResponse.json();
+
+        if (profileResponse.ok && profileResult.ok && profileResult.data) {
+          setUserData(profileResult.data.user);
+          // Обновляем историю (без Codeforces)
+          setHistoryData(profileResult.data.history);
+        }
       } else {
         alert(result.error || 'Ошибка при отвязке аккаунта');
       }
@@ -553,26 +791,31 @@ const ProfilePage: React.FC = () => {
     setCfError(null);
     setCfGeneratedCode('');
     setCfVerificationStep('input_username');
+    setCfAutoVerifyCountdown(5);
   };
 
   // Загрузка задач соревнования
-  const handleContestClick = async (contestId: string, contestName: string, platform: string) => {
+  const handleContestClick = async (
+    contestId: string,
+    contestName: string,
+    platform: string,
+  ) => {
     const uniqueKey = `${platform}_${contestId}`;
-    
+
     // Если уже раскрыто - сворачиваем
     if (expandedContestId === uniqueKey) {
       setExpandedContestId(null);
       return;
     }
-    
+
     setExpandedContestId(uniqueKey);
-    
+
     // Если уже загружено - не загружаем снова
     if (contestProblems[uniqueKey]) {
       return;
     }
-    
-    setContestProblemsLoading(prev => ({ ...prev, [uniqueKey]: true }));
+
+    setContestProblemsLoading((prev) => ({ ...prev, [uniqueKey]: true }));
 
     // Для Codeforces и AtCoder используем клиентский fetch
     if (platform.toLowerCase() === 'codeforces') {
@@ -583,56 +826,69 @@ const ProfilePage: React.FC = () => {
   };
 
   // Загрузка задач Codeforces - показываем только решённые
-  const loadCFProblemsClientSide = async (contestId: string, uniqueKey: string) => {
-    console.log(`[CF Client] Fetching solved problems for contest ${contestId}`);
-    
+  const loadCFProblemsClientSide = async (
+    contestId: string,
+    uniqueKey: string,
+  ) => {
+    console.log(
+      `[CF Client] Fetching solved problems for contest ${contestId}`,
+    );
+
     try {
       // Получаем данные пользователя
       const profileResponse = await fetch('/api/profile/codeforces');
       const profileData = await profileResponse.json();
-      
+
       if (!profileData.connected || !profileData.cf_username) {
         console.error('[CF Client] Codeforces not connected');
-        setContestProblems(prev => ({ ...prev, [uniqueKey]: [] }));
-        setContestProblemsLoading(prev => ({ ...prev, [uniqueKey]: false }));
+        setContestProblems((prev) => ({ ...prev, [uniqueKey]: [] }));
+        setContestProblemsLoading((prev) => ({ ...prev, [uniqueKey]: false }));
         return;
       }
-      
+
       const cfHandle = profileData.cf_username;
       console.log(`[CF Client] Using handle: ${cfHandle}`);
-      
+
       // Получаем submission'ы пользователя
       const submissionsRes = await fetch(
-        `https://codeforces.com/api/user.status?handle=${cfHandle}&from=1&count=10000`
+        `https://codeforces.com/api/user.status?handle=${cfHandle}&from=1&count=10000`,
       );
       const submissionsData = await submissionsRes.json();
-      
+
       const solvedProblems = new Map<string, { name: string }>();
-      
+
       if (submissionsData.status === 'OK' && submissionsData.result) {
         const submissions: unknown[] = submissionsData.result;
         console.log(`[CF Client] Found ${submissions.length} submissions`);
-        
+
         // Фильтруем только решённые задачи для этого конкурса
         submissions.forEach((sub: unknown) => {
-          const submission = sub as { 
-            problem?: { contestId?: number; index?: string; name?: string }; 
+          const submission = sub as {
+            problem?: { contestId?: number; index?: string; name?: string };
             verdict?: string;
           };
-          
-          if (submission.problem?.contestId === parseInt(contestId) && submission.verdict === 'OK') {
+
+          if (
+            submission.problem?.contestId === parseInt(contestId) &&
+            submission.verdict === 'OK'
+          ) {
             const idx = submission.problem.index || 'Unknown';
             solvedProblems.set(idx, {
               name: submission.problem.name || `Problem ${idx}`,
             });
           }
         });
-        
-        console.log(`[CF Client] Solved problems:`, Array.from(solvedProblems.keys()));
+
+        console.log(
+          `[CF Client] Solved problems:`,
+          Array.from(solvedProblems.keys()),
+        );
       }
-      
+
       // Формируем список только решённых задач
-      const problems: ContestProblem[] = Array.from(solvedProblems.entries()).map(([index, data]) => ({
+      const problems: ContestProblem[] = Array.from(
+        solvedProblems.entries(),
+      ).map(([index, data]) => ({
         contestId: parseInt(contestId),
         problemIndex: index,
         problemName: data.name,
@@ -641,40 +897,50 @@ const ProfilePage: React.FC = () => {
         solved: true,
         problemUrl: `https://codeforces.com/contest/${contestId}/problem/${index}`,
       }));
-      
+
       // Сортируем по индексу (A, B, C...)
       problems.sort((a, b) => a.problemIndex.localeCompare(b.problemIndex));
-      
+
       console.log(`[CF Client] Total solved: ${problems.length}`);
       console.log(`[CF Client] Problems:`, problems);
-      
-      setContestProblems(prev => ({ ...prev, [uniqueKey]: problems }));
+
+      setContestProblems((prev) => ({ ...prev, [uniqueKey]: problems }));
     } catch (err) {
       console.error('[CF Client] Error loading problems:', err);
-      setContestProblems(prev => ({ ...prev, [uniqueKey]: [] }));
+      setContestProblems((prev) => ({ ...prev, [uniqueKey]: [] }));
     } finally {
-      setContestProblemsLoading(prev => ({ ...prev, [uniqueKey]: false }));
+      setContestProblemsLoading((prev) => ({ ...prev, [uniqueKey]: false }));
     }
   };
 
   // Загрузка задач AtCoder - показываем только решённые
-  const loadAtCoderProblemsClientSide = async (contestId: string, uniqueKey: string) => {
-    console.log(`[AtCoder Client] Fetching solved problems for contest ${contestId}, uniqueKey: ${uniqueKey}`);
-    
+  const loadAtCoderProblemsClientSide = async (
+    contestId: string,
+    uniqueKey: string,
+  ) => {
+    console.log(
+      `[AtCoder Client] Fetching solved problems for contest ${contestId}, uniqueKey: ${uniqueKey}`,
+    );
+
     try {
       // Шаг 1: Получаем список решённых problem IDs через GET
       const getResponse = await fetch(`/api/atcoder/${contestId}/solved`);
       const getResult = await getResponse.json();
-      
+
       console.log('[AtCoder Client] GET response:', getResult);
-      
-      if (!getResponse.ok || !getResult.ok || !getResult.problemIds || getResult.problemIds.length === 0) {
+
+      if (
+        !getResponse.ok ||
+        !getResult.ok ||
+        !getResult.problemIds ||
+        getResult.problemIds.length === 0
+      ) {
         console.log('[AtCoder Client] No solved problems found');
-        setContestProblems(prev => ({ ...prev, [uniqueKey]: [] }));
-        setContestProblemsLoading(prev => ({ ...prev, [uniqueKey]: false }));
+        setContestProblems((prev) => ({ ...prev, [uniqueKey]: [] }));
+        setContestProblemsLoading((prev) => ({ ...prev, [uniqueKey]: false }));
         return;
       }
-      
+
       // Шаг 2: Получаем названия задач через POST
       const postResponse = await fetch(`/api/atcoder/${contestId}/solved`, {
         method: 'POST',
@@ -685,24 +951,29 @@ const ProfilePage: React.FC = () => {
           problemIds: getResult.problemIds,
         }),
       });
-      
+
       const postResult = await postResponse.json();
       console.log('[AtCoder Client] POST response:', postResult);
-      
+
       if (postResponse.ok && postResult.ok && postResult.problems) {
-        console.log(`[AtCoder Client] Total solved: ${postResult.problems.length}`);
+        console.log(
+          `[AtCoder Client] Total solved: ${postResult.problems.length}`,
+        );
         console.log(`[AtCoder Client] Problems:`, postResult.problems);
-        
-        setContestProblems(prev => ({ ...prev, [uniqueKey]: postResult.problems }));
+
+        setContestProblems((prev) => ({
+          ...prev,
+          [uniqueKey]: postResult.problems,
+        }));
       } else {
         console.error(`[AtCoder Client] Error:`, postResult.error);
-        setContestProblems(prev => ({ ...prev, [uniqueKey]: [] }));
+        setContestProblems((prev) => ({ ...prev, [uniqueKey]: [] }));
       }
     } catch (err) {
       console.error('[AtCoder Client] Error loading problems:', err);
-      setContestProblems(prev => ({ ...prev, [uniqueKey]: [] }));
+      setContestProblems((prev) => ({ ...prev, [uniqueKey]: [] }));
     } finally {
-      setContestProblemsLoading(prev => ({ ...prev, [uniqueKey]: false }));
+      setContestProblemsLoading((prev) => ({ ...prev, [uniqueKey]: false }));
     }
   };
 
@@ -798,8 +1069,51 @@ const ProfilePage: React.FC = () => {
       <section id="profile" style={{ display: 'block' }}>
         <div className="profile-header">
           <h2>{userData.full_name || 'Неизвестный пользователь'}</h2>
-          <div className="rating">{userData.bscp_rating}</div>
-          <div className="rating-label">Рейтинг в системе БЦСП</div>
+          <div className="ratings-container">
+            <div className="rating-block">
+              <div className="rating">{userData.bscp_rating}</div>
+              <div className="rating-label">Рейтинг БЦСП</div>
+            </div>
+            {cfData?.connected && (
+              <div className="rating-block">
+                {cfKarmaLoading ? (
+                  <div className="rating karma-loading">...</div>
+                ) : cfKarmaData ? (
+                  <div
+                    className="rating karma-rating"
+                    style={{ color: cfKarmaData.karmaColor }}
+                  >
+                    {cfKarmaData.karma}
+                  </div>
+                ) : (
+                  <div className="rating karma-rating">
+                    {userData.codeforces_karma || 0}
+                  </div>
+                )}
+                <div className="rating-label">
+                  Карма Codeforces
+                  {cfKarmaData && (
+                    <span
+                      className="karma-level"
+                      style={{ color: cfKarmaData.karmaColor }}
+                    >
+                      {' '}
+                      ({cfKarmaData.karmaLevel})
+                    </span>
+                  )}
+                  {cfKarmaData && (
+                    <button
+                      className="cf-stats-btn"
+                      onClick={() => setShowCFProblems(true)}
+                      title="Показать все решённые задачи"
+                    >
+                      📊
+                    </button>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
           <button onClick={() => signOut()} className="btn-logout">
             Выйти
           </button>
@@ -824,13 +1138,22 @@ const ProfilePage: React.FC = () => {
             <button
               onClick={handleCFClick}
               className="system-link connected-cf"
-              style={{ backgroundColor: '#ffc107', color: '#333', border: '1px solid #e0a800' }}
+              style={{
+                backgroundColor: '#ffc107',
+                color: '#333',
+                border: '1px solid #e0a800',
+              }}
               title="Нажмите, чтобы завершить верификацию"
             >
-              <span className="status-indicator" style={{ backgroundColor: '#ffc107' }}></span>
+              <span
+                className="status-indicator"
+                style={{ backgroundColor: '#ffc107' }}
+              ></span>
               <div className="cf-info">
                 <span className="cf-label">Ожидает подтверждения</span>
-                <span className="cf-nickname">{cfData.pending_cf_username}</span>
+                <span className="cf-nickname">
+                  {cfData.pending_cf_username}
+                </span>
               </div>
             </button>
           ) : (
@@ -853,20 +1176,31 @@ const ProfilePage: React.FC = () => {
               <span className="status-indicator"></span>
               <div className="cf-info">
                 <span className="cf-label">Подключено AtCoder</span>
-                <span className="cf-nickname">{atCoderData.atcoder_username}</span>
+                <span className="cf-nickname">
+                  {atCoderData.atcoder_username}
+                </span>
               </div>
             </button>
           ) : atCoderData?.pending_verification ? (
             <button
               onClick={handleAtCoderClick}
               className="system-link connected-cf"
-              style={{ backgroundColor: '#ffc107', color: '#333', border: '1px solid #e0a800' }}
+              style={{
+                backgroundColor: '#ffc107',
+                color: '#333',
+                border: '1px solid #e0a800',
+              }}
               title="Нажмите, чтобы завершить верификацию"
             >
-              <span className="status-indicator" style={{ backgroundColor: '#ffc107' }}></span>
+              <span
+                className="status-indicator"
+                style={{ backgroundColor: '#ffc107' }}
+              ></span>
               <div className="cf-info">
                 <span className="cf-label">Ожидает подтверждения</span>
-                <span className="cf-nickname">{atCoderData.pending_atcoder_username}</span>
+                <span className="cf-nickname">
+                  {atCoderData.pending_atcoder_username}
+                </span>
               </div>
             </button>
           ) : (
@@ -878,7 +1212,7 @@ const ProfilePage: React.FC = () => {
               Подключить AtCoder
             </button>
           )}
-          
+
           <a
             href="https://contest.yandex.ru/enter"
             target="_blank"
@@ -950,18 +1284,34 @@ const ProfilePage: React.FC = () => {
                       <strong>Сохраните этот код!</strong>
                     </p>
                     <p>
-                      Разместите его в вашем <strong>профиле на Codeforces</strong> в поле <strong>First Name</strong>:
+                      Разместите его в вашем{' '}
+                      <strong>профиле на Codeforces</strong> в поле{' '}
+                      <strong>First Name</strong>:
                     </p>
                     <ol className="affiliation-steps">
-                      <li>Перейдите на <a href="https://codeforces.com/settings" target="_blank" rel="noopener noreferrer">Codeforces Settings</a></li>
-                      <li>Найдите поле <strong>First Name</strong> (Имя)</li>
+                      <li>
+                        Перейдите на{' '}
+                        <a
+                          href="https://codeforces.com/settings/social"
+                          target="_blank"
+                          rel="noopener noreferrer"
+                        >
+                          Codeforces Settings
+                        </a>
+                      </li>
+                      <li>
+                        Найдите поле <strong>First Name</strong> (Имя)
+                      </li>
                       <li>Вставьте туда этот код (см. ниже)</li>
-                      <li>Нажмите <strong>Save Changes</strong> для сохранения</li>
+                      <li>
+                        Нажмите <strong>Save Changes</strong> для сохранения
+                      </li>
                       <li>Вернитесь сюда и нажмите &laquo;Проверить&raquo;</li>
                     </ol>
                     <div className="code-box">{cfGeneratedCode}</div>
                     <p className="code-warning">
-                      ⚠️ Код будет показан только один раз!
+                      💡 Если вы забыли код — нажмите кнопку ниже для генерации
+                      нового
                     </p>
                   </div>
                   <div className="modal-buttons">
@@ -972,6 +1322,22 @@ const ProfilePage: React.FC = () => {
                       className="btn-cancel"
                     >
                       Отмена
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setCfGeneratedCode('');
+                        setCfVerificationStep('input_username');
+                      }}
+                      disabled={cfLoading}
+                      className="btn-secondary"
+                      style={{
+                        backgroundColor: '#f59e0b',
+                        color: '#fff',
+                        marginRight: '10px',
+                      }}
+                    >
+                      Новый код
                     </button>
                     <button
                       type="button"
@@ -987,11 +1353,18 @@ const ProfilePage: React.FC = () => {
                 <>
                   <h2>Проверка привязки</h2>
                   <p className="verification-instructions">
-                    Проверяем, что код размещён в поле <strong>First Name</strong> на Codeforces...
+                    Автоматическая проверка через{' '}
+                    <strong>{cfAutoVerifyCountdown} сек...</strong>
+                  </p>
+                  <p className="verification-hint">
+                    Убедитесь, что код размещён в поле{' '}
+                    <strong>First Name</strong> на Codeforces
                   </p>
                   <div className="checking-status">
                     <div className="spinner"></div>
-                    <p>Проверка профиля <strong>{cfInput}</strong>...</p>
+                    <p>
+                      Проверка профиля <strong>{cfInput}</strong>...
+                    </p>
                   </div>
                   {cfError && <p className="error-message">{cfError}</p>}
                   <div className="modal-buttons">
@@ -1006,10 +1379,14 @@ const ProfilePage: React.FC = () => {
                     <button
                       type="button"
                       onClick={handleVerifyCFFirstName}
-                      disabled={cfLoading}
+                      disabled={cfLoading || cfAutoVerifyCountdown > 0}
                       className="btn-submit"
                     >
-                      {cfLoading ? 'Проверка...' : 'Проверить'}
+                      {cfLoading
+                        ? 'Проверка...'
+                        : cfAutoVerifyCountdown > 0
+                          ? `Проверить (${cfAutoVerifyCountdown})`
+                          : 'Проверить сейчас'}
                     </button>
                   </div>
                 </>
@@ -1035,7 +1412,9 @@ const ProfilePage: React.FC = () => {
                       disabled={atCoderLoading}
                       autoFocus
                     />
-                    {atCoderError && <p className="error-message">{atCoderError}</p>}
+                    {atCoderError && (
+                      <p className="error-message">{atCoderError}</p>
+                    )}
                     <div className="modal-buttons">
                       <button
                         type="button"
@@ -1063,18 +1442,34 @@ const ProfilePage: React.FC = () => {
                       <strong>Сохраните этот код!</strong>
                     </p>
                     <p>
-                      Разместите его в вашем <strong>профиле на AtCoder</strong> в поле <strong>Affiliation</strong>:
+                      Разместите его в вашем <strong>профиле на AtCoder</strong>{' '}
+                      в поле <strong>Affiliation</strong>:
                     </p>
                     <ol className="affiliation-steps">
-                      <li>Перейдите на <a href="https://atcoder.jp/settings" target="_blank" rel="noopener noreferrer">AtCoder Settings</a></li>
-                      <li>Найдите поле <strong>Affiliation</strong> (Организация/Компания)</li>
+                      <li>
+                        Перейдите на{' '}
+                        <a
+                          href="https://atcoder.jp/settings"
+                          target="_blank"
+                          rel="noopener noreferrer"
+                        >
+                          AtCoder Settings
+                        </a>
+                      </li>
+                      <li>
+                        Найдите поле <strong>Affiliation</strong>{' '}
+                        (Организация/Компания)
+                      </li>
                       <li>Вставьте туда этот код (см. ниже)</li>
-                      <li>Нажмите <strong>Update</strong> для сохранения</li>
+                      <li>
+                        Нажмите <strong>Update</strong> для сохранения
+                      </li>
                       <li>Вернитесь сюда и нажмите &laquo;Проверить&raquo;</li>
                     </ol>
                     <div className="code-box">{generatedVerificationCode}</div>
                     <p className="code-warning">
-                      ⚠️ Код будет показан только один раз!
+                      💡 Если вы забыли код — нажмите кнопку ниже для генерации
+                      нового
                     </p>
                   </div>
                   <div className="modal-buttons">
@@ -1085,6 +1480,22 @@ const ProfilePage: React.FC = () => {
                       className="btn-cancel"
                     >
                       Отмена
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setGeneratedVerificationCode('');
+                        setVerificationStep('input_username');
+                      }}
+                      disabled={atCoderLoading}
+                      className="btn-secondary"
+                      style={{
+                        backgroundColor: '#f59e0b',
+                        color: '#fff',
+                        marginRight: '10px',
+                      }}
+                    >
+                      Новый код
                     </button>
                     <button
                       type="button"
@@ -1100,13 +1511,18 @@ const ProfilePage: React.FC = () => {
                 <>
                   <h2>Проверка привязки</h2>
                   <p className="verification-instructions">
-                    Проверяем, что код размещён в поле <strong>Affiliation</strong> на AtCoder...
+                    Проверяем, что код размещён в поле{' '}
+                    <strong>Affiliation</strong> на AtCoder...
                   </p>
                   <div className="checking-status">
                     <div className="spinner"></div>
-                    <p>Проверка профиля <strong>{atCoderInput}</strong>...</p>
+                    <p>
+                      Проверка профиля <strong>{atCoderInput}</strong>...
+                    </p>
                   </div>
-                  {atCoderError && <p className="error-message">{atCoderError}</p>}
+                  {atCoderError && (
+                    <p className="error-message">{atCoderError}</p>
+                  )}
                   <div className="modal-buttons">
                     <button
                       type="button"
@@ -1144,24 +1560,32 @@ const ProfilePage: React.FC = () => {
                 Отвязать
               </button>
             </div>
-            
+
             {atCoderData.user_info && (
               <div className="atcoder-stats">
                 <div className="stat-item">
                   <span className="stat-label">Рейтинг:</span>
-                  <span className="stat-value">{atCoderData.user_info.rating}</span>
+                  <span className="stat-value">
+                    {atCoderData.user_info.rating}
+                  </span>
                 </div>
                 <div className="stat-item">
                   <span className="stat-label">Ранг:</span>
-                  <span className="stat-value">{atCoderData.user_info.rank || 'N/A'}</span>
+                  <span className="stat-value">
+                    {atCoderData.user_info.rank || 'N/A'}
+                  </span>
                 </div>
                 <div className="stat-item">
                   <span className="stat-label">Участий в контестах:</span>
-                  <span className="stat-value">{atCoderData.user_info.attended_contests_count}</span>
+                  <span className="stat-value">
+                    {atCoderData.user_info.attended_contests_count}
+                  </span>
                 </div>
                 <div className="stat-item">
                   <span className="stat-label">Сумма очков:</span>
-                  <span className="stat-value">{atCoderData.user_info.rated_point_sum}</span>
+                  <span className="stat-value">
+                    {atCoderData.user_info.rated_point_sum}
+                  </span>
                 </div>
               </div>
             )}
@@ -1185,13 +1609,26 @@ const ProfilePage: React.FC = () => {
                     .reverse()
                     .map((sub) => (
                       <tr key={sub.contest_id + sub.contest_end_time}>
-                        <td>{sub.contest_end_time ? new Date(sub.contest_end_time).toLocaleDateString() : 'N/A'}</td>
+                        <td>
+                          {sub.contest_end_time
+                            ? new Date(
+                                sub.contest_end_time,
+                              ).toLocaleDateString()
+                            : 'N/A'}
+                        </td>
                         <td>{sub.contest_name}</td>
                         <td>{sub.user_rank || 'N/A'}</td>
                         <td>{sub.user_old_rating || 'N/A'}</td>
                         <td>{sub.user_new_rating || 'N/A'}</td>
-                        <td className={sub.user_rating_change >= 0 ? 'status-ac' : 'rating-change negative'}>
-                          {sub.user_rating_change >= 0 ? '+' : ''}{sub.user_rating_change}
+                        <td
+                          className={
+                            sub.user_rating_change >= 0
+                              ? 'status-ac'
+                              : 'rating-change negative'
+                          }
+                        >
+                          {sub.user_rating_change >= 0 ? '+' : ''}
+                          {sub.user_rating_change}
                         </td>
                       </tr>
                     ))}
@@ -1225,15 +1662,21 @@ const ProfilePage: React.FC = () => {
                 </div>
                 <div className="stat-item">
                   <span className="stat-label">Ранг:</span>
-                  <span className="stat-value">{cfData.user_info.rank || 'N/A'}</span>
+                  <span className="stat-value">
+                    {cfData.user_info.rank || 'N/A'}
+                  </span>
                 </div>
                 <div className="stat-item">
                   <span className="stat-label">Макс. рейтинг:</span>
-                  <span className="stat-value">{cfData.user_info.max_rating || 'N/A'}</span>
+                  <span className="stat-value">
+                    {cfData.user_info.max_rating || 'N/A'}
+                  </span>
                 </div>
                 <div className="stat-item">
                   <span className="stat-label">Участий в контестах:</span>
-                  <span className="stat-value">{cfData.user_info.attended_contests_count}</span>
+                  <span className="stat-value">
+                    {cfData.user_info.attended_contests_count}
+                  </span>
                 </div>
               </div>
             )}
@@ -1257,13 +1700,26 @@ const ProfilePage: React.FC = () => {
                     .reverse()
                     .map((sub) => (
                       <tr key={sub.contest_id + sub.contest_end_time}>
-                        <td>{sub.contest_end_time ? new Date(sub.contest_end_time).toLocaleDateString() : 'N/A'}</td>
+                        <td>
+                          {sub.contest_end_time
+                            ? new Date(
+                                sub.contest_end_time,
+                              ).toLocaleDateString()
+                            : 'N/A'}
+                        </td>
                         <td>{sub.contest_name}</td>
                         <td>{sub.user_rank || 'N/A'}</td>
                         <td>{sub.user_old_rating || 'N/A'}</td>
                         <td>{sub.user_new_rating || 'N/A'}</td>
-                        <td className={sub.user_rating_change >= 0 ? 'status-ac' : 'rating-change negative'}>
-                          {sub.user_rating_change >= 0 ? '+' : ''}{sub.user_rating_change}
+                        <td
+                          className={
+                            sub.user_rating_change >= 0
+                              ? 'status-ac'
+                              : 'rating-change negative'
+                          }
+                        >
+                          {sub.user_rating_change >= 0 ? '+' : ''}
+                          {sub.user_rating_change}
                         </td>
                       </tr>
                     ))}
@@ -1373,29 +1829,42 @@ const ProfilePage: React.FC = () => {
           <tbody>
             {filteredAndSortedHistory.length > 0 ? (
               filteredAndSortedHistory.map((item, index) => {
-                const uniqueKey = item.contest.id ? `${item.contest.platform}_${item.contest.id}` : null;
+                const uniqueKey = item.contest.id
+                  ? `${item.contest.platform}_${item.contest.id}`
+                  : null;
                 const isExpanded = uniqueKey && expandedContestId === uniqueKey;
                 const problems = uniqueKey ? contestProblems[uniqueKey] : null;
-                const isLoading = uniqueKey ? contestProblemsLoading[uniqueKey] : false;
-                
-                console.log(`[Table] Item ${index}:`, { 
-                  title: item.contest.title, 
-                  platform: item.contest.platform, 
+                const isLoading = uniqueKey
+                  ? contestProblemsLoading[uniqueKey]
+                  : false;
+
+                console.log(`[Table] Item ${index}:`, {
+                  title: item.contest.title,
+                  platform: item.contest.platform,
                   id: item.contest.id,
-                  uniqueKey 
+                  uniqueKey,
                 });
 
                 return (
                   <React.Fragment key={index}>
                     <tr className={isExpanded ? 'expanded-row' : ''}>
-                      <td>{new Date(item.date_recorded).toLocaleDateString()}</td>
+                      <td>
+                        {new Date(item.date_recorded).toLocaleDateString()}
+                      </td>
                       <td>
                         {item.contest.id ? (
                           <button
                             className="contest-link"
                             onClick={() => {
-                              console.log(`[Table] Clicking contest:`, item.contest);
-                              handleContestClick(item.contest.id!, item.contest.title, item.contest.platform);
+                              console.log(
+                                `[Table] Clicking contest:`,
+                                item.contest,
+                              );
+                              handleContestClick(
+                                item.contest.id!,
+                                item.contest.title,
+                                item.contest.platform,
+                              );
                             }}
                             type="button"
                           >
@@ -1407,7 +1876,9 @@ const ProfilePage: React.FC = () => {
                         )}
                       </td>
                       <td>
-                        <span className={`platform-badge platform-${item.contest.platform.toLowerCase()}`}>
+                        <span
+                          className={`platform-badge platform-${item.contest.platform.toLowerCase()}`}
+                        >
                           {item.contest.platform === 'Codeforces' && '🔴 '}
                           {item.contest.platform === 'AtCoder' && '🟠 '}
                           {item.contest.platform}
@@ -1440,7 +1911,8 @@ const ProfilePage: React.FC = () => {
                               <>
                                 <div className="problems-summary">
                                   <p>
-                                    Решено задач: <strong>{problems.length}</strong>
+                                    Решено задач:{' '}
+                                    <strong>{problems.length}</strong>
                                   </p>
                                 </div>
                                 <table className="problems-table">
@@ -1453,9 +1925,16 @@ const ProfilePage: React.FC = () => {
                                   </thead>
                                   <tbody>
                                     {problems.map((problem, idx) => (
-                                      <tr key={`${uniqueKey}_${problem.problemIndex}_${idx}`} className="solved-row">
-                                        <td className="problem-index">{problem.problemIndex}</td>
-                                        <td className="problem-name">{problem.problemName}</td>
+                                      <tr
+                                        key={`${uniqueKey}_${problem.problemIndex}_${idx}`}
+                                        className="solved-row"
+                                      >
+                                        <td className="problem-index">
+                                          {problem.problemIndex}
+                                        </td>
+                                        <td className="problem-name">
+                                          {problem.problemName}
+                                        </td>
                                         <td>
                                           <a
                                             href={problem.problemUrl}
@@ -1473,7 +1952,10 @@ const ProfilePage: React.FC = () => {
                               </>
                             ) : (
                               <div className="no-problems">
-                                <p>Нет данных о задачах или произошла ошибка при загрузке.</p>
+                                <p>
+                                  Нет данных о задачах или произошла ошибка при
+                                  загрузке.
+                                </p>
                               </div>
                             )}
                           </div>
@@ -1541,6 +2023,32 @@ const ProfilePage: React.FC = () => {
           </div>
         </form>
       </section>
+
+      {/* Модальное окно статистики Codeforces */}
+      {showCFStats && cfKarmaData && (
+        <CodeforcesStats
+          karma={cfKarmaData.karma}
+          karmaLevel={cfKarmaData.karmaLevel}
+          karmaColor={cfKarmaData.karmaColor}
+          breakdown={cfKarmaData.breakdown}
+          details={cfKarmaData.details}
+          difficultyDistribution={cfKarmaData.difficultyDistribution}
+          tagStats={cfKarmaData.tagStats}
+          onClose={() => setShowCFStats(false)}
+        />
+      )}
+
+      {/* Модальное окно со списком задач */}
+      {showCFProblems && cfKarmaData && cfKarmaData.problems && (
+        <CodeforcesProblems
+          problems={cfKarmaData.problems}
+          karma={cfKarmaData.karma}
+          karmaLevel={cfKarmaData.karmaLevel}
+          karmaColor={cfKarmaData.karmaColor}
+          details={cfKarmaData.details}
+          onClose={() => setShowCFProblems(false)}
+        />
+      )}
     </main>
   );
 };
