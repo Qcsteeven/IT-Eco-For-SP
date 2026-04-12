@@ -4,7 +4,7 @@ import { getDB } from '@/lib/surreal/surreal';
 import { authOptions } from '@/lib/authOptions';
 import crypto from 'crypto';
 import axios from 'axios';
-import { fetchUserInfo } from '@qatadaazzeh/atcoder-api';
+import { fetchUserInfo, fetchUserContestList } from '@qatadaazzeh/atcoder-api';
 
 // Генерация кода верификации
 function generateVerificationCode(): string {
@@ -459,11 +459,15 @@ export async function PUT() {
       console.error('Error getting CF rating:', e);
     }
 
-    // Получаем рейтинг AtCoder пользователя (если привязан)
+    // Получаем рейтинг и карму AtCoder пользователя (если привязан)
     let atcoderRating = 0;
+    let atcoderKarma = 0;
     try {
       const atcoderQuery = await db.query(
-        `SELECT (SELECT VALUE handle_username FROM external_accounts WHERE user_id = type::thing($user_id) AND platform_name = 'atcoder' AND is_verified = true LIMIT 1)[0] AS atcoder_username FROM type::thing($user_id)`,
+        `SELECT
+          (SELECT VALUE handle_username FROM external_accounts WHERE user_id = type::thing($user_id) AND platform_name = 'atcoder' AND is_verified = true LIMIT 1)[0] AS atcoder_username,
+          (SELECT VALUE total_karma FROM users WHERE id = type::thing($user_id) LIMIT 1)[0] AS current_total_karma
+        FROM type::thing($user_id)`,
         { user_id: userId },
       );
       const atcoderResult = (atcoderQuery[0] as Record<string, unknown>[])?.[0];
@@ -474,25 +478,84 @@ export async function PUT() {
       if (atcoderUsername) {
         const userInfo = await fetchUserInfo(atcoderUsername);
         atcoderRating = userInfo.userRating || 0;
+        // Карма AtCoder = сумма изменений рейтинга
+        const contestHistory = await fetchUserContestList(atcoderUsername);
+        atcoderKarma = contestHistory.reduce((sum: number, contest) => {
+          const c = contest as unknown as Record<string, unknown>;
+          const change =
+            (c.userRatingChange as number) ||
+            ((c.userNewRating as number) || 0) -
+              ((c.userOldRating as number) || 0);
+          return sum + change;
+        }, 0);
       }
     } catch (e) {
-      console.error('Error getting AtCoder rating:', e);
+      console.error('Error getting AtCoder data:', e);
+    }
+
+    // Вычисляем карму Codeforces из API
+    let cfKarma = 0;
+    try {
+      const submissionsRes = await axios.get(
+        `https://codeforces.com/api/user.status?handle=${cfHandle}&from=1&count=5000`,
+        { timeout: 10000 },
+      );
+      if (submissionsRes.data.status === 'OK') {
+        const submissions = submissionsRes.data.result;
+        const okSubmissions = submissions.filter(
+          (s: { verdict: string }) => s.verdict === 'OK',
+        );
+        const uniqueProblems = new Map<string, unknown>();
+        for (let i = okSubmissions.length - 1; i >= 0; i--) {
+          const sub = okSubmissions[i];
+          const problemIndex = sub.problem?.index || sub.problemIndex;
+          if (!sub.contestId || !problemIndex) continue;
+          const key = `${sub.contestId}-${problemIndex}`;
+          if (!uniqueProblems.has(key)) {
+            uniqueProblems.set(key, sub);
+          }
+        }
+        // Простая карма: easy=1, medium=3, hard=10
+        let easyCount = 0;
+        let mediumCount = 0;
+        let hardCount = 0;
+        uniqueProblems.forEach((sub: unknown) => {
+          const s = sub as Record<string, unknown>;
+          const problem = s.problem as Record<string, unknown> | undefined;
+          const rating = problem?.rating as number | undefined;
+          if (rating) {
+            if (rating < 1200) easyCount++;
+            else if (rating < 2000) mediumCount++;
+            else hardCount++;
+          }
+        });
+        cfKarma = easyCount * 1 + mediumCount * 3 + hardCount * 10;
+      }
+    } catch (e) {
+      console.error('Error getting CF karma:', e);
     }
 
     // Итоговый рейтинг = MAX(CF, AtCoder)
+    // Итоговая карма = CF karma + AtCoder karma
     const finalRating = Math.max(cfRating, atcoderRating);
+    const totalKarma = cfKarma + atcoderKarma;
 
-    // Подтверждаем привязку и обновляем рейтинг
+    // Подтверждаем привязку и обновляем рейтинг + карму
     const updateResult = await db.query(
       `
       BEGIN TRANSACTION;
 
       UPDATE external_accounts SET is_verified = true, verified = true, verified_at = time::now() WHERE id = $id;
-      UPDATE users SET bscp_rating = $newRating WHERE id = type::thing($user_id);
+      UPDATE users SET bscp_rating = $newRating, total_karma = $totalKarma WHERE id = type::thing($user_id);
 
       COMMIT TRANSACTION;
       `,
-      { id: verificationRecord.id, user_id: userId, newRating: finalRating },
+      {
+        id: verificationRecord.id,
+        user_id: userId,
+        newRating: finalRating,
+        totalKarma,
+      },
     );
 
     console.log(
@@ -531,11 +594,14 @@ export async function DELETE() {
 
     const userId = session.user.id.toString();
 
-    // Получаем рейтинг AtCoder пользователя (если привязан)
+    // Получаем рейтинг и карму AtCoder пользователя (если привязан)
     let atcoderRating = 0;
+    let atcoderKarma = 0;
     try {
       const atcoderQuery = await db.query(
-        `SELECT (SELECT VALUE handle_username FROM external_accounts WHERE user_id = type::thing($user_id) AND platform_name = 'atcoder' AND is_verified = true LIMIT 1)[0] AS atcoder_username FROM type::thing($user_id)`,
+        `SELECT
+          (SELECT VALUE handle_username FROM external_accounts WHERE user_id = type::thing($user_id) AND platform_name = 'atcoder' AND is_verified = true LIMIT 1)[0] AS atcoder_username
+        FROM type::thing($user_id)`,
         { user_id: userId },
       );
       const atcoderResult = (atcoderQuery[0] as Record<string, unknown>[])?.[0];
@@ -546,25 +612,37 @@ export async function DELETE() {
       if (atcoderUsername) {
         const userInfo = await fetchUserInfo(atcoderUsername);
         atcoderRating = userInfo.userRating || 0;
+        // Карма AtCoder = сумма изменений рейтинга
+        const contestHistory = await fetchUserContestList(atcoderUsername);
+        atcoderKarma = contestHistory.reduce((sum: number, contest) => {
+          const c = contest as unknown as Record<string, unknown>;
+          const change =
+            (c.userRatingChange as number) ||
+            ((c.userNewRating as number) || 0) -
+              ((c.userOldRating as number) || 0);
+          return sum + change;
+        }, 0);
       }
     } catch (e) {
-      console.error('Error getting AtCoder rating:', e);
+      console.error('Error getting AtCoder data:', e);
     }
 
-    // Итоговый рейтинг = MAX(0, AtCoder) = AtCoder (т.к. CF отвязан)
+    // Итоговый рейтинг = AtCoder (т.к. CF отвязан)
+    // Итоговая карма = только AtCoder karma
     const finalRating = atcoderRating;
+    const totalKarma = atcoderKarma;
 
-    // Удаляем привязку и обновляем рейтинг
+    // Удаляем привязку и обновляем рейтинг + карму
     await db.query(
       `
       BEGIN TRANSACTION;
 
       DELETE external_accounts WHERE user_id = type::thing($id) AND platform_name = 'codeforces';
-      UPDATE users SET bscp_rating = $newRating WHERE id = type::thing($id);
+      UPDATE users SET bscp_rating = $newRating, total_karma = $totalKarma WHERE id = type::thing($id);
 
       COMMIT TRANSACTION;
       `,
-      { id: userId, newRating: finalRating },
+      { id: userId, newRating: finalRating, totalKarma },
     );
 
     return NextResponse.json({

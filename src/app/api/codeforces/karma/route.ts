@@ -38,12 +38,13 @@ export async function GET() {
 
     const userId = session.user.id.toString();
 
-    // Получаем верифицированный CF username
+    // Получаем верифицированный CF username И текущую карму из БД
     const userQuery = await db.query(
       `
       SELECT
         id,
         codeforces_karma,
+        total_karma,
         (SELECT VALUE handle_username FROM external_accounts WHERE user_id = type::thing($id) AND platform_name = 'codeforces' AND is_verified = true LIMIT 1)[0] AS cf_username
       FROM type::thing($id);
       `,
@@ -243,8 +244,12 @@ export async function GET() {
     });
 
     // Рассчитываем карму
-    const totalKarma = calculateSimpleKarma(easyCount, mediumCount, hardCount);
-    console.log('[CF Karma] Total karma:', totalKarma);
+    const cfKarmaValue = calculateSimpleKarma(
+      easyCount,
+      mediumCount,
+      hardCount,
+    );
+    console.log('[CF Karma] Total karma:', cfKarmaValue);
 
     // Считаем распределение по сложности
     const difficultyDistribution = {
@@ -257,9 +262,9 @@ export async function GET() {
     const response = {
       ok: true,
       data: {
-        karma: totalKarma,
-        karmaLevel: getKarmaLevel(totalKarma),
-        karmaColor: getKarmaColor(totalKarma),
+        karma: cfKarmaValue,
+        karmaLevel: getKarmaLevel(cfKarmaValue),
+        karmaColor: getKarmaColor(cfKarmaValue),
         breakdown: {
           easyKarma: easyCount * 1,
           mediumKarma: mediumCount * 3,
@@ -283,7 +288,7 @@ export async function GET() {
       fast: true, // Флаг, что это быстрый расчет
     };
 
-    // Сохраняем в кэш
+    // Сохраняем в кэш external_accounts
     if (cfAccountData?.id) {
       try {
         await db.query(
@@ -297,6 +302,82 @@ export async function GET() {
       } catch (e) {
         console.error('[CF Karma] Cache save error:', e);
       }
+    }
+
+    // Сохраняем карму в users ТОЛЬКО если она изменилась
+    try {
+      const savedCfKarma = (userData as Record<string, unknown>)
+        ?.codeforces_karma as number | undefined;
+      const savedTotalKarma = (userData as Record<string, unknown>)
+        ?.total_karma as number | undefined;
+
+      // Получаем карму AtCoder (если привязан) для вычисления total_karma
+      let atcoderKarma = 0;
+      try {
+        const { fetchUserContestList } = await import(
+          '@qatadaazzeh/atcoder-api'
+        );
+        const { fetchUserInfo } = await import('@qatadaazzeh/atcoder-api');
+        const atcoderQuery = await db.query(
+          `SELECT (SELECT VALUE handle_username FROM external_accounts WHERE user_id = type::thing($user_id) AND platform_name = 'atcoder' AND is_verified = true LIMIT 1)[0] AS atcoder_username FROM type::thing($user_id)`,
+          { user_id: userId },
+        );
+        const atcoderResult = (
+          atcoderQuery[0] as Record<string, unknown>[]
+        )?.[0];
+        const atcoderUsername = atcoderResult?.atcoder_username as
+          | string
+          | undefined;
+
+        if (atcoderUsername) {
+          const userInfo = await fetchUserInfo(atcoderUsername);
+          if (userInfo.userRating) {
+            const contestHistory = await fetchUserContestList(atcoderUsername);
+            atcoderKarma = contestHistory.reduce(
+              (sum: number, contest: unknown) => {
+                const c = contest as Record<string, unknown>;
+                const change =
+                  (c.userRatingChange as number) ||
+                  ((c.userNewRating as number) || 0) -
+                    ((c.userOldRating as number) || 0);
+                return sum + change;
+              },
+              0,
+            );
+          }
+        }
+      } catch (e) {
+        console.error('[CF Karma] Error getting AtCoder karma:', e);
+      }
+
+      const newTotalKarma = cfKarmaValue + atcoderKarma;
+
+      // Обновляем БД только если карма изменилась
+      if (savedCfKarma !== cfKarmaValue || savedTotalKarma !== newTotalKarma) {
+        await db.query(
+          `UPDATE type::thing($id) SET codeforces_karma = $cfKarma, total_karma = $totalKarma WHERE id = type::thing($id)`,
+          {
+            id: userId,
+            cfKarma: cfKarmaValue,
+            totalKarma: newTotalKarma,
+          },
+        );
+        console.log(
+          '[CF Karma] Karma updated in users: cf_karma=',
+          cfKarmaValue,
+          '(was',
+          savedCfKarma,
+          '), total_karma=',
+          newTotalKarma,
+          '(was',
+          savedTotalKarma,
+          ')',
+        );
+      } else {
+        console.log('[CF Karma] Karma unchanged, skipping DB update');
+      }
+    } catch (e) {
+      console.error('[CF Karma] Error saving to users:', e);
     }
 
     return NextResponse.json(response);
