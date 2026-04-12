@@ -34,17 +34,17 @@ export async function GET(req: NextRequest) {
 
     if (!userId) {
       // Гость — только public
-      query = `SELECT * FROM contests WHERE visibility_type = 'public' ORDER BY start_time_utc ASC;`;
+      query = `SELECT * FROM events WHERE visibility_type = 'public' ORDER BY start_time_utc ASC;`;
     } else if (userRole === 'admin') {
       // Админ — всё
-      query = `SELECT * FROM contests ORDER BY start_time_utc ASC;`;
+      query = `SELECT * FROM events ORDER BY start_time_utc ASC;`;
     } else if (userRole === 'coach') {
       // Тренер — всё + пометка какие он создал
-      query = `SELECT *, (visibility_type = 'private' AND created_by = type::thing($userId)) AS is_mine FROM contests ORDER BY start_time_utc ASC;`;
+      query = `SELECT *, (visibility_type = 'private' AND created_by = type::thing($userId)) AS is_mine FROM events ORDER BY start_time_utc ASC;`;
       params = { userId };
     } else {
       // Участник — public + private где он в participant_list
-      query = `SELECT * FROM contests WHERE visibility_type = 'public' OR $userId IN participant_list ORDER BY start_time_utc ASC;`;
+      query = `SELECT * FROM events WHERE visibility_type = 'public' OR $userId IN participant_list ORDER BY start_time_utc ASC;`;
       params = { userId };
     }
 
@@ -161,13 +161,38 @@ export async function POST(req: NextRequest) {
       participant_list: body.participant_list || [],
       created_by: `users:${session.user.id}`,
       platform_contest_id: body.platform_contest_id || '',
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
     };
 
-    const result = await db.query(`CREATE contests CONTENT $data;`, {
-      data: eventData,
-    });
+    const result = await db.query(
+      `CREATE events CONTENT {
+        title: $title,
+        description: $description,
+        platform: $platform,
+        status: $status,
+        start_time_utc: d'${body.start_time_utc}',
+        end_time_utc: d'${body.end_time_utc}',
+        external_link: $external_link,
+        visibility_type: $visibility_type,
+        participant_list: $participant_list,
+        created_by: $created_by,
+        platform_contest_id: $platform_contest_id,
+        created_at: time::now(),
+        updated_at: time::now()
+      };`,
+      {
+        title: eventData.title,
+        description: eventData.description,
+        platform: eventData.platform,
+        status: eventData.status,
+        start_time_utc: eventData.start_time_utc,
+        end_time_utc: eventData.end_time_utc,
+        external_link: eventData.external_link,
+        visibility_type: eventData.visibility_type,
+        participant_list: eventData.participant_list,
+        created_by: eventData.created_by,
+        platform_contest_id: eventData.platform_contest_id,
+      },
+    );
 
     const createdEvent = (result[0] as unknown as Event[])?.[0];
 

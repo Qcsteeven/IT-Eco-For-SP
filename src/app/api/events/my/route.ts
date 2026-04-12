@@ -31,13 +31,13 @@ export async function GET() {
 
     // Получаем private мероприятия где пользователь в participant_list
     const privateResult = await db.query<Event[][]>(
-      `SELECT *, 'assigned' AS access_reason FROM contests WHERE visibility_type = 'private' AND type::string($userId) IN participant_list ORDER BY start_time_utc ASC;`,
+      `SELECT *, 'assigned' AS access_reason FROM events WHERE visibility_type = 'private' AND type::string($userId) IN participant_list ORDER BY start_time_utc ASC;`,
       { userId },
     );
 
     // Получаем все public мероприятия
     const publicResult = await db.query<Event[][]>(
-      `SELECT *, 'public' AS access_reason FROM contests WHERE visibility_type = 'public' ORDER BY start_time_utc ASC;`,
+      `SELECT *, 'public' AS access_reason FROM events WHERE visibility_type = 'public' ORDER BY start_time_utc ASC;`,
       {},
     );
 

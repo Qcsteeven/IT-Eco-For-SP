@@ -55,7 +55,7 @@ export async function POST(req: NextRequest) {
     // Получаем мероприятие
     const eventResult = await db.query(
       `SELECT * FROM type::thing($tableName, $id)`,
-      { tableName: 'contests', id: eventId },
+      { tableName: 'events', id: eventId },
     );
     const event = (eventResult[0] as unknown as Event[])?.[0];
 

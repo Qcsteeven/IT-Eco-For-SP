@@ -5,10 +5,10 @@ import { authOptions } from '@/lib/authOptions';
 
 /**
  * GET /api/users
- * 
+ *
  * Получение списка пользователей для назначения на мероприятия.
  * Доступно только coach и admin.
- * 
+ *
  * Query params:
  * - search?: string — поиск по имени/email
  * - group?: string — фильтр по группе (если есть)
@@ -16,6 +16,7 @@ import { authOptions } from '@/lib/authOptions';
 export async function GET(req: Request) {
   try {
     const session = await getServerSession(authOptions);
+    console.log('[Users API] Session:', JSON.stringify(session?.user, null, 2));
     if (!session?.user?.id) {
       return NextResponse.json(
         { ok: false, error: 'Неавторизован' },
@@ -25,6 +26,7 @@ export async function GET(req: Request) {
 
     // Только coach и admin могут просматривать список пользователей
     if (session.user.role !== 'coach' && session.user.role !== 'admin') {
+      console.warn('[Users API] Access denied. Role:', session.user.role);
       return NextResponse.json(
         { ok: false, error: 'Доступно только тренерам и администраторам' },
         { status: 403 },

@@ -47,7 +47,7 @@ export async function PUT(req: NextRequest) {
     if (session.user.role === 'coach') {
       const checkResult = await db.query(
         `SELECT * FROM type::thing($tableName, $id)`,
-        { tableName: 'contests', id: eventId },
+        { tableName: 'events', id: eventId },
       );
       const existingEvent = (checkResult[0] as unknown as Event[])?.[0];
 
@@ -99,7 +99,7 @@ export async function PUT(req: NextRequest) {
       if (!updateData.participant_list) {
         const existingCheck = await db.query(
           `SELECT participant_list FROM type::thing($tableName, $id)`,
-          { tableName: 'contests', id: eventId },
+          { tableName: 'events', id: eventId },
         );
         const existing = (existingCheck[0] as Record<string, unknown>[])?.[0];
         const existingList = existing?.participant_list as
@@ -118,11 +118,58 @@ export async function PUT(req: NextRequest) {
       }
     }
 
-    updateData.updated_at = new Date().toISOString();
+    updateData.updated_at = 'time::now()';
+
+    // Формируем SQL с правильными типами
+    const setClauses: string[] = [];
+    const params: Record<string, unknown> = {
+      tableName: 'events',
+      id: eventId,
+    };
+
+    if (updateData.title) {
+      setClauses.push('title = $title');
+      params.title = updateData.title;
+    }
+    if (updateData.description !== undefined) {
+      setClauses.push('description = $description');
+      params.description = updateData.description;
+    }
+    if (updateData.platform) {
+      setClauses.push('platform = $platform');
+      params.platform = updateData.platform;
+    }
+    if (updateData.status) {
+      setClauses.push('status = $status');
+      params.status = updateData.status;
+    }
+    if (updateData.start_time_utc) {
+      setClauses.push(`start_time_utc = d'${updateData.start_time_utc}'`);
+    }
+    if (updateData.end_time_utc) {
+      setClauses.push(`end_time_utc = d'${updateData.end_time_utc}'`);
+    }
+    if (updateData.external_link) {
+      setClauses.push('external_link = $external_link');
+      params.external_link = updateData.external_link;
+    }
+    if (updateData.visibility_type) {
+      setClauses.push('visibility_type = $visibility_type');
+      params.visibility_type = updateData.visibility_type;
+    }
+    if (updateData.participant_list !== undefined) {
+      setClauses.push('participant_list = $participant_list');
+      params.participant_list = updateData.participant_list;
+    }
+    if (updateData.platform_contest_id !== undefined) {
+      setClauses.push('platform_contest_id = $platform_contest_id');
+      params.platform_contest_id = updateData.platform_contest_id;
+    }
+    setClauses.push('updated_at = time::now()');
 
     const result = await db.query(
-      `UPDATE type::thing($tableName, $id) MERGE $data`,
-      { tableName: 'contests', id: eventId, data: updateData },
+      `UPDATE type::thing($tableName, $id) SET ${setClauses.join(', ')}`,
+      params,
     );
 
     const updatedEvent = (result[0] as unknown as Event[])?.[0];
@@ -183,7 +230,7 @@ export async function DELETE(req: NextRequest) {
     if (session.user.role === 'coach') {
       const checkResult = await db.query(
         `SELECT created_by FROM type::thing($tableName, $id)`,
-        { tableName: 'contests', id: eventId },
+        { tableName: 'events', id: eventId },
       );
       const existing = (checkResult[0] as Record<string, unknown>[])?.[0];
       const createdBy = existing?.created_by as string | undefined;
@@ -198,7 +245,7 @@ export async function DELETE(req: NextRequest) {
     }
 
     await db.query(`DELETE type::thing($tableName, $id)`, {
-      tableName: 'contests',
+      tableName: 'events',
       id: eventId,
     });
 
