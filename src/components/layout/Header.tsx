@@ -2,10 +2,12 @@
 
 import Link from 'next/link';
 import { useSession } from 'next-auth/react';
+import { hasPermission, UserRole } from '@/lib/rbac';
 import './header.scss';
 
 export default function Header() {
-  const { status } = useSession();
+  const { data: session, status } = useSession();
+  const userRole = session?.user?.role as UserRole | undefined;
 
   return (
     <>
@@ -25,12 +27,31 @@ export default function Header() {
             </Link>
             {status === 'authenticated' && (
               <>
-                <Link href="/chat" className="header-links-item">
-                  ИИ Ассистент
-                </Link>
-                <Link href="/profile" className="header-links-item">
-                  Профиль
-                </Link>
+                {userRole && hasPermission(userRole, 'canUseAIAssistant') && (
+                  <Link href="/chat" className="header-links-item">
+                    ИИ Ассистент
+                  </Link>
+                )}
+                {userRole && hasPermission(userRole, 'canViewPersonalDashboard') && (
+                  <Link href="/profile" className="header-links-item">
+                    Профиль
+                  </Link>
+                )}
+                {userRole && hasPermission(userRole, 'canManageContests') && (
+                  <Link href="/coach/contests" className="header-links-item">
+                    Контесты
+                  </Link>
+                )}
+                {userRole && hasPermission(userRole, 'canViewAnalytics') && (
+                  <Link href="/coach/analytics" className="header-links-item">
+                    Аналитика
+                  </Link>
+                )}
+                {userRole && hasPermission(userRole, 'canManageUsers') && (
+                  <Link href="/admin" className="header-links-item header-links-item-admin">
+                    Админ
+                  </Link>
+                )}
               </>
             )}
             {status === 'unauthenticated' && (

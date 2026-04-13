@@ -64,3 +64,14 @@
     }
   }
 }
+
+.header-links-item-admin {
+  position: relative;
+  font-weight: 600;
+  
+  &::before {
+    content: '⚙️';
+    margin-right: 4px;
+    font-size: 0.8em;
+  }
+}
