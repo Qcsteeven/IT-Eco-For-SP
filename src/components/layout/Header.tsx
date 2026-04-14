@@ -38,8 +38,8 @@ export default function Header() {
                   </Link>
                 )}
                 {userRole && hasPermission(userRole, 'canManageContests') && (
-                  <Link href="/coach/contests" className="header-links-item">
-                    Контесты
+                  <Link href="/events" className="header-links-item">
+                    Мероприятия
                   </Link>
                 )}
                 {userRole && hasPermission(userRole, 'canViewAnalytics') && (
