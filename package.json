@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev --turbopack",
-    "dev:docker": "docker compose up dev",
+    "dev:docker": "next dev",
     "build": "next build --turbopack",
     "build:docker": "docker compose build app",
     "start": "next start",
