@@ -178,20 +178,28 @@ ROUTERAI_API_KEY=rsk_xxxxxxxxxxxxxxxxxxxxxxxx
 
 ## ⏱ Фоновая синхронизация календаря Codeforces
 
-Используется для Render Cron / отдельного воркера и для защиты HTTP-эндпоинта синхронизации. Подробности потоков — в [INTERNAL_JOBS.md](./INTERNAL_JOBS.md).
+Подробности — в [INTERNAL_JOBS.md](./INTERNAL_JOBS.md).
+
+**Отдельный процесс (рекомендуется):** те же `SURREAL_*` и `ROUTERAI_API_KEY`, что для приложения. Во втором терминале рядом с `npm run dev`:
 
 ```bash
-# Общий секрет: тот же в веб-приложении и у процесса, который вызывает sync
-CRON_SECRET=$(openssl rand -base64 32)
-
-# Публичный или внутренний базовый URL приложения (без завершающего /)
-APP_URL=https://your-app.onrender.com
-# Альтернатива: INTERNAL_API_BASE_URL (если воркер ходит на другой хост)
+npm run cron
 ```
 
-Локально `src/lib/cron-worker.ts` при `npm run dev` берёт URL из `INTERNAL_API_BASE_URL` → `APP_URL` → `NEXTAUTH_URL` → `http://localhost:3000` и при наличии `CRON_SECRET` добавляет `Authorization: Bearer ...`.
+Опционально своё расписание (выражение `node-cron`):
 
-Одноразовый вызов синка (без скриптов в репозитории), из shell с теми же переменными:
+```bash
+CRON_SCHEDULE="*/30 * * * *" npm run cron
+```
+
+**Только HTTP** (например Render Cron без второго Node): секрет и URL приложения:
+
+```bash
+CRON_SECRET=$(openssl rand -base64 32)
+APP_URL=https://your-app.onrender.com
+```
+
+Вызов из shell:
 
 ```bash
 curl -sS -H "Authorization: Bearer $CRON_SECRET" \

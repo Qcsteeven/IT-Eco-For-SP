@@ -167,7 +167,7 @@ IT-Eco-For-SP/
 │       ├── rag.ts                    # RAG контекст
 │       ├── prompts.ts                # Системные промпты
 │       ├── contembtext.ts            # Embedding для контестов
-│       └── cron-worker.ts            # Фоновые задачи
+│       └── cron/scheduler.ts         # Отдельный процесс: npm run cron
 ├── .env.example                      # Шаблон переменных
 ├── .env.local                        # Локальные переменные (не коммить!)
 ├── ENV_SETUP.md                      # Документация по окружению
