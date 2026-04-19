@@ -41,7 +41,7 @@ export async function POST(request: NextRequest) {
       WHERE email = $email
     `;
 
-    let queryResult: any;
+    let queryResult: unknown;
     try {
       queryResult = await db.query(findUserQuery, { email });
     } catch (dbError: unknown) {
@@ -58,10 +58,12 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const records = queryResult?.[0] || [];
+    const records = queryResult && typeof queryResult === 'object' && '0' in queryResult ? (queryResult as Record<string, unknown>)[0] : queryResult;
     const userArray: IUser[] = Array.isArray(records)
       ? records
-      : (records as any).result || [];
+      : records && typeof records === 'object' && 'result' in records
+        ? (records as { result: IUser[] }).result || []
+        : [];
 
     if (userArray.length === 0) {
       return NextResponse.json(

@@ -48,7 +48,7 @@ export default function SignUp() {
           `/auth/verify-email?email=${encodeURIComponent(data.email || email)}`,
         );
       }
-    } catch (err) {
+    } catch {
       setError('Ошибка подключения к серверу.');
     } finally {
       setLoading(false);

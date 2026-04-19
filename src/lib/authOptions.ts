@@ -46,9 +46,10 @@ export const authOptions: NextAuthOptions = {
         const user = await getUserByEmail(credentials.email);
 
         if (user) {
+          const storedHash = (user as Record<string, unknown>).password_hash as string | undefined || user.password;
           const isMatch = await verifyPassword(
             credentials.password,
-            user.password_hash || user.password,
+            storedHash,
           );
 
           if (isMatch) {

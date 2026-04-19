@@ -13,7 +13,7 @@ interface UserData {
 }
 
 export default function DashboardPage() {
-  const { data: session, status } = useSession();
+  const { status } = useSession();
   const router = useRouter();
 
   const [userData, setUserData] = useState<UserData | null>(null);
@@ -76,7 +76,7 @@ export default function DashboardPage() {
         setUserData((prev) => (prev ? { ...prev, cf_username: null } : null));
         alert('Аккаунт успешно отвязан');
       }
-    } catch (error) {
+    } catch {
       alert('Ошибка при отключении');
     }
   };

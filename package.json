@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev --turbopack",
-    "dev:docker": "docker compose up dev",
+    "dev:docker": "next dev",
     "build": "next build --turbopack",
     "build:docker": "docker compose build app",
     "start": "next start",
@@ -46,7 +46,6 @@
   "devDependencies": {
     "@eslint/eslintrc": "^3",
     "@tailwindcss/postcss": "^4",
-    "@types/bcrypt": "^6.0.0",
     "@types/node": "^20",
     "@types/node-cron": "^3.0.11",
     "@types/react": "^19",

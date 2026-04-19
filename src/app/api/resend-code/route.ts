@@ -19,7 +19,7 @@ type SurrealQueryResult = [
     status: 'OK';
     result: UserVerificationRecord[];
   },
-  ...any[],
+  ...unknown[],
 ];
 
 export async function POST(request: NextRequest) {
@@ -97,13 +97,14 @@ export async function POST(request: NextRequest) {
       { message: 'Новый код отправлен.' },
       { status: 200 },
     );
-  } catch (error: any) {
-    console.error('Ошибка API повторной отправки кода:', error);
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    console.error('Ошибка API повторной отправки кода:', errorMessage);
 
     return NextResponse.json(
       {
         message: 'Внутренняя ошибка сервера при повторной отправке кода.',
-        detail: error.message || String(error),
+        detail: errorMessage,
       },
       { status: 500 },
     );

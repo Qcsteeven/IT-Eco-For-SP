@@ -28,10 +28,11 @@ export async function GET() {
     const contests = result[0];
 
     return NextResponse.json({ ok: true, data: contests }, { status: 200 });
-  } catch (err: any) {
-    console.error('API Error:', err);
+  } catch (err: unknown) {
+    const errorMessage = err instanceof Error ? err.message : String(err);
+    console.error('API Error:', errorMessage);
     return NextResponse.json(
-      { ok: false, error: err?.message || String(err) },
+      { ok: false, error: errorMessage },
       { status: 500 },
     );
   }

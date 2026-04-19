@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { getDB } from '@/lib/surreal/surreal';
 import { authOptions } from '@/lib/authOptions';
@@ -12,7 +12,7 @@ function generateVerificationCode(): string {
 }
 
 // GET - получение данных Codeforces пользователя
-export async function GET(req: NextRequest) {
+export async function GET() {
   try {
     const session = await getServerSession(authOptions);
     if (!session?.user?.id) {
@@ -27,12 +27,12 @@ export async function GET(req: NextRequest) {
 
     const userId = session.user.id.toString();
 
-    // Получаем данные пользователя с Codeforces username
+    // Получаем данные пользователя с Codeforces username и кэшем
     const userQuery = await db.query(
       `
       SELECT
         id,
-        (SELECT VALUE handle_username FROM external_accounts WHERE user_id = type::thing($id) AND platform_name = 'codeforces' AND is_verified = true LIMIT 1)[0] AS cf_username,
+        (SELECT * FROM external_accounts WHERE user_id = type::thing($id) AND platform_name = 'codeforces' AND is_verified = true LIMIT 1)[0] AS cf_account,
         (SELECT VALUE verification_code FROM external_accounts WHERE user_id = type::thing($id) AND platform_name = 'codeforces' AND is_verified = false LIMIT 1)[0] AS pending_verification_code,
         (SELECT VALUE handle_username FROM external_accounts WHERE user_id = type::thing($id) AND platform_name = 'codeforces' AND is_verified = false LIMIT 1)[0] AS pending_cf_username
       FROM type::thing($id);
@@ -40,10 +40,15 @@ export async function GET(req: NextRequest) {
       { id: userId },
     );
 
-    const resultArr = userQuery[0] as any;
+    const resultArr = userQuery[0] as
+      | Record<string, unknown>
+      | Record<string, unknown>[];
     const userData = Array.isArray(resultArr) ? resultArr[0] : resultArr;
 
-    console.log(`[CF GET] userId: ${userId}, query result:`, JSON.stringify(userData, null, 2));
+    console.log(
+      `[CF GET] userId: ${userId}, query result:`,
+      JSON.stringify(userData, null, 2),
+    );
 
     if (!userData) {
       return NextResponse.json(
@@ -53,7 +58,7 @@ export async function GET(req: NextRequest) {
     }
 
     // Если аккаунт не привязан
-    if (!userData.cf_username) {
+    if (!userData.cf_account) {
       return NextResponse.json({
         connected: false,
         cf_username: null,
@@ -63,16 +68,71 @@ export async function GET(req: NextRequest) {
       });
     }
 
-    // Получаем данные с Codeforces API
-    let userInfo = null;
-    let formattedHistory = [];
-    
-    try {
-      const cfRes = await axios.get(`https://codeforces.com/api/user.info?handles=${userData.cf_username}`);
+    const cfAccount = userData.cf_account as Record<string, unknown>;
+    const cfUsername = cfAccount.handle_username as string;
 
-      if (cfRes.data.status === 'OK' && cfRes.data.result && cfRes.data.result.length > 0) {
+    // Проверяем кэш (TTL 1 час)
+    const CACHE_TTL = 60 * 60 * 1000;
+    const now = Date.now();
+    const lastUpdate = cfAccount.updated_at
+      ? new Date(cfAccount.updated_at as string).getTime()
+      : 0;
+    const cacheValid = lastUpdate && now - lastUpdate < CACHE_TTL;
+
+    // Если кэш валиден, возвращаем его
+    if (cacheValid && cfAccount.cached_user_info) {
+      console.log('[CF GET] Using cached data');
+      return NextResponse.json({
+        connected: true,
+        cf_username: cfUsername,
+        user_info: JSON.parse(cfAccount.cached_user_info as string),
+        submissions: JSON.parse(cfAccount.cached_submissions as string),
+      });
+    }
+
+    console.log('[CF GET] Fetching from Codeforces API...');
+
+    // Получаем данные с Codeforces API
+    let userInfo: {
+      rating: number;
+      rank: string;
+      max_rating: number;
+      attended_contests_count: number;
+    } | null = null;
+
+    interface CodeforcesRatingEntry {
+      contestId?: number;
+      contestName?: string;
+      rank?: number;
+      oldRating?: number;
+      newRating?: number;
+      ratingUpdateTimeSeconds?: number;
+      [key: string]: unknown;
+    }
+
+    let formattedHistory: {
+      contest_id: number | string;
+      contest_name: string;
+      user_rank: number;
+      user_old_rating: number;
+      user_new_rating: number;
+      user_rating_change: number;
+      contest_end_time: string;
+      is_rated: boolean;
+    }[] = [];
+
+    try {
+      const cfRes = await axios.get(
+        `https://codeforces.com/api/user.info?handles=${userData.cf_username}`,
+      );
+
+      if (
+        cfRes.data.status === 'OK' &&
+        cfRes.data.result &&
+        cfRes.data.result.length > 0
+      ) {
         const cfUser = cfRes.data.result[0];
-        
+
         userInfo = {
           rating: cfUser.rating || 0,
           rank: cfUser.rank || '',
@@ -81,32 +141,55 @@ export async function GET(req: NextRequest) {
         };
 
         // Получаем историю рейтинга
-        const ratingRes = await axios.get(`https://codeforces.com/api/user.rating?handle=${userData.cf_username}`);
-        const ratingHistory = ratingRes.data.status === 'OK' ? ratingRes.data.result : [];
+        const ratingRes = await axios.get(
+          `https://codeforces.com/api/user.rating?handle=${userData.cf_username}`,
+        );
+        const ratingHistory: CodeforcesRatingEntry[] =
+          ratingRes.data.status === 'OK' ? ratingRes.data.result : [];
 
-        formattedHistory = ratingHistory.map((item: any) => ({
+        formattedHistory = ratingHistory.map((item) => ({
           contest_id: item.contestId || '',
           contest_name: item.contestName || '',
           user_rank: item.rank || 0,
           user_old_rating: item.oldRating || 0,
           user_new_rating: item.newRating || 0,
           user_rating_change: (item.newRating || 0) - (item.oldRating || 0),
-          contest_end_time: new Date(item.ratingUpdateTimeSeconds * 1000).toISOString(),
+          contest_end_time: new Date(
+            item.ratingUpdateTimeSeconds * 1000,
+          ).toISOString(),
           is_rated: true,
         }));
       }
-    } catch (apiError: any) {
-      console.error('Codeforces API Error:', apiError);
+    } catch (apiError: unknown) {
+      const errorMessage =
+        apiError instanceof Error ? apiError.message : String(apiError);
+      console.error('Codeforces API Error:', errorMessage);
+    }
+
+    // Сохраняем в кэш
+    try {
+      await db.query(
+        `UPDATE type::thing($id) SET cached_user_info = $userInfo, cached_submissions = $submissions, updated_at = time::now() WHERE platform_name = 'codeforces'`,
+        {
+          id: cfAccount.id,
+          userInfo: JSON.stringify(userInfo),
+          submissions: JSON.stringify(formattedHistory),
+        },
+      );
+      console.log('[CF GET] Cache saved');
+    } catch (e) {
+      console.error('[CF GET] Cache save error:', e);
     }
 
     return NextResponse.json({
       connected: true,
-      cf_username: userData.cf_username,
+      cf_username: cfUsername,
       user_info: userInfo,
       submissions: formattedHistory,
     });
-  } catch (err: any) {
-    console.error('API GET Error:', err);
+  } catch (err: unknown) {
+    const errorMessage = err instanceof Error ? err.message : String(err);
+    console.error('API GET Error:', errorMessage);
     return NextResponse.json(
       { ok: false, error: 'Ошибка сервера' },
       { status: 500 },
@@ -115,7 +198,7 @@ export async function GET(req: NextRequest) {
 }
 
 // POST - начало процесса привязки (создание кода верификации)
-export async function POST(req: NextRequest) {
+export async function POST(req: Request) {
   try {
     const session = await getServerSession(authOptions);
     if (!session?.user?.id) {
@@ -143,16 +226,27 @@ export async function POST(req: NextRequest) {
 
     // Проверяем существование пользователя на Codeforces
     try {
-      const cfRes = await axios.get(`https://codeforces.com/api/user.info?handles=${cf_handle.trim()}`);
-      
-      if (cfRes.data.status !== 'OK' || !cfRes.data.result || cfRes.data.result.length === 0) {
+      const cfRes = await axios.get(
+        `https://codeforces.com/api/user.info?handles=${cf_handle.trim()}`,
+      );
+
+      if (
+        cfRes.data.status !== 'OK' ||
+        !cfRes.data.result ||
+        cfRes.data.result.length === 0
+      ) {
         return NextResponse.json(
-          { ok: false, error: 'Пользователь с таким хендлом не найден на Codeforces' },
+          {
+            ok: false,
+            error: 'Пользователь с таким хендлом не найден на Codeforces',
+          },
           { status: 404 },
         );
       }
-    } catch (apiError: any) {
-      console.error('Codeforces API validation Error:', apiError);
+    } catch (apiError: unknown) {
+      const errorMessage =
+        apiError instanceof Error ? apiError.message : String(apiError);
+      console.error('Codeforces API validation Error:', errorMessage);
       return NextResponse.json(
         { ok: false, error: 'Ошибка при проверке пользователя на Codeforces' },
         { status: 400 },
@@ -165,11 +259,22 @@ export async function POST(req: NextRequest) {
       { handle: cf_handle.trim() },
     );
 
-    if (existingBinding && existingBinding[0] && (existingBinding[0] as any[]).length > 0) {
-      const existingUserId = (existingBinding[0] as any)[0]?.user_id;
+    if (
+      existingBinding &&
+      existingBinding[0] &&
+      Array.isArray(existingBinding[0]) &&
+      existingBinding[0].length > 0
+    ) {
+      const existingUserId = (
+        existingBinding[0] as Record<string, unknown>[]
+      )?.[0]?.user_id;
       if (existingUserId && existingUserId.toString() !== userId) {
         return NextResponse.json(
-          { ok: false, error: 'Этот аккаунт Codeforces уже привязан к другому пользователю' },
+          {
+            ok: false,
+            error:
+              'Этот аккаунт Codeforces уже привязан к другому пользователю',
+          },
           { status: 409 },
         );
       }
@@ -181,8 +286,12 @@ export async function POST(req: NextRequest) {
       { user_id: userId },
     );
 
-    const existingPendingArr = existingPending[0] as any;
-    const existingPendingRecord = Array.isArray(existingPendingArr) ? existingPendingArr[0] : existingPendingArr;
+    const existingPendingArr = existingPending[0] as
+      | Record<string, unknown>
+      | Record<string, unknown>[];
+    const existingPendingRecord = Array.isArray(existingPendingArr)
+      ? existingPendingArr[0]
+      : existingPendingArr;
 
     if (existingPendingRecord) {
       // Обновляем существующую запись
@@ -197,7 +306,12 @@ export async function POST(req: NextRequest) {
           verified = false, 
           created_at = time::now() 
         WHERE id = $id`,
-        { user_id: userId, id: existingPendingRecord.id, handle: cf_handle.trim(), code: verificationCode },
+        {
+          user_id: userId,
+          id: existingPendingRecord.id,
+          handle: cf_handle.trim(),
+          code: verificationCode,
+        },
       );
     } else {
       // Создаём новую запись
@@ -224,8 +338,9 @@ export async function POST(req: NextRequest) {
       cf_handle: cf_handle.trim(),
       verification_code: verificationCode,
     });
-  } catch (err: any) {
-    console.error('API POST Error:', err);
+  } catch (err: unknown) {
+    const errorMessage = err instanceof Error ? err.message : String(err);
+    console.error('API POST Error:', errorMessage);
     return NextResponse.json(
       { ok: false, error: 'Ошибка сервера' },
       { status: 500 },
@@ -234,7 +349,7 @@ export async function POST(req: NextRequest) {
 }
 
 // PUT - проверка кода в First Name и подтверждение привязки
-export async function PUT(req: NextRequest) {
+export async function PUT() {
   try {
     const session = await getServerSession(authOptions);
     if (!session?.user?.id) {
@@ -255,26 +370,42 @@ export async function PUT(req: NextRequest) {
       { id: userId },
     );
 
-    const resultArr = verificationQuery[0] as any;
-    const verificationRecord = Array.isArray(resultArr) ? resultArr[0] : resultArr;
+    const resultArr = verificationQuery[0] as
+      | Record<string, unknown>
+      | Record<string, unknown>[];
+    const verificationRecord = Array.isArray(resultArr)
+      ? resultArr[0]
+      : resultArr;
 
     if (!verificationRecord) {
       return NextResponse.json(
-        { ok: false, error: 'Нет активной верификации. Начните процесс привязки заново.' },
+        {
+          ok: false,
+          error: 'Нет активной верификации. Начните процесс привязки заново.',
+        },
         { status: 400 },
       );
     }
 
-    const cfHandle = verificationRecord.handle_username;
-    const expectedCode = verificationRecord.verification_code;
+    const cfHandle = verificationRecord.handle_username as string;
+    const expectedCode = verificationRecord.verification_code as string;
 
     // Проверяем, что код есть в профиле Codeforces (в поле firstName)
     try {
-      const cfRes = await axios.get(`https://codeforces.com/api/user.info?handles=${cfHandle}`);
+      const cfRes = await axios.get(
+        `https://codeforces.com/api/user.info?handles=${cfHandle}`,
+      );
 
-      if (cfRes.data.status !== 'OK' || !cfRes.data.result || cfRes.data.result.length === 0) {
+      if (
+        cfRes.data.status !== 'OK' ||
+        !cfRes.data.result ||
+        cfRes.data.result.length === 0
+      ) {
         return NextResponse.json(
-          { ok: false, error: 'Ошибка при получении данных профиля Codeforces' },
+          {
+            ok: false,
+            error: 'Ошибка при получении данных профиля Codeforces',
+          },
           { status: 500 },
         );
       }
@@ -282,7 +413,9 @@ export async function PUT(req: NextRequest) {
       const cfUser = cfRes.data.result[0];
       const firstName = cfUser.firstName || '';
 
-      console.log(`[Codeforces] Profile: ${cfHandle}, First Name: "${firstName}", Expected: "${expectedCode}"`);
+      console.log(
+        `[Codeforces] Profile: ${cfHandle}, First Name: "${firstName}", Expected: "${expectedCode}"`,
+      );
 
       if (!firstName.includes(expectedCode)) {
         return NextResponse.json(
@@ -294,10 +427,17 @@ export async function PUT(req: NextRequest) {
           { status: 400 },
         );
       }
-    } catch (apiError: any) {
-      console.error('Codeforces API verification Error:', apiError);
+    } catch (apiError: unknown) {
+      const errorMessage =
+        apiError instanceof Error ? apiError.message : String(apiError);
+      console.error('Codeforces API verification Error:', errorMessage);
       return NextResponse.json(
-        { ok: false, error: 'Ошибка при проверке профиля Codeforces: ' + (apiError?.message || 'Неизвестная ошибка') },
+        {
+          ok: false,
+          error:
+            'Ошибка при проверке профиля Codeforces: ' +
+            (errorMessage || 'Неизвестная ошибка'),
+        },
         { status: 500 },
       );
     }
@@ -305,8 +445,14 @@ export async function PUT(req: NextRequest) {
     // Получаем рейтинг Codeforces пользователя
     let cfRating = 0;
     try {
-      const cfRes = await axios.get(`https://codeforces.com/api/user.info?handles=${cfHandle}`);
-      if (cfRes.data.status === 'OK' && cfRes.data.result && cfRes.data.result.length > 0) {
+      const cfRes = await axios.get(
+        `https://codeforces.com/api/user.info?handles=${cfHandle}`,
+      );
+      if (
+        cfRes.data.status === 'OK' &&
+        cfRes.data.result &&
+        cfRes.data.result.length > 0
+      ) {
         cfRating = cfRes.data.result[0].rating || 0;
       }
     } catch (e) {
@@ -320,8 +466,10 @@ export async function PUT(req: NextRequest) {
         `SELECT (SELECT VALUE handle_username FROM external_accounts WHERE user_id = type::thing($user_id) AND platform_name = 'atcoder' AND is_verified = true LIMIT 1)[0] AS atcoder_username FROM type::thing($user_id)`,
         { user_id: userId },
       );
-      const atcoderResult = (atcoderQuery[0] as any)?.[0];
-      const atcoderUsername = atcoderResult?.atcoder_username;
+      const atcoderResult = (atcoderQuery[0] as Record<string, unknown>[])?.[0];
+      const atcoderUsername = atcoderResult?.atcoder_username as
+        | string
+        | undefined;
 
       if (atcoderUsername) {
         const userInfo = await fetchUserInfo(atcoderUsername);
@@ -347,15 +495,19 @@ export async function PUT(req: NextRequest) {
       { id: verificationRecord.id, user_id: userId, newRating: finalRating },
     );
 
-    console.log(`[CF PUT] Update result:`, JSON.stringify(updateResult, null, 2));
+    console.log(
+      `[CF PUT] Update result:`,
+      JSON.stringify(updateResult, null, 2),
+    );
 
     return NextResponse.json({
       ok: true,
       message: 'Аккаунт Codeforces успешно привязан',
       cf_handle: cfHandle,
     });
-  } catch (err: any) {
-    console.error('API PUT Error:', err);
+  } catch (err: unknown) {
+    const errorMessage = err instanceof Error ? err.message : String(err);
+    console.error('API PUT Error:', errorMessage);
     return NextResponse.json(
       { ok: false, error: 'Ошибка сервера' },
       { status: 500 },
@@ -364,7 +516,7 @@ export async function PUT(req: NextRequest) {
 }
 
 // DELETE - отвязка аккаунта Codeforces
-export async function DELETE(req: NextRequest) {
+export async function DELETE() {
   try {
     const session = await getServerSession(authOptions);
     if (!session?.user?.id) {
@@ -386,8 +538,10 @@ export async function DELETE(req: NextRequest) {
         `SELECT (SELECT VALUE handle_username FROM external_accounts WHERE user_id = type::thing($user_id) AND platform_name = 'atcoder' AND is_verified = true LIMIT 1)[0] AS atcoder_username FROM type::thing($user_id)`,
         { user_id: userId },
       );
-      const atcoderResult = (atcoderQuery[0] as any)?.[0];
-      const atcoderUsername = atcoderResult?.atcoder_username;
+      const atcoderResult = (atcoderQuery[0] as Record<string, unknown>[])?.[0];
+      const atcoderUsername = atcoderResult?.atcoder_username as
+        | string
+        | undefined;
 
       if (atcoderUsername) {
         const userInfo = await fetchUserInfo(atcoderUsername);
@@ -417,8 +571,9 @@ export async function DELETE(req: NextRequest) {
       ok: true,
       message: 'Аккаунт Codeforces успешно отвязан',
     });
-  } catch (err: any) {
-    console.error('API DELETE Error:', err);
+  } catch (err: unknown) {
+    const errorMessage = err instanceof Error ? err.message : String(err);
+    console.error('API DELETE Error:', errorMessage);
     return NextResponse.json(
       { ok: false, error: 'Ошибка сервера' },
       { status: 500 },
