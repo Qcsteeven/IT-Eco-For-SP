@@ -7,12 +7,11 @@
 | Элемент | Назначение |
 |--------|------------|
 | [`src/lib/jobs/sync-codeforces-calendar.ts`](../src/lib/jobs/sync-codeforces-calendar.ts) | Общая логика: Codeforces API → эмбеддинги → SurrealDB `contests`. |
-| `GET`/`POST` [`/api/internal/codeforces/sync-calendar`](../src/app/api/internal/codeforces/sync-calendar/route.ts) | Основной внутренний эндпоинт для воркера. |
-| [`/api/codeforces/update-calendar`](../src/app/api/codeforces/update-calendar/route.ts) | Устаревший путь; те же правила авторизации, предпочтительно мигрировать на `/api/internal/...`. |
+| `GET`/`POST` [`/api/internal/codeforces/sync-calendar`](../src/app/api/internal/codeforces/sync-calendar/route.ts) | Единственный HTTP-эндпоинт синхронизации для воркера и cron. |
 
 ### Авторизация
 
-Все вызовы синхронизации требуют:
+Эндпоинт `/api/internal/codeforces/sync-calendar` требует:
 
 - В **production** переменная `CRON_SECRET` обязательна; заголовок `Authorization: Bearer <CRON_SECRET>`.
 - В **не-production**, если `CRON_SECRET` не задан — запросы разрешены без заголовка (только для локальной разработки).
@@ -22,7 +21,7 @@
 | Переменная | Где используется |
 |------------|------------------|
 | `CRON_SECRET` | Секрет Bearer для воркера и для проверки в route handlers. |
-| `APP_URL` / `INTERNAL_API_BASE_URL` / `NEXTAUTH_URL` | Базовый URL приложения: воркер и [`calendar-sync-run.ts`](../tooling/calendar-sync-run.ts) строят URL до `/api/internal/codeforces/sync-calendar`. |
+| `APP_URL` / `INTERNAL_API_BASE_URL` / `NEXTAUTH_URL` | Базовый URL приложения: воркер и [`bin/calendar-sync-run.ts`](../bin/calendar-sync-run.ts) строят URL до `/api/internal/codeforces/sync-calendar`. |
 | `ROUTERAI_API_KEY` | Эмбеддинги контестов (как и раньше). |
 
 Подробнее см. [ENV_SETUP.md](./ENV_SETUP.md) (раздел про фоновые задачи).
