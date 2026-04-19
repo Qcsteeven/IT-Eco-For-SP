@@ -191,10 +191,11 @@ APP_URL=https://your-app.onrender.com
 
 Локально `src/lib/cron-worker.ts` при `npm run dev` берёт URL из `INTERNAL_API_BASE_URL` → `APP_URL` → `NEXTAUTH_URL` → `http://localhost:3000` и при наличии `CRON_SECRET` добавляет `Authorization: Bearer ...`.
 
-Одноразовый запуск синка из CLI (те же переменные в `.env.local`):
+Одноразовый вызов синка (без скриптов в репозитории), из shell с теми же переменными:
 
 ```bash
-npm run calendar-sync
+curl -sS -H "Authorization: Bearer $CRON_SECRET" \
+  "${APP_URL%/}/api/internal/codeforces/sync-calendar"
 ```
 
 ---
