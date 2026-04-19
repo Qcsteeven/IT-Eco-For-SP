@@ -20,6 +20,7 @@ interface AtCoderProblem {
   solvedAt: number;
   difficulty?: number; // Рейтинг задачи
   karma: number;
+  difficultyLevel?: 'easy' | 'medium' | 'hard' | 'unknown';
 }
 
 /**
@@ -206,8 +207,7 @@ export async function GET() {
       }
 
       problem.karma = karma;
-      (problem as { difficultyLevel: string }).difficultyLevel =
-        problemDifficulty;
+      problem.difficultyLevel = problemDifficulty;
     });
 
     console.log('[AtCoder Problems] Difficulty breakdown:', {

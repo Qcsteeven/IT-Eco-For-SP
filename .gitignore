@@ -12,6 +12,7 @@
 
 # testing
 /coverage
+/scripts
 
 # next.js
 /.next/
@@ -40,3 +41,7 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+.qwen/
+gha-creds-*.json
+.cursor

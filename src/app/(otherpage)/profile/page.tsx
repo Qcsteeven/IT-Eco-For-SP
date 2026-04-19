@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useSession, signOut } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
 import './profile.scss';
@@ -194,35 +194,23 @@ const ProfilePage: React.FC = () => {
       solvedCount: number;
       averageRating: number;
     }>;
+    problems?: Array<{
+      contestId: number;
+      problemIndex: string;
+      problemName?: string;
+      solvedAt: number;
+      difficulty: 'easy' | 'medium' | 'hard' | 'unknown';
+      karma: number;
+      tags?: string[];
+      rating?: number;
+    }>;
   } | null>(null);
   const [cfKarmaLoading, setCfKarmaLoading] = useState(false);
   const [showCFStats, setShowCFStats] = useState(false);
   const [showCFProblems, setShowCFProblems] = useState(false);
 
-  // AtCoder Karma состояния
-  const [atcoderKarmaData, setAtcoderKarmaData] = useState<{
-    karma: number;
-    karmaLevel: string;
-    karmaColor: string;
-    details: {
-      totalSolved: number;
-      easyCount: number;
-      mediumCount: number;
-      hardCount: number;
-      unknownCount: number;
-    };
-    problems?: Array<{
-      contestId: string;
-      contestName: string;
-      taskIndex: string;
-      taskName: string;
-      solvedAt: number;
-      difficulty?: number;
-      karma: number;
-    }>;
-  } | null>(null);
-  const [atcoderKarmaLoading, setAtcoderKarmaLoading] = useState(false);
-  const [showAtCoderProblems, setShowAtCoderProblems] = useState(false);
+  // Кэш кармы AtCoder (данные подгружаются для будущего UI; референс не триггерит ререндер)
+  const atcoderKarmaCacheRef = useRef<unknown>(null);
 
   // Редирект при неавторизованном доступе
   useEffect(() => {
@@ -339,10 +327,11 @@ const ProfilePage: React.FC = () => {
             console.log('[CF Karma] Data:', result.data);
             setCfKarmaData(result.data);
 
-            // Обновляем codeforces_karma в userData если есть
-            if (userData && result.data.karma !== userData.codeforces_karma) {
-              setUserData({ ...userData, codeforces_karma: result.data.karma });
-            }
+            setUserData((u) =>
+              u && result.data.karma !== u.codeforces_karma
+                ? { ...u, codeforces_karma: result.data.karma }
+                : u,
+            );
           } else {
             console.error('[CF Karma] Error:', result);
           }
@@ -357,12 +346,11 @@ const ProfilePage: React.FC = () => {
     }
   }, [status, cfData?.connected]);
 
-  // Загрузка данных кармы AtCoder
+  // Загрузка данных кармы AtCoder (кэш в ref для будущего UI)
   useEffect(() => {
     if (status === 'authenticated' && atCoderData?.connected) {
       const fetchAtCoderKarma = async () => {
         try {
-          setAtcoderKarmaLoading(true);
           const response = await fetch('/api/atcoder/problems');
           const result = await response.json();
 
@@ -370,14 +358,12 @@ const ProfilePage: React.FC = () => {
 
           if (response.ok && result.ok && result.data) {
             console.log('[AtCoder Karma] Data:', result.data);
-            setAtcoderKarmaData(result.data);
+            atcoderKarmaCacheRef.current = result.data;
           } else {
             console.error('[AtCoder Karma] Error:', result);
           }
         } catch (err) {
           console.error('[AtCoder Karma] Fetch error:', err);
-        } finally {
-          setAtcoderKarmaLoading(false);
         }
       };
 
@@ -411,6 +397,8 @@ const ProfilePage: React.FC = () => {
         clearInterval(countdownInterval);
       };
     }
+    // Запуск однократного таймера при входе в шаг verifying; handleVerify стабилен по смыслу сценария
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional: avoid re-arming countdown on every render
   }, [cfVerificationStep]);
 
   // Уникальные платформы
@@ -609,7 +597,7 @@ const ProfilePage: React.FC = () => {
         );
 
         // Сбрасываем карму AtCoder
-        setAtcoderKarmaData(null);
+        atcoderKarmaCacheRef.current = null;
         setAtCoderData({
           connected: false,
           atcoder_username: null,
