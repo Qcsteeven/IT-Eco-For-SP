@@ -158,14 +158,16 @@ export async function GET() {
 
             // Сохраняем в кэш
             try {
-              await db.query(
-                `UPDATE type::thing($id) SET cached_history = $history, cached_rating = $rating, updated_at = time::now() WHERE platform_name = 'codeforces'`,
-                {
-                  id: cfAccount.id,
-                  history: JSON.stringify(cfHistory),
-                  rating: currentRating,
-                },
-              );
+              if (cfAccount?.id) {
+                await db.query(
+                  `UPDATE type::thing($id) SET cached_history = $history, cached_rating = $rating, updated_at = time::now() WHERE platform_name = 'codeforces'`,
+                  {
+                    id: cfAccount.id,
+                    history: JSON.stringify(cfHistory),
+                    rating: currentRating,
+                  },
+                );
+              }
             } catch (e) {
               console.error('[CF] Cache save error:', e);
             }
@@ -206,25 +208,23 @@ export async function GET() {
 
           const currentRating = userInfo.userRating || 0;
 
-          const atCoderHistory = contestHistory.map((contest: any) => {
+          const atCoderHistory = contestHistory.map((contest: UserContest) => {
             const diff =
               contest.userRatingChange ||
-              (contest.userNewRating || 0) - (contest.userOldRating || 0);
+              contest.userNewRating - contest.userOldRating;
             const fullContestId = contest.contestId || '';
             const shortContestId = fullContestId.split('.')[0] || '';
 
             return {
               date_recorded: new Date(
-                contest.contestEndTime ||
-                  contest.contest_end_time ||
-                  Date.now(),
+                contest.contestEndTime || Date.now(),
               ).toISOString(),
-              placement: (contest.userRank || contest.rank || '0').toString(),
+              placement: contest.userRank.toString(),
               mmr_change: diff,
               is_manual: false,
               source_rating_change: diff >= 0 ? `+${diff}` : `${diff}`,
               contest: {
-                title: contest.contestName || contest.contest_id || '',
+                title: contest.contestName || '',
                 platform: 'AtCoder',
                 id: shortContestId,
               },
@@ -238,14 +238,16 @@ export async function GET() {
 
           // Сохраняем в кэш
           try {
-            await db.query(
-              `UPDATE type::thing($id) SET cached_history = $history, cached_rating = $rating, updated_at = time::now() WHERE platform_name = 'atcoder'`,
-              {
-                id: atcoderAccount.id,
-                history: JSON.stringify(atCoderHistory),
-                rating: currentRating,
-              },
-            );
+            if (atcoderAccount?.id) {
+              await db.query(
+                `UPDATE type::thing($id) SET cached_history = $history, cached_rating = $rating, updated_at = time::now() WHERE platform_name = 'atcoder'`,
+                {
+                  id: atcoderAccount.id,
+                  history: JSON.stringify(atCoderHistory),
+                  rating: currentRating,
+                },
+              );
+            }
           } catch (e) {
             console.error('[AtCoder] Cache save error:', e);
           }

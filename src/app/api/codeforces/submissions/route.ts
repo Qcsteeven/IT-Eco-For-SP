@@ -109,9 +109,12 @@ export async function GET() {
     // Убираем дубликаты задач (одна задача может быть решена несколько раз)
     const uniqueProblems = new Map<string, CodeforcesSubmission>();
     allSubmissions.forEach((sub) => {
-      const key = sub.contestId
-        ? `${sub.contestId}-${sub.problemIndex}`
-        : sub.problemIndex;
+      const problemIndex = sub.problem?.index ?? sub.problemIndex;
+      if (!problemIndex) return;
+      const key =
+        sub.contestId != null
+          ? `${sub.contestId}-${problemIndex}`
+          : problemIndex;
       if (!uniqueProblems.has(key)) {
         uniqueProblems.set(key, sub);
       }
@@ -176,11 +179,11 @@ export async function GET() {
     let ratedProblemsCount = 0;
 
     uniqueSubmissions.forEach((sub) => {
-      const problemIndex = sub.problem?.index || sub.problemIndex;
+      const problemIndex = sub.problem?.index ?? sub.problemIndex;
       const key =
-        sub.contestId && problemIndex
+        sub.contestId != null && problemIndex
           ? `${sub.contestId}-${problemIndex}`
-          : problemIndex;
+          : (problemIndex ?? '');
       const rating = problemRatings.get(key) || 0;
 
       if (rating > 0) {
