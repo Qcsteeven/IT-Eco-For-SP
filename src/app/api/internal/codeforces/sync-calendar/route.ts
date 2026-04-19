@@ -6,8 +6,8 @@ import { cronAuthErrorResponse } from '@/lib/internal/cron-auth';
 export const dynamic = 'force-dynamic';
 
 /**
- * @deprecated Предпочтительно вызывать GET /api/internal/codeforces/sync-calendar с CRON_SECRET.
- * Оставлен для обратной совместимости (старые ссылки, локальный cron).
+ * Внутренний эндпоинт синхронизации календаря Codeforces.
+ * Вызывается Render Cron / фоновым воркером с Authorization: Bearer CRON_SECRET.
  */
 export async function GET(request: Request) {
   const denied = cronAuthErrorResponse(request);
@@ -27,4 +27,8 @@ export async function GET(request: Request) {
       errorCount: result.errorCount,
     },
   });
+}
+
+export async function POST(request: Request) {
+  return GET(request);
 }

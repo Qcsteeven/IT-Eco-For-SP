@@ -176,6 +176,29 @@ ROUTERAI_API_KEY=rsk_xxxxxxxxxxxxxxxxxxxxxxxx
 
 ---
 
+## ⏱ Фоновая синхронизация календаря Codeforces
+
+Используется для Render Cron / отдельного воркера и для защиты HTTP-эндпоинта синхронизации. Подробности потоков — в [INTERNAL_JOBS.md](./INTERNAL_JOBS.md).
+
+```bash
+# Общий секрет: тот же в веб-приложении и у процесса, который вызывает sync
+CRON_SECRET=$(openssl rand -base64 32)
+
+# Публичный или внутренний базовый URL приложения (без завершающего /)
+APP_URL=https://your-app.onrender.com
+# Альтернатива: INTERNAL_API_BASE_URL (если воркер ходит на другой хост)
+```
+
+Локально `src/lib/cron-worker.ts` при `npm run dev` берёт URL из `INTERNAL_API_BASE_URL` → `APP_URL` → `NEXTAUTH_URL` → `http://localhost:3000` и при наличии `CRON_SECRET` добавляет `Authorization: Bearer ...`.
+
+Одноразовый запуск синка из CLI (те же переменные в `.env.local`):
+
+```bash
+npm run calendar-sync
+```
+
+---
+
 ## ✅ Проверка настройки
 
 ### 1. Проверка переменных окружения

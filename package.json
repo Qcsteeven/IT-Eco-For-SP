@@ -12,7 +12,8 @@
     "lint": "eslint . --ext .ts,.tsx --max-warnings 0",
     "format": "prettier --write \"src/**/*.{ts,tsx}\"",
     "type-check": "tsc --noEmit",
-    "validate": "npm run lint && npm run format && npm run type-check"
+    "validate": "npm run lint && npm run format && npm run type-check",
+    "calendar-sync": "tsx tooling/calendar-sync-run.ts"
   },
   "dependencies": {
     "@ai-sdk/deepinfra": "^1.0.23",
