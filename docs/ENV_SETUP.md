@@ -176,6 +176,38 @@ ROUTERAI_API_KEY=rsk_xxxxxxxxxxxxxxxxxxxxxxxx
 
 ---
 
+## ⏱ Фоновая синхронизация календаря Codeforces
+
+Подробности — в [INTERNAL_JOBS.md](./INTERNAL_JOBS.md).
+
+**Отдельный процесс (рекомендуется):** те же `SURREAL_*` и `ROUTERAI_API_KEY`, что для приложения. Во втором терминале рядом с `npm run dev`:
+
+```bash
+npm run cron
+```
+
+Опционально своё расписание (выражение `node-cron`):
+
+```bash
+CRON_SCHEDULE="*/30 * * * *" npm run cron
+```
+
+**Только HTTP** (например Render Cron без второго Node): секрет и URL приложения:
+
+```bash
+CRON_SECRET=$(openssl rand -base64 32)
+APP_URL=https://your-app.onrender.com
+```
+
+Вызов из shell:
+
+```bash
+curl -sS -H "Authorization: Bearer $CRON_SECRET" \
+  "${APP_URL%/}/api/internal/codeforces/sync-calendar"
+```
+
+---
+
 ## ✅ Проверка настройки
 
 ### 1. Проверка переменных окружения

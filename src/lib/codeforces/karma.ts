@@ -1,4 +1,4 @@
-import type { CodeforcesSubmission } from '@/types/codeforces';
+import type { CodeforcesSubmission, KarmaResult } from '@/types/codeforces';
 
 /**
  * Конфигурация весов по умолчанию для расчета кармы
@@ -11,14 +11,16 @@ export const DEFAULT_KARMA_WEIGHTS = {
   easyWeight: 1, // < 1200 rating
   mediumWeight: 3, // 1200-2000 rating
   hardWeight: 10, // 2000+ rating
+  contestProblemBonus: 0,
+  uniqueProblemTagBonus: 0,
 };
 
 /**
  * Получить множитель для задачи на основе её тегов
  * Всегда возвращает 1.0 (теги не влияют на карму)
  */
-export function getTagMultiplier(_tags: string[]): number {
-  return 1.0;
+export function getTagMultiplier(tags: string[]): number {
+  return tags.length > 0 ? 1.0 : 1.0;
 }
 
 /**
@@ -28,6 +30,14 @@ function getDifficulty(rating: number): 'easy' | 'medium' | 'hard' {
   if (rating < 1200) return 'easy';
   if (rating < 2000) return 'medium';
   return 'hard';
+}
+
+function submissionProblemKey(sub: CodeforcesSubmission): string {
+  const index = sub.problem?.index ?? sub.problemIndex ?? '';
+  if (sub.contestId != null) {
+    return `${sub.contestId}-${index}`;
+  }
+  return index;
 }
 
 /**
@@ -69,9 +79,7 @@ export function calculateKarma(
 
   // Обрабатываем каждую задачу
   for (const submission of submissions) {
-    const key = submission.contestId
-      ? `${submission.contestId}-${submission.problemIndex}`
-      : submission.problemIndex;
+    const key = submissionProblemKey(submission);
 
     const rating = problemRatings.get(key) || 0;
     const tags = problemTags.get(key) || [];
@@ -137,23 +145,17 @@ export function calculateKarma(
     details: {
       totalSolved: submissions.length,
       easyCount: submissions.filter((s) => {
-        const key = s.contestId
-          ? `${s.contestId}-${s.problemIndex}`
-          : s.problemIndex;
+        const key = submissionProblemKey(s);
         const rating = problemRatings.get(key) || 0;
         return getDifficulty(rating) === 'easy';
       }).length,
       mediumCount: submissions.filter((s) => {
-        const key = s.contestId
-          ? `${s.contestId}-${s.problemIndex}`
-          : s.problemIndex;
+        const key = submissionProblemKey(s);
         const rating = problemRatings.get(key) || 0;
         return getDifficulty(rating) === 'medium';
       }).length,
       hardCount: submissions.filter((s) => {
-        const key = s.contestId
-          ? `${s.contestId}-${s.problemIndex}`
-          : s.problemIndex;
+        const key = submissionProblemKey(s);
         const rating = problemRatings.get(key) || 0;
         return getDifficulty(rating) === 'hard';
       }).length,
