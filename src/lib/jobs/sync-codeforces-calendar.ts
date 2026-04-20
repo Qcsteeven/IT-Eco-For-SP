@@ -1,4 +1,3 @@
-import { NextResponse } from 'next/server';
 import axios from 'axios';
 
 import { buildContestEmbeddingText } from '@/lib/contembtext';
@@ -15,19 +14,29 @@ type CfContest = {
   startTimeSeconds?: number;
 };
 
-/** Ровно поля таблицы contests — без MERGE, чтобы не копить лишние ключи в SCHEMALESS. */
 type ContestDbRow = {
   title: string;
   name: string;
   platform: string;
   platform_contest_id: string;
   registration_link: string;
-  start_time_utc: string;
-  end_time_utc: string;
+  start_time_utc: Date;
+  end_time_utc: Date;
   status: 'Open' | 'Soon' | 'Finished';
   embedding: number[];
-  updated_at: string;
+  updated_at: Date;
 };
+
+export type SyncCodeforcesCalendarResult =
+  | {
+      ok: true;
+      scanned: number;
+      synced: number;
+      upserted: number;
+      errors: string[];
+      errorCount: number;
+    }
+  | { ok: false; error: string; status: number };
 
 function cfPhaseToStatus(phase: string): 'Open' | 'Soon' | 'Finished' {
   if (phase === 'CODING') return 'Open';
@@ -41,7 +50,6 @@ function listingStatusForEmbedding(phase: string): string {
   return 'upcoming';
 }
 
-/** Окно синхронизации: не тянуть всю историю CF и не гонять эмбеддинги на тысячи записей. */
 function shouldSyncContest(c: CfContest, nowSec: number): boolean {
   if (typeof c.startTimeSeconds !== 'number') return false;
   const start = c.startTimeSeconds;
@@ -53,12 +61,17 @@ function shouldSyncContest(c: CfContest, nowSec: number): boolean {
   return start < horizonFuture && end > horizonPast;
 }
 
-export async function GET() {
+/**
+ * Синхронизация списка контестов Codeforces в таблицу contests (эмбеддинги + upsert).
+ * Не выполняет проверку CRON_SECRET — это делают route handlers.
+ */
+export async function syncCodeforcesCalendar(): Promise<SyncCodeforcesCalendarResult> {
   if (!process.env.ROUTERAI_API_KEY) {
-    return NextResponse.json(
-      { ok: false, error: 'ROUTERAI_API_KEY не задан — нужен для эмбеддингов contests' },
-      { status: 500 },
-    );
+    return {
+      ok: false,
+      error: 'ROUTERAI_API_KEY не задан — нужен для эмбеддингов contests',
+      status: 500,
+    };
   }
 
   try {
@@ -67,10 +80,7 @@ export async function GET() {
     );
 
     if (cfRes.data.status !== 'OK' || !cfRes.data.result) {
-      return NextResponse.json(
-        { ok: false, error: 'Codeforces API: неверный ответ' },
-        { status: 502 },
-      );
+      return { ok: false, error: 'Codeforces API: неверный ответ', status: 502 };
     }
 
     const nowSec = Math.floor(Date.now() / 1000);
@@ -78,10 +88,7 @@ export async function GET() {
 
     const db = await getDB();
     if (!db) {
-      return NextResponse.json(
-        { ok: false, error: 'Нет подключения к SurrealDB' },
-        { status: 500 },
-      );
+      return { ok: false, error: 'Нет подключения к SurrealDB', status: 500 };
     }
 
     let upserted = 0;
@@ -90,8 +97,8 @@ export async function GET() {
     for (const c of toSync) {
       const startSec = c.startTimeSeconds!;
       const duration = c.durationSeconds ?? 0;
-      const startIso = new Date(startSec * 1000).toISOString();
-      const endIso = new Date((startSec + duration) * 1000).toISOString();
+      const startAt = new Date(startSec * 1000);
+      const endAt = new Date((startSec + duration) * 1000);
       const status = cfPhaseToStatus(c.phase);
       const platformContestId = String(c.id);
       const part = `codeforces_${c.id}`;
@@ -114,14 +121,13 @@ export async function GET() {
           platform: 'Codeforces',
           platform_contest_id: platformContestId,
           registration_link: registrationLink,
-          start_time_utc: startIso,
-          end_time_utc: endIso,
+          start_time_utc: startAt,
+          end_time_utc: endAt,
           status,
           embedding,
-          updated_at: new Date().toISOString(),
+          updated_at: new Date(),
         };
 
-        // CONTENT заменяет тело записи целиком; MERGE оставлял бы старые поля (id, phase, …).
         const updated = await db.query<unknown[]>(
           `UPDATE type::thing('contests', $part) CONTENT $data RETURN AFTER`,
           { part, data },
@@ -141,23 +147,21 @@ export async function GET() {
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e);
         errors.push(`${c.id}: ${msg}`);
-        console.error(`[update-calendar] contest ${c.id}:`, e);
+        console.error(`[sync-codeforces-calendar] contest ${c.id}:`, e);
       }
     }
 
-    return NextResponse.json({
+    return {
       ok: true,
-      data: {
-        scanned: cfRes.data.result.length,
-        synced: toSync.length,
-        upserted,
-        errors: errors.slice(0, 20),
-        errorCount: errors.length,
-      },
-    });
+      scanned: cfRes.data.result.length,
+      synced: toSync.length,
+      upserted,
+      errors: errors.slice(0, 20),
+      errorCount: errors.length,
+    };
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : String(err);
-    console.error('[update-calendar]', err);
-    return NextResponse.json({ ok: false, error: message }, { status: 500 });
+    console.error('[sync-codeforces-calendar]', err);
+    return { ok: false, error: message, status: 500 };
   }
 }

@@ -13,6 +13,8 @@
 # testing
 /coverage
 /scripts
+/tooling
+/bin
 
 # next.js
 /.next/
