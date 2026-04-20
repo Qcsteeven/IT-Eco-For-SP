@@ -1,36 +1,31 @@
 import { NextResponse } from 'next/server';
 
-import { getDB } from '@/lib/surreal/surreal';
-
-type Contest = {
-  id: string;
-  title: string;
-  platform: string;
-  status: string;
-  start_time_utc: string;
-  end_time_utc: string;
-  registration_link: string;
-  platform_contest_id: string;
-};
-
+/**
+ * GET /api/events — обратная совместимость.
+ * Перенаправляет на основной эндпоинт /api/contests.
+ *
+ * TODO: После обновления всех клиентов (UpcomingEvents)
+ * удалить этот файл и использовать напрямую /api/contests.
+ */
 export async function GET() {
   try {
-    const db = await getDB();
+    const baseUrl = process.env.NEXTAUTH_URL || 'http://localhost:3000';
+    const response = await fetch(`${baseUrl}/api/contests`, {
+      cache: 'no-store',
+    });
 
-    if (!db) {
-      throw new Error('Не удалось подключиться к базе данных SurrealDB');
+    if (!response.ok) {
+      return NextResponse.json(
+        { error: 'Failed to fetch events' },
+        { status: response.status },
+      );
     }
 
-    const result = await db.query<Contest[][]>(
-      'SELECT * FROM contests ORDER BY start_time_utc ASC;',
-    );
-
-    const contests = result[0];
-
-    return NextResponse.json({ ok: true, data: contests }, { status: 200 });
+    const result = await response.json();
+    return NextResponse.json(result, { status: 200 });
   } catch (err: unknown) {
     const errorMessage = err instanceof Error ? err.message : String(err);
-    console.error('API Error:', errorMessage);
+    console.error('[API /events GET] Error:', errorMessage);
     return NextResponse.json(
       { ok: false, error: errorMessage },
       { status: 500 },

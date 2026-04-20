@@ -1,0 +1,99 @@
+.home-hero {
+  --home-hero-bg: #f3f3f3;
+  --home-hero-teal: #36dae1;
+  --home-hero-teal-hover: #2bc4cb;
+  background: var(--home-hero-bg);
+  padding: 24px 16px 48px;
+}
+
+.home-hero__inner {
+  max-width: 1360px;
+  margin: 0 auto;
+}
+
+.home-hero__banner {
+  position: relative;
+  width: 100%;
+  max-width: 1328px;
+  margin: 0 auto;
+  border-radius: 28px;
+  overflow: hidden;
+  aspect-ratio: 1328 / 752;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.12);
+}
+
+.home-hero__banner-img {
+  object-fit: contain;
+  object-position: center;
+}
+
+.home-hero__overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: flex-start;
+  padding: clamp(16px, 4vw, 48px) clamp(16px, 5vw, 72px);
+  pointer-events: none;
+}
+
+.home-hero__title {
+  margin: 0 0 16px;
+  max-width: 460px;
+  font-size: clamp(28px, 4vw, 48px);
+  font-weight: 600;
+  line-height: 1.05;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: #fff;
+  text-shadow: 0 2px 12px rgba(0, 0, 0, 0.35);
+}
+
+.home-hero__lead {
+  margin: 0 0 28px;
+  max-width: 420px;
+  font-size: clamp(16px, 2vw, 26px);
+  line-height: 1.35;
+  letter-spacing: 0.05em;
+  color: #fff;
+  text-shadow: 0 1px 8px rgba(0, 0, 0, 0.35);
+}
+
+.home-hero__cta {
+  pointer-events: auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 56px;
+  padding: 0 32px;
+  border-radius: 20px;
+  background: var(--home-hero-teal);
+  color: #fff !important;
+  font-size: clamp(18px, 1.8vw, 26px);
+  font-weight: 500;
+  letter-spacing: 0.05em;
+  text-decoration: none;
+  box-shadow: 0 5px 20px rgba(0, 0, 0, 0.25);
+  transition: background 0.2s ease, transform 0.15s ease;
+}
+
+.home-hero__cta:hover {
+  background: var(--home-hero-teal-hover);
+  transform: translateY(-1px);
+}
+
+@media (max-width: 640px) {
+  .home-hero__banner {
+    aspect-ratio: 4 / 5;
+  }
+
+  .home-hero__banner-img {
+    object-fit: cover;
+  }
+
+  .home-hero__overlay {
+    justify-content: flex-end;
+    padding-bottom: 28px;
+  }
+}
