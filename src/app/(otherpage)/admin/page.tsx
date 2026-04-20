@@ -56,12 +56,6 @@ export default function AdminDashboardPage() {
             <h3>Управление контестами</h3>
             <p>Создание и редактирование соревнований</p>
           </Link>
-
-          <Link href="/coach/analytics" className="admin-card">
-            <div className="admin-card-icon">📊</div>
-            <h3>Аналитика</h3>
-            <p>Статистика и отчёты по пользователям</p>
-          </Link>
         </div>
 
         <div className="admin-section">

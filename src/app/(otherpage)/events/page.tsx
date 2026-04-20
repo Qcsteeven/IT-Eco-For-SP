@@ -4,6 +4,7 @@ import React, { useState, useEffect } from 'react';
 import { useSession } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
 import axios from 'axios';
+import { toGroupThingId, toUserThingId } from '@/lib/surreal/ids';
 
 interface User {
   id: string;
@@ -23,7 +24,14 @@ interface Event {
   external_link: string;
   visibility_type: 'public' | 'private';
   participant_list: string[];
+  target_groups?: string[];
   created_by?: string;
+}
+
+interface Group {
+  id: string;
+  name: string;
+  description?: string;
 }
 
 const PLATFORMS = [
@@ -52,10 +60,13 @@ export default function EventsManagementPage() {
 
   const [events, setEvents] = useState<Event[]>([]);
   const [users, setUsers] = useState<User[]>([]);
+  const [groups, setGroups] = useState<Group[]>([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [editingEvent, setEditingEvent] = useState<Event | null>(null);
   const [hasAccess, setHasAccess] = useState(false);
+  const [groupSearch, setGroupSearch] = useState('');
+  const [groupMemberUserIds, setGroupMemberUserIds] = useState<string[]>([]);
 
   const [formData, setFormData] = useState({
     title: '',
@@ -67,6 +78,7 @@ export default function EventsManagementPage() {
     external_link: '',
     visibility_type: 'public' as 'public' | 'private',
     participant_list: [] as string[],
+    target_groups: [] as string[],
   });
 
   // Проверка доступа
@@ -99,6 +111,15 @@ export default function EventsManagementPage() {
       ]);
       setEvents(eventsRes.data.data || []);
       setUsers(usersRes.data.data || []);
+      const groupsRes = await axios.get('/api/groups');
+      const groupsRaw = groupsRes.data.data || [];
+      // Нормализуем id группы, чтобы везде был формат groups:...
+      setGroups(
+        (groupsRaw as Group[]).map((g) => ({
+          ...g,
+          id: toGroupThingId(String(g.id)),
+        })),
+      );
     } catch (err) {
       console.error('Error fetching data:', err);
     } finally {
@@ -117,6 +138,7 @@ export default function EventsManagementPage() {
       external_link: '',
       visibility_type: 'public',
       participant_list: [],
+      target_groups: [],
     });
     setEditingEvent(null);
     setShowForm(false);
@@ -135,7 +157,12 @@ export default function EventsManagementPage() {
       end_time_utc: event.end_time_utc ? event.end_time_utc.slice(0, 16) : '',
       external_link: event.external_link,
       visibility_type: event.visibility_type,
-      participant_list: [...(event.participant_list || [])],
+      participant_list: (event.participant_list || [])
+        .map((id) => toUserThingId(String(id)))
+        .filter(Boolean),
+      target_groups: (event.target_groups || [])
+        .map((id) => toGroupThingId(String(id)))
+        .filter(Boolean),
     });
     setShowForm(true);
   };
@@ -185,6 +212,73 @@ export default function EventsManagementPage() {
     }));
   };
 
+  const toggleGroup = (groupId: string) => {
+    const gid = toGroupThingId(String(groupId));
+    setFormData((prev) => ({
+      ...prev,
+      target_groups: prev.target_groups.includes(gid)
+        ? prev.target_groups.filter((id) => id !== gid)
+        : [...prev.target_groups, gid],
+    }));
+  };
+
+  // Когда выбраны группы — исключаем их участников из ручного выбора пользователей
+  useEffect(() => {
+    let cancelled = false;
+
+    async function fetchMembersForGroups(groupIds: string[]) {
+      if (formData.visibility_type !== 'private' || groupIds.length === 0) {
+        setGroupMemberUserIds([]);
+        return;
+      }
+
+      try {
+        const results = await Promise.all(
+          groupIds.map(async (gid) => {
+            const res = await fetch(`/api/groups/${encodeURIComponent(gid)}/members`);
+            const json = await res.json();
+            if (!json?.ok) return [];
+            const arr = Array.isArray(json.data) ? json.data : [];
+            return arr
+              .map((m: { user_id?: unknown }) => String(m?.user_id || ''))
+              .filter(Boolean);
+          }),
+        );
+
+        const unique = Array.from(new Set(results.flat())).sort();
+        if (!cancelled) setGroupMemberUserIds(unique);
+      } catch {
+        if (!cancelled) setGroupMemberUserIds([]);
+      }
+    }
+
+    fetchMembersForGroups(formData.target_groups);
+
+    return () => {
+      cancelled = true;
+    };
+  }, [formData.target_groups, formData.visibility_type]);
+
+  // Если пользователь уже входит в выбранные группы — убираем его из participant_list (защита от дублей)
+  useEffect(() => {
+    if (formData.visibility_type !== 'private') return;
+    if (groupMemberUserIds.length === 0) return;
+
+    const excluded = new Set(groupMemberUserIds);
+    setFormData((prev) => {
+      const filtered = prev.participant_list.filter((id) => !excluded.has(id));
+      if (filtered.length === prev.participant_list.length) return prev;
+      return { ...prev, participant_list: filtered };
+    });
+  }, [groupMemberUserIds, formData.visibility_type]);
+
+  const effectiveParticipantsCount = React.useMemo(() => {
+    const direct = new Set(formData.participant_list);
+    // без запроса состава группы считаем только уникальные выборы (группы считаем как 0+)
+    // реальный union будет на бэке при sync-results через participant_snapshot
+    return direct.size;
+  }, [formData.participant_list]);
+
   const handleSync = async (eventId: string) => {
     try {
       const res = await axios.post(`/api/events/${eventId}/sync-results`);
@@ -205,6 +299,18 @@ export default function EventsManagementPage() {
     <div className="events-management">
       <div className="events-header">
         <h1>Управление мероприятиями</h1>
+        <a
+          href="/coach"
+          style={{
+            marginLeft: 'auto',
+            marginRight: '1rem',
+            color: '#667eea',
+            fontWeight: 600,
+            textDecoration: 'none',
+          }}
+        >
+          ← В тренерскую
+        </a>
         <button className="btn-primary" onClick={() => setShowForm(!showForm)}>
           {showForm ? 'Отмена' : '+ Создать мероприятие'}
         </button>
@@ -326,6 +432,7 @@ export default function EventsManagementPage() {
                       ...formData,
                       visibility_type: 'public',
                       participant_list: [],
+                      target_groups: [],
                     })
                   }
                 />
@@ -350,12 +457,75 @@ export default function EventsManagementPage() {
 
           {formData.visibility_type === 'private' && (
             <div className="form-group participants-selector">
-              <label>Участники *</label>
+              <label>Назначение на группы и/или пользователей *</label>
               <p className="hint">
-                Выберите пользователей, которым будет видно это мероприятие
+                Private мероприятие видно, если пользователь выбран напрямую или состоит в одной из выбранных групп
               </p>
+
+              <div style={{ marginBottom: '1rem' }}>
+                <div style={{ fontWeight: 600, marginBottom: '0.5rem', color: '#4a5568' }}>
+                  Группы
+                </div>
+                <input
+                  type="text"
+                  value={groupSearch}
+                  onChange={(e) => setGroupSearch(e.target.value)}
+                  placeholder="Поиск группы..."
+                  style={{
+                    width: '100%',
+                    padding: '0.75rem',
+                    border: '2px solid #e2e8f0',
+                    borderRadius: 8,
+                    marginBottom: '0.75rem',
+                  }}
+                />
+                <div
+                  style={{
+                    maxHeight: 180,
+                    overflowY: 'auto',
+                    border: '2px solid #e2e8f0',
+                    borderRadius: 8,
+                    padding: '0.5rem',
+                    background: '#fff',
+                  }}
+                >
+                  {groups
+                    .filter((g) =>
+                      (g.name || '')
+                        .toLowerCase()
+                        .includes(groupSearch.trim().toLowerCase()),
+                    )
+                    .map((g) => (
+                      <label
+                        key={g.id}
+                        className={`participant-item ${formData.target_groups.includes(g.id) ? 'selected' : ''}`}
+                        onClick={() => toggleGroup(g.id)}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={formData.target_groups.includes(g.id)}
+                          onChange={() => {}}
+                        />
+                        <span className="participant-name">{g.name}</span>
+                        <span className="participant-email">{g.id}</span>
+                      </label>
+                    ))}
+                  {groups.length === 0 && (
+                    <div style={{ padding: '0.75rem', color: '#718096' }}>
+                      Нет доступных групп
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <div style={{ fontSize: '0.9rem', color: '#718096', marginBottom: '0.75rem' }}>
+                Выбрано пользователей: {effectiveParticipantsCount}. Выбрано групп: {formData.target_groups.length}.
+              </div>
+
               <div className="participants-list">
-                {users.map((user) => (
+                {users
+                  .filter((user) => !groupMemberUserIds.includes(user.id))
+                  .map((user) => (
                   <label
                     key={user.id}
                     className={`participant-item ${formData.participant_list.includes(user.id) ? 'selected' : ''}`}
@@ -423,7 +593,8 @@ export default function EventsManagementPage() {
                   </div>
                   {event.visibility_type === 'private' && (
                     <span className="participants-count">
-                      Участников: {event.participant_list?.length || 0}
+                      Пользователей: {event.participant_list?.length || 0} · Групп:{' '}
+                      {event.target_groups?.length || 0}
                     </span>
                   )}
                 </div>

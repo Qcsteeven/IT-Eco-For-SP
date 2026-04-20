@@ -4,6 +4,7 @@ import { getDB } from '@/lib/surreal/surreal';
 import { authOptions } from '@/lib/authOptions';
 import axios from 'axios';
 import type { Event } from '@/lib/types/event';
+import { toGroupThingId, toUserThingId } from '@/lib/surreal/ids';
 
 /**
  * POST /api/events/[id]/sync-results
@@ -93,7 +94,43 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const participantList = (event.participant_list as string[]) || [];
+    // participant_snapshot: фиксируем состав участников для результатов
+    let participantList =
+      ((event as unknown as { participant_snapshot?: string[] }).participant_snapshot as
+        | string[]
+        | undefined) || [];
+
+    if (participantList.length === 0) {
+      const direct = ((event.participant_list as string[]) || [])
+        .map(toUserThingId)
+        .filter(Boolean);
+
+      const targetGroups =
+        ((event as unknown as { target_groups?: string[] }).target_groups as
+          | string[]
+          | undefined) || [];
+      const normalizedGroups = targetGroups.map(toGroupThingId).filter(Boolean);
+
+      let fromGroups: string[] = [];
+      if (normalizedGroups.length > 0) {
+        const membersRes = await db.query(
+          `
+          LET $g = array::map($groupIds, |$id| type::thing($id));
+          SELECT VALUE user_id FROM group_members WHERE group_id IN $g;
+          `,
+          { groupIds: normalizedGroups },
+        );
+        fromGroups = ((membersRes[0] as unknown as string[]) || []).map(toUserThingId).filter(Boolean);
+      }
+
+      participantList = Array.from(new Set([...direct, ...fromGroups]));
+
+      // Сохраняем снапшот, чтобы состав группы не менял итоги задним числом
+      await db.query(
+        `UPDATE type::thing($tableName, $id) SET participant_snapshot = $snapshot, updated_at = time::now();`,
+        { tableName: 'events', id: eventId, snapshot: participantList },
+      );
+    }
     const startTime = event.start_time_utc;
     const endTime = event.end_time_utc;
 

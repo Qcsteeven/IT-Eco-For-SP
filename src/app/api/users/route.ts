@@ -3,6 +3,17 @@ import { getServerSession } from 'next-auth';
 import { getDB } from '@/lib/surreal/surreal';
 import { authOptions } from '@/lib/authOptions';
 
+function toRecordIdString(v: unknown): string {
+  if (v == null) return '';
+  if (typeof v === 'string') return v;
+  if (typeof v === 'object') {
+    const anyV = v as Record<string, unknown>;
+    if (typeof anyV.tb === 'string' && anyV.id != null) return `${anyV.tb}:${String(anyV.id)}`;
+    if (typeof anyV.id === 'string') return anyV.id;
+  }
+  return String(v);
+}
+
 /**
  * GET /api/users
  *
@@ -55,7 +66,8 @@ export async function GET(req: Request) {
     params.limit = limit;
 
     const result = await db.query(query, params);
-    const users = (result[0] as Record<string, unknown>[]) || [];
+    const usersRaw = (result[0] as Record<string, unknown>[]) || [];
+    const users = usersRaw.map((u) => ({ ...u, id: toRecordIdString(u.id) }));
 
     return NextResponse.json(
       { ok: true, data: users, total: users.length },

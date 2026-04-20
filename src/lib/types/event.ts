@@ -26,6 +26,10 @@ export interface Event {
   visibility_type: EventVisibility;
   /** Массив ID пользователей, которым виден private контест */
   participant_list: string[];
+  /** Список групп, которым назначен private event (groups:...) */
+  target_groups?: string[];
+  /** Зафиксированный список участников для результатов (users:...) */
+  participant_snapshot?: string[];
   /** ID пользователя (тренера/админа), создавшего мероприятие */
   created_by?: string;
   /** ID контеста на внешней платформе */
@@ -47,6 +51,7 @@ export interface CreateEventData {
   external_link: string;
   visibility_type: EventVisibility;
   participant_list?: string[];
+  target_groups?: string[];
   platform_contest_id?: string;
 }
 
