@@ -35,14 +35,15 @@ const patchHandler = withRoleGuard(
 
       const db = await getDB();
 
-      const result = await db.query(
+      const result = (await db.query(
         'UPDATE type::thing("users", $id) SET role = $role',
         { id: userId, role: role as UserRole }
-      );
+      )) as unknown;
 
-      const updatedUser = result && typeof result === 'object' && '0' in result
-        ? (result as Record<string, { result?: unknown[] }>)['0']?.result?.[0]
-        : null;
+      const updatedUser =
+        Array.isArray(result) && result[0] && typeof result[0] === 'object'
+          ? (result[0] as { result?: unknown[] }).result?.[0] ?? null
+          : null;
 
       if (!updatedUser) {
         return NextResponse.json(

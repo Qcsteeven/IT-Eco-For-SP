@@ -5,7 +5,8 @@
   "scripts": {
     "dev": "next dev --turbopack",
     "dev:docker": "next dev",
-    "build": "next build --turbopack",
+    "build": "next build",
+    "build:turbopack": "next build --turbopack",
     "build:docker": "docker compose build app",
     "start": "next start",
     "start:docker": "docker compose up app",

@@ -1,7 +1,7 @@
 import { UIMessage } from 'ai';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/authOptions';
-import { createSystemPrompt, mapRBACRoleToAgentRole } from '@/lib/prompts';
+import { AgentRole, createSystemPrompt, mapRBACRoleToAgentRole } from '@/lib/prompts';
 import { getRagContext } from '@/lib/rag';
 import { UserRole } from '@/lib/rbac';
 
@@ -16,7 +16,7 @@ export async function POST(req: Request) {
     const session = await getServerSession(authOptions);
     
     // Определяем роль пользователя (по умолчанию 'student' для неавторизованных)
-    let agentRole = 'student';
+    let agentRole: AgentRole = 'student';
     
     if (session?.user?.role) {
       const userRole = session.user.role as UserRole;
@@ -47,7 +47,7 @@ export async function POST(req: Request) {
     // RAG + промпт с роль-адаптивным поведением
     const ragContext = await getRagContext(userMessage);
     const mode = /json/i.test(userMessage) ? 'action' : 'chat';
-    const systemPrompt = createSystemPrompt({ ragContext, agentRole: agentRole as any, mode });
+    const systemPrompt = createSystemPrompt({ ragContext, agentRole, mode });
 
     // Конвертируем сообщения в простой формат для RouterAI
     interface MessagePart {

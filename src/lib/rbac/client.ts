@@ -39,20 +39,20 @@ export function useRoleGuard(requiredRole: UserRole) {
  */
 export function useRoleRedirect(requiredRole: UserRole) {
   const router = useRouter();
+  const { data: session } = useSession();
   const { authorized, isLoading } = useRoleGuard(requiredRole);
 
   useEffect(() => {
     if (!isLoading && !authorized) {
       // Редирект на маршрут, соответствующий роли пользователя
-      const session = useSession();
-      if (session.data?.user?.role && hasRoleLevel(session.data.user.role as UserRole, 'user')) {
+      if (session?.user?.role && hasRoleLevel(session.user.role as UserRole, 'user')) {
         // Если пользователь авторизован, но нет доступа — на dashboard
         router.push(ROLE_REDIRECT_PATHS['user']);
       } else {
         router.push(ROLE_REDIRECT_PATHS['guest']);
       }
     }
-  }, [authorized, isLoading, router]);
+  }, [authorized, isLoading, router, session?.user?.role]);
 
   return { authorized, isLoading };
 }

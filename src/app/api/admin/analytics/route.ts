@@ -14,19 +14,19 @@ const handler = withRoleGuard(
       const totalUsersResult = await db.query(
         'SELECT count() AS totalUsers FROM users GROUP ALL'
       );
-      const totalUsers = (totalUsersResult as Record<string, { result?: Array<Record<string, unknown>> }>)['0']?.result?.[0] as Record<string, number> | undefined;
+      const totalUsers = (totalUsersResult as unknown as Record<string, { result?: Array<Record<string, unknown>> }>)['0']?.result?.[0] as Record<string, number> | undefined;
 
       // Пользователи по ролям
       const usersByRoleResult = await db.query(
         'SELECT role, count() AS count FROM users GROUP BY role'
       );
-      const usersByRole = (usersByRoleResult as Record<string, { result?: unknown[] }>)['0']?.result || [];
+      const usersByRole = (usersByRoleResult as unknown as Record<string, { result?: unknown[] }>)['0']?.result || [];
 
       // Верифицированные vs неверифицированные
       const verificationStatsResult = await db.query(
         'SELECT is_verified, count() AS count FROM users GROUP BY is_verified'
       );
-      const verificationStats = (verificationStatsResult as Record<string, { result?: unknown[] }>)['0']?.result || [];
+      const verificationStats = (verificationStatsResult as unknown as Record<string, { result?: unknown[] }>)['0']?.result || [];
 
       // Для админа — дополнительная статистика
       let adminStats = {};
@@ -35,7 +35,7 @@ const handler = withRoleGuard(
         const recentRegistrationsResult = await db.query(
           'SELECT count() AS count FROM users WHERE registration_date > time::now() - 7d GROUP ALL'
         );
-        const recentRegistrations = (recentRegistrationsResult as Record<string, { result?: Array<Record<string, unknown>> }>)['0']?.result?.[0] as Record<string, number> | undefined;
+        const recentRegistrations = (recentRegistrationsResult as unknown as Record<string, { result?: Array<Record<string, unknown>> }>)['0']?.result?.[0] as Record<string, number> | undefined;
 
         adminStats = {
           recentRegistrations: recentRegistrations?.count || 0,

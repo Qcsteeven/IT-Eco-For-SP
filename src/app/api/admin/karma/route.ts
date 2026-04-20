@@ -38,7 +38,7 @@ const handler = withRoleGuard(
         { id: userId }
       );
 
-      const user = (userResult as Record<string, { result?: Array<Record<string, unknown>> }>)['0']?.result?.[0];
+      const user = (userResult as unknown as Record<string, { result?: Array<Record<string, unknown>> }>)['0']?.result?.[0];
 
       if (!user) {
         return NextResponse.json(

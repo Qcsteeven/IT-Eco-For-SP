@@ -65,7 +65,7 @@ const patchHandler = withRoleGuard(
       const query = `UPDATE type::thing("contests", $id) SET ${updateFields.join(', ')}`;
       const result = await db.query(query, variables);
 
-      const updatedContest = (result as Record<string, { result?: unknown[] }>)['0']?.result?.[0];
+      const updatedContest = (result as unknown as Record<string, { result?: unknown[] }>)['0']?.result?.[0];
 
       if (!updatedContest) {
         return NextResponse.json(

@@ -9,13 +9,14 @@ const handler = withRoleGuard(
     try {
       const db = await getDB();
 
-      const result = await db.query(
+      const result = (await db.query(
         'SELECT id, email, full_name, role, is_verified, registration_date FROM users ORDER BY registration_date DESC'
-      );
+      )) as unknown;
 
-      const usersArray = result && typeof result === 'object' && '0' in result
-        ? (result as Record<string, { result?: unknown[] }>)['0']?.result || []
-        : [];
+      const usersArray =
+        Array.isArray(result) && result[0] && typeof result[0] === 'object'
+          ? (result[0] as { result?: unknown[] }).result ?? []
+          : [];
 
       return NextResponse.json({
         ok: true,

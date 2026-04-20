@@ -4,8 +4,13 @@
 
 import { NextResponse, NextRequest } from 'next/server';
 import { getServerSession } from 'next-auth';
+import type { Session } from 'next-auth';
 import { authOptions } from '@/lib/authOptions';
 import { UserRole, hasRoleLevel, isValidUserRole } from '@/lib/rbac';
+
+type SessionWithUserAndRole = Session & {
+  user: NonNullable<Session['user']> & { role?: string };
+};
 
 export interface RoleGuardOptions {
   /** Минимальная требуемая роль */
@@ -26,7 +31,7 @@ export interface RoleGuardOptions {
 export function withRoleGuard(
   handler: (
     req: NextRequest,
-    session: NonNullable<Awaited<ReturnType<typeof getServerSession>>>
+    session: SessionWithUserAndRole
   ) => Promise<NextResponse>,
   options: RoleGuardOptions
 ) {
@@ -40,9 +45,9 @@ export function withRoleGuard(
       );
     }
 
-    const userRole = session.user.role as string;
+    const userRole = (session.user as { role?: string }).role;
 
-    if (!isValidUserRole(userRole)) {
+    if (!userRole || !isValidUserRole(userRole)) {
       return NextResponse.json(
         { error: 'Некорректная роль пользователя' },
         { status: 403 }
@@ -56,7 +61,7 @@ export function withRoleGuard(
       );
     }
 
-    return handler(req, session as NonNullable<Awaited<ReturnType<typeof getServerSession>>>);
+    return handler(req, session as SessionWithUserAndRole);
   };
 }
 

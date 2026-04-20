@@ -18,7 +18,7 @@ const getHandler = withRoleGuard(
         'SELECT * FROM contests ORDER BY date DESC'
       );
 
-      const contests = (result as Record<string, { result?: unknown[] }>)['0']?.result || [];
+      const contests = (result as unknown as Record<string, { result?: unknown[] }>)['0']?.result || [];
 
       return NextResponse.json({
         ok: true,
@@ -89,7 +89,7 @@ const postHandler = withRoleGuard(
         }
       );
 
-      const createdContest = (result as Record<string, { result?: unknown[] }>)['0']?.result?.[0];
+      const createdContest = (result as unknown as Record<string, { result?: unknown[] }>)['0']?.result?.[0];
 
       return NextResponse.json({
         ok: true,
