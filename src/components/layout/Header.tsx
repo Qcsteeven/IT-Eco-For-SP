@@ -4,6 +4,7 @@ import Link from 'next/link';
 import Image from 'next/image';
 import { usePathname } from 'next/navigation';
 import { useSession } from 'next-auth/react';
+import { User } from 'lucide-react';
 import './header.scss';
 
 export default function Header() {
@@ -63,12 +64,7 @@ export default function Header() {
                 : 'Вход или регистрация'
             }
           >
-            <Image
-              src="/home-assets/hero/profile-icon.png"
-              alt=""
-              width={40}
-              height={40}
-            />
+            <User size={32} color="#0b3852" aria-hidden="true" />
           </Link>
         </div>
       </header>
