@@ -32,12 +32,15 @@ export default function HomeWhySection() {
         </h2>
         <div className="home-why__grid">
           {CARDS.map((card) => (
-            <article key={card.title} className="home-why-card">
-              <div className="home-why-card__illustration" aria-hidden="true">
-                <img src={card.illustration} alt="" width={649} height={453} />
+            <article
+              key={card.title}
+              className="home-why-card"
+              style={{ backgroundImage: `url(${card.illustration})` }}
+            >
+              <div className="home-why-card__content">
+                <h3 className="home-why-card__heading">{card.title}</h3>
+                <p className="home-why-card__text">{card.body}</p>
               </div>
-              <h3 className="home-why-card__heading">{card.title}</h3>
-              <p className="home-why-card__text">{card.body}</p>
             </article>
           ))}
         </div>
