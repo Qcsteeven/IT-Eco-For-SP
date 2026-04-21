@@ -20,8 +20,8 @@ export default function Calendar() {
     <svg
       className="bcm-arrow"
       xmlns="http://www.w3.org/2000/svg"
-      width="39"
-      height="35"
+      width="20"
+      height="20"
       viewBox="0 0 39 35"
       fill="none"
     >
@@ -68,34 +68,40 @@ export default function Calendar() {
   }).format(currentDate);
 
   return (
-    <div className="calendar">
-      <div className="c-main">
+    <div className="calendar-page">
+      <h1 className="calendar-page__title">Календарь ближайших событий</h1>
+
+      <div className="calendar-page__month-row">
         <button
-          className="btn-change-month _prev"
+          type="button"
+          className="calendar-page__month-btn calendar-page__month-btn--prev"
           onClick={() => changeMonth(-1)}
+          aria-label="Предыдущий месяц"
         >
           {arrowSvg}
         </button>
 
-        <div className="calendar-content">
-          <div className="c-current-month">
-            {formatted}
-            {loading && <span className="loading-spinner">...</span>}
-          </div>
-
-          <CalendarTable
-            year={currentDate.getFullYear()}
-            month={currentDate.getMonth()}
-            events={events} // Передаем массив мероприятий в таблицу
-          />
+        <div className="calendar-page__month">
+          <span className="calendar-page__month-text">{formatted}</span>
+          {loading && <span className="calendar-page__loading">...</span>}
         </div>
 
         <button
-          className="btn-change-month _next"
+          type="button"
+          className="calendar-page__month-btn calendar-page__month-btn--next"
           onClick={() => changeMonth(1)}
+          aria-label="Следующий месяц"
         >
           {arrowSvg}
         </button>
+      </div>
+
+      <div className="calendar-page__table">
+        <CalendarTable
+          year={currentDate.getFullYear()}
+          month={currentDate.getMonth()}
+          events={events}
+        />
       </div>
     </div>
   );

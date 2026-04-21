@@ -1,6 +1,8 @@
 import HomeHero from './HomeHero';
 import HomeWhySection from './HomeWhySection';
-import UpcomingEvents from './UpcomingEvents';
+import HomeFeaturesSection from './HomeFeaturesSection';
+import HomeContestsCarousel from './HomeContestsCarousel';
+import HomePartnersCarousel from './HomePartnersCarousel';
 
 export default function Home() {
   return (
@@ -8,10 +10,10 @@ export default function Home() {
       <div className="main-section">
         <HomeHero />
         <HomeWhySection />
+        <HomeFeaturesSection />
       </div>
-      <div className="upcoming-events">
-        <UpcomingEvents />
-      </div>
+      <HomeContestsCarousel />
+      <HomePartnersCarousel />
     </div>
   )
 }

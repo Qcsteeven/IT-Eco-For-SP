@@ -8,7 +8,7 @@
   position: fixed;
   left: 0;
   top: 0;
-  z-index: 3;
+  z-index: 1000;
   display: flex;
   justify-content: center;
   align-items: center;
@@ -43,19 +43,26 @@
   line-height: 0;
   text-decoration: none;
 }
+.header-logo img {
+  max-width: 240px;
+  height: auto;
+}
 .header-nav {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 64px;
+  gap: clamp(18px, 3vw, 56px);
+  flex: 1 1 auto;
+  min-width: 0;
 }
 
 .header-nav-item {
-  font-size: 32px;
+  font-size: clamp(18px, 2.2vw, 28px);
   font-weight: 500;
   color: #0b3852;
   text-decoration: none;
   transition: color 0.2s ease;
+  white-space: nowrap;
 
   &:hover {
     color: #23bcba;
@@ -65,15 +72,6 @@
     color: #23bcba;
   }
 
-  @media (max-width: 1300px) {
-    font-size: 20px;
-  }
-}
-
-@media (max-width: 1300px) {
-  .header-nav {
-    gap: 32px;
-  }
 }
 
 .header-profile {
