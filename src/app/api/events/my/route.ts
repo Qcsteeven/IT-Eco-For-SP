@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { getDB } from '@/lib/surreal/surreal';
 import { authOptions } from '@/lib/authOptions';
+import { toUserThingId } from '@/lib/surreal/ids';
 import type { Event } from '@/lib/types/event';
 
 /**
@@ -27,11 +28,22 @@ export async function GET() {
     const db = await getDB();
     if (!db) throw new Error('Не удалось подключиться к базе данных SurrealDB');
 
-    const userId = session.user.id.toString();
+    const userId = toUserThingId(session.user.id.toString());
 
-    // Получаем private мероприятия где пользователь в participant_list
+    // Получаем private мероприятия где пользователь в participant_list или его группах
     const privateResult = await db.query<Event[][]>(
-      `SELECT *, 'assigned' AS access_reason FROM events WHERE visibility_type = 'private' AND type::string($userId) IN participant_list ORDER BY start_time_utc ASC;`,
+      `
+      LET $my_groups = (SELECT VALUE group_id FROM group_members WHERE user_id = type::thing($userId));
+      SELECT *, 'assigned' AS access_reason
+      FROM events
+      WHERE
+        visibility_type = 'private'
+        AND (
+          $userId IN participant_list
+          OR array::len(array::intersect(target_groups ?? [], $my_groups)) > 0
+        )
+      ORDER BY start_time_utc ASC;
+      `,
       { userId },
     );
 

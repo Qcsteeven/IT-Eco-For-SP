@@ -70,6 +70,21 @@
   }
 }
 
+// Внутри белых карточек (coach-section) "secondary" должен быть читаемым
+.coach-section {
+  .coach-btn.coach-btn-secondary {
+    background: #f0fdf4;
+    color: #11998e;
+    border: 1px solid rgba(17, 153, 142, 0.35);
+
+    &:hover {
+      background: #dcfce7;
+      transform: translateY(-2px);
+      box-shadow: 0 4px 8px rgba(0, 0, 0, 0.08);
+    }
+  }
+}
+
 .coach-error-banner {
   background: rgba(255, 77, 77, 0.9);
   color: white;
