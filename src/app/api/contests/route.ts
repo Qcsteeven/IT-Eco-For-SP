@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/authOptions';
 import { getDB } from '@/lib/surreal/surreal';
-import { ApiResponse, successResponse, errorResponse } from '@/lib/types/api';
+import { successResponse, errorResponse } from '@/lib/types/api';
 
 /**
  * Тип контеста (соответствует структуре в SurrealDB)

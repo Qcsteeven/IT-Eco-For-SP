@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import Image from 'next/image';
 
 import './home-features.scss';
 
@@ -47,7 +48,14 @@ const BOTTOM: Feature[] = [
 function FeatureCard({ title, body, iconSrc, small }: Feature & { small?: boolean }) {
   return (
     <article className={`feature-card ${small ? 'feature-card--small' : ''}`}>
-      <img className="feature-card__icon" src={iconSrc} alt="" aria-hidden="true" />
+      <Image
+        className="feature-card__icon"
+        src={iconSrc}
+        alt=""
+        width={56}
+        height={56}
+        aria-hidden="true"
+      />
       <h3 className="feature-card__title">{title}</h3>
       <p className="feature-card__text">{body}</p>
     </article>
@@ -80,10 +88,12 @@ export default function HomeFeaturesSection() {
 
         <Link href="/profile" className="home-features__cta">
           Подключить свои аккаунты
-          <img
+          <Image
             className="home-features__cta-icon"
             src="/home-assets/features/arrow-link.svg"
             alt=""
+            width={18}
+            height={18}
             aria-hidden="true"
           />
         </Link>

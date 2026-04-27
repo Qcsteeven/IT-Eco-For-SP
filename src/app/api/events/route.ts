@@ -7,8 +7,6 @@ import type {
   Event,
   EventVisibility,
   CreateEventData,
-  EventPlatform,
-  EventStatus,
 } from '@/lib/types/event';
 
 /**

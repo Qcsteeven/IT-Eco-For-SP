@@ -13,6 +13,7 @@ import { isValidUserRole, UserRole } from '@/lib/rbac';
 const patchHandler = withRoleGuard(
   async (req: NextRequest, _session) => {
     try {
+      void _session;
       const urlPath = req.url.split('/api/admin/users/')[1];
       const userId = urlPath?.split('/role')[0];
 
@@ -78,6 +79,7 @@ export { patchHandler as PATCH };
 const deleteHandler = withRoleGuard(
   async (req: NextRequest, _session) => {
     try {
+      void _session;
       const urlPath = req.url.split('/api/admin/users/')[1];
       const userId = urlPath?.split('/')[0];
 
