@@ -12,64 +12,31 @@ import type {
 } from '@/lib/types/event';
 
 /**
- * GET /api/events
+ * GET /api/events — обратная совместимость.
+ * Перенаправляет на основной эндпоинт /api/contests.
  *
- * Логика фильтрации по ролям:
- * - Гость (не авторизован) — только public мероприятия
- * - Участник (user) — public + private, где он в participant_list
- * - Тренер (coach) — все мероприятия + свои созданные
- * - Админ (admin) — все мероприятия
+ * TODO: После обновления всех клиентов (UpcomingEvents)
+ * удалить этот файл и использовать напрямую /api/contests.
  */
-export async function GET(req: NextRequest) {
+export async function GET() {
   try {
-    const db = await getDB();
-    if (!db) throw new Error('Не удалось подключиться к базе данных SurrealDB');
+    const baseUrl = process.env.NEXTAUTH_URL || 'http://localhost:3000';
+    const response = await fetch(`${baseUrl}/api/contests`, {
+      cache: 'no-store',
+    });
 
-    const session = await getServerSession(authOptions);
-    const userIdRaw = session?.user?.id?.toString();
-    const userRole = session?.user?.role as string | undefined;
-
-    // Строим запрос в зависимости от роли
-    let query: string;
-    let params: Record<string, unknown> = {};
-
-    if (!userIdRaw) {
-      // Гость — только public
-      query = `SELECT * FROM events WHERE visibility_type = 'public' ORDER BY start_time_utc ASC;`;
-    } else if (userRole === 'admin') {
-      // Админ — всё
-      query = `SELECT * FROM events ORDER BY start_time_utc ASC;`;
-    } else if (userRole === 'coach') {
-      // Тренер — всё + пометка какие он создал
-      query = `SELECT *, (visibility_type = 'private' AND created_by = type::thing($userId)) AS is_mine FROM events ORDER BY start_time_utc ASC;`;
-      params = { userId: toUserThingId(userIdRaw) };
-    } else {
-      // Участник — public + private где он в participant_list или в одной из target_groups
-      const userId = toUserThingId(userIdRaw);
-      query = `
-        LET $my_groups = (SELECT VALUE group_id FROM group_members WHERE user_id = type::thing($userId));
-        SELECT * FROM events
-        WHERE
-          visibility_type = 'public'
-          OR (
-            visibility_type = 'private'
-            AND (
-              $userId IN participant_list
-              OR array::len(array::intersect(target_groups ?? [], $my_groups)) > 0
-            )
-          )
-        ORDER BY start_time_utc ASC;
-      `;
-      params = { userId };
+    if (!response.ok) {
+      return NextResponse.json(
+        { error: 'Failed to fetch events' },
+        { status: response.status },
+      );
     }
 
-    const result = await db.query<Event[][]>(query, params);
-    const events = result[0] || [];
-
-    return NextResponse.json({ ok: true, data: events }, { status: 200 });
+    const result = await response.json();
+    return NextResponse.json(result, { status: 200 });
   } catch (err: unknown) {
     const errorMessage = err instanceof Error ? err.message : String(err);
-    console.error('API Error:', errorMessage);
+    console.error('[API /events GET] Error:', errorMessage);
     return NextResponse.json(
       { ok: false, error: errorMessage },
       { status: 500 },

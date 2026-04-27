@@ -15,6 +15,21 @@ interface CalendarTableOptions {
   events: Contest[]; // Добавили список событий
 }
 
+function getEventState(event: Contest, nowMs: number) {
+  const startMs = new Date(event.start_time_utc).getTime();
+  const endMs = new Date(event.end_time_utc).getTime();
+
+  if (Number.isFinite(endMs) && nowMs > endMs) return 'done' as const;
+  if (
+    Number.isFinite(startMs) &&
+    Number.isFinite(endMs) &&
+    nowMs >= startMs &&
+    nowMs <= endMs
+  )
+    return 'live' as const;
+  return 'open' as const;
+}
+
 export default function CalendarTable({
   year,
   month,
@@ -90,6 +105,18 @@ export default function CalendarTable({
                 );
               });
 
+              const nowMs = Date.now();
+              const states = dayEvents.map((e) => getEventState(e, nowMs));
+              const hasLive = states.includes('live');
+              const hasOpen = states.includes('open');
+              const cellState = hasLive
+                ? 'live'
+                : hasOpen
+                  ? 'open'
+                  : states.length
+                    ? 'done'
+                    : null;
+
               return (
                 <td key={i} className={`calendar-table-td _${cell.type}`}>
                   <div className="c-ttd-content">
@@ -97,16 +124,26 @@ export default function CalendarTable({
 
                     {/* Список событий в ячейке */}
                     <div className="c-day-events">
+                      {cellState && (
+                        <div className={`c-day-state c-day-state--${cellState}`}>
+                          {cellState === 'done'
+                            ? 'Завершено'
+                            : cellState === 'live'
+                              ? 'Идет сейчас'
+                              : 'Регистрация открыта'}
+                        </div>
+                      )}
                       {dayEvents.map((event) => (
                         <a
                           key={event.id}
-                          href={event.registration_link}
+                          href={event.registration_link || '#'}
                           target="_blank"
                           rel="noopener noreferrer"
                           className={`c-event-item _${event.platform.toLowerCase()}`}
                           title={event.name}
                         >
-                          {event.name}
+                          <span className="c-event-item__name">{event.name}</span>
+                          <span className="c-event-item__platform">{event.platform}</span>
                         </a>
                       ))}
                     </div>

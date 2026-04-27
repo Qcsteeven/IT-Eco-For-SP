@@ -47,3 +47,6 @@ next-env.d.ts
 .qwen/
 gha-creds-*.json
 .cursor
+
+# IDE
+.idea/

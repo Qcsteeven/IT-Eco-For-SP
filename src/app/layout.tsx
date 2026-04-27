@@ -5,6 +5,7 @@ import { Geist, Geist_Mono } from 'next/font/google';
 import './globals.css';
 // 👈 Импортируем наш клиентский компонент-обертку
 import SessionWrapper from '../components/SessionWrapper';
+import { chetty, montserrat, stengazeta } from './fonts';
 
 const geistSans = Geist({
   variable: '--font-geist-sans',
@@ -29,7 +30,7 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased`}
+        className={`${montserrat.variable} ${chetty.variable} ${stengazeta.variable} ${geistSans.variable} ${geistMono.variable} antialiased`}
       >
         {/* 👈 Оборачиваем здесь: SessionProvider теперь доступен для всех дочерних элементов */}
         <SessionWrapper>{children}</SessionWrapper>
