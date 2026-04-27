@@ -163,6 +163,8 @@ const ProfilePage: React.FC = () => {
   const [placeFrom, setPlaceFrom] = useState<string>('');
   const [placeTo, setPlaceTo] = useState<string>('');
   const [ratingSort, setRatingSort] = useState<'none' | 'asc' | 'desc'>('none');
+  const [historyLimit, setHistoryLimit] = useState(6);
+  const [isEditing, setIsEditing] = useState(false);
 
   // Codeforces Karma состояния
   const [cfKarmaData, setCfKarmaData] = useState<{
@@ -467,6 +469,11 @@ const ProfilePage: React.FC = () => {
     placeTo,
     ratingSort,
   ]);
+
+  const visibleHistory = useMemo(
+    () => filteredAndSortedHistory.slice(0, historyLimit),
+    [filteredAndSortedHistory, historyLimit],
+  );
 
   // Обработка открытия модального окна AtCoder
   const handleAtCoderClick = (e: React.MouseEvent) => {
@@ -1054,78 +1061,82 @@ const ProfilePage: React.FC = () => {
 
   return (
     <main>
-      <section id="profile" style={{ display: 'block' }}>
-        <div className="profile-header">
-          <h2>{userData.full_name || 'Неизвестный пользователь'}</h2>
-          <div className="ratings-container">
-            <div className="rating-block">
-              <div className="rating">{userData.bscp_rating}</div>
-              <div className="rating-label">Рейтинг БЦСП</div>
-            </div>
-            {cfData?.connected && (
-              <div className="rating-block">
-                {cfKarmaLoading ? (
-                  <div className="rating karma-loading">...</div>
-                ) : cfKarmaData ? (
-                  <div
-                    className="rating karma-rating"
-                    style={{ color: cfKarmaData.karmaColor }}
-                  >
-                    {cfKarmaData.karma}
-                  </div>
-                ) : (
-                  <div className="rating karma-rating">
-                    {userData.codeforces_karma || 0}
-                  </div>
-                )}
-                <div className="rating-label">
-                  Карма Codeforces
-                  {cfKarmaData && (
-                    <span
-                      className="karma-level"
-                      style={{ color: cfKarmaData.karmaColor }}
-                    >
-                      {' '}
-                      ({cfKarmaData.karmaLevel})
-                    </span>
-                  )}
-                  {cfKarmaData && (
-                    <button
-                      className="cf-stats-btn"
-                      onClick={() => setShowCFProblems(true)}
-                      title="Показать все решённые задачи"
-                    >
-                      📊
-                    </button>
-                  )}
-                </div>
-              </div>
-            )}
+      <section
+        id="profile"
+        className="profile-page"
+        style={{ display: 'block' }}
+        data-cf-karma-loading={cfKarmaLoading}
+      >
+        <div className="profile-card">
+          <div className="profile-card__name">
+            {userData.full_name || 'Неизвестный пользователь'}
           </div>
-          <button onClick={() => signOut()} className="btn-logout">
-            Выйти
-          </button>
+          <div className="profile-card__rating">
+            <img
+              className="profile-card__star"
+              src="/profile-assets/star.svg"
+              alt=""
+              aria-hidden="true"
+            />
+            <span className="profile-card__rating-value">{userData.bscp_rating}</span>
+          </div>
+
+          <a
+            className="profile-card__field profile-card__email"
+            href={`mailto:${userData.email}`}
+            target="_blank"
+            rel="noreferrer"
+          >
+            {userData.email}
+          </a>
+          <div className="profile-card__field profile-card__phone">
+            {userData.phone || '—'}
+          </div>
+
+          <div className="profile-card__actions">
+            <button
+              type="button"
+              className="profile-card__btn profile-card__btn--edit"
+              onClick={() => setIsEditing((v) => !v)}
+            >
+              Редактировать
+            </button>
+            <button
+              type="button"
+              className="profile-card__btn profile-card__btn--logout"
+              onClick={() => signOut()}
+            >
+              Выйти
+            </button>
+          </div>
         </div>
 
-        <h1>Вход во внешние системы</h1>
-        <div className="systems-links">
+        <div className="profile-systems-card">
+          <div className="profile-systems-card__title">Вход во внешние системы</div>
+          <div className="profile-systems-grid">
           {/* Codeforces кнопка */}
           {cfData?.connected ? (
             <button
               onClick={handleCFClick}
-              className="system-link connected-cf"
+              className="profile-system-btn"
               title="Нажмите, чтобы посмотреть историю или отвязать"
             >
-              <span className="status-indicator"></span>
-              <div className="cf-info">
-                <span className="cf-label">Подключено Codeforces</span>
-                <span className="cf-nickname">{cfData.cf_username}</span>
-              </div>
+              <span className="profile-system-btn__text">
+                Подключить
+                <br />
+                CODEFOCES
+              </span>
+              <img
+                className="profile-system-btn__logo profile-system-btn__logo--codeforces"
+                src="/profile-assets/codeforces.png"
+                alt=""
+                aria-hidden="true"
+              />
             </button>
           ) : cfData?.pending_verification ? (
             <button
               onClick={handleCFClick}
-              className="system-link connected-cf"
+              className="profile-system-btn profile-system-btn--pending"
               style={{
                 backgroundColor: '#ffc107',
                 color: '#333',
@@ -1133,24 +1144,25 @@ const ProfilePage: React.FC = () => {
               }}
               title="Нажмите, чтобы завершить верификацию"
             >
-              <span
-                className="status-indicator"
-                style={{ backgroundColor: '#ffc107' }}
-              ></span>
-              <div className="cf-info">
-                <span className="cf-label">Ожидает подтверждения</span>
-                <span className="cf-nickname">
-                  {cfData.pending_cf_username}
-                </span>
-              </div>
+              Подключить Codeforces
             </button>
           ) : (
             <button
               onClick={handleCFClick}
-              className="system-link"
+              className="profile-system-btn"
               title="Нажмите, чтобы привязать"
             >
-              Подключить Codeforces
+              <span className="profile-system-btn__text">
+                Подключить
+                <br />
+                CODEFOCES
+              </span>
+              <img
+                className="profile-system-btn__logo profile-system-btn__logo--codeforces"
+                src="/profile-assets/codeforces.png"
+                alt=""
+                aria-hidden="true"
+              />
             </button>
           )}
 
@@ -1158,21 +1170,25 @@ const ProfilePage: React.FC = () => {
           {atCoderData?.connected ? (
             <button
               onClick={handleAtCoderClick}
-              className="system-link connected-cf"
+              className="profile-system-btn profile-system-btn--atcoder-connected"
               title="Нажмите, чтобы отвязать или посмотреть submissions"
             >
-              <span className="status-indicator"></span>
-              <div className="cf-info">
-                <span className="cf-label">Подключено AtCoder</span>
-                <span className="cf-nickname">
-                  {atCoderData.atcoder_username}
-                </span>
-              </div>
+              <span className="profile-system-btn__text">
+                Подключено
+                <br />
+                AtCoder
+              </span>
+              <img
+                className="profile-system-btn__logo profile-system-btn__logo--atcoder"
+                src="/profile-assets/atcoder.png"
+                alt=""
+                aria-hidden="true"
+              />
             </button>
           ) : atCoderData?.pending_verification ? (
             <button
               onClick={handleAtCoderClick}
-              className="system-link connected-cf"
+              className="profile-system-btn profile-system-btn--pending"
               style={{
                 backgroundColor: '#ffc107',
                 color: '#333',
@@ -1180,24 +1196,25 @@ const ProfilePage: React.FC = () => {
               }}
               title="Нажмите, чтобы завершить верификацию"
             >
-              <span
-                className="status-indicator"
-                style={{ backgroundColor: '#ffc107' }}
-              ></span>
-              <div className="cf-info">
-                <span className="cf-label">Ожидает подтверждения</span>
-                <span className="cf-nickname">
-                  {atCoderData.pending_atcoder_username}
-                </span>
-              </div>
+              Подключить AtCoder
             </button>
           ) : (
             <button
               onClick={handleAtCoderClick}
-              className="system-link"
+              className="profile-system-btn"
               title="Нажмите, чтобы привязать"
             >
-              Подключить AtCoder
+              <span className="profile-system-btn__text">
+                Подключить
+                <br />
+                AtCoder
+              </span>
+              <img
+                className="profile-system-btn__logo profile-system-btn__logo--atcoder"
+                src="/profile-assets/atcoder.png"
+                alt=""
+                aria-hidden="true"
+              />
             </button>
           )}
 
@@ -1205,26 +1222,57 @@ const ProfilePage: React.FC = () => {
             href="https://contest.yandex.ru/enter"
             target="_blank"
             rel="noopener noreferrer"
-            className="system-link"
+            className="profile-system-btn"
           >
-            Вход в Yandex.Contest
+            <span className="profile-system-btn__text">
+              Подключить
+              <br />
+              Yandex.Contest
+            </span>
+            <img
+              className="profile-system-btn__logo profile-system-btn__logo--yandex"
+              src="/profile-assets/yandex.svg"
+              alt=""
+              aria-hidden="true"
+            />
           </a>
           <a
             href="https://leetcode.com/accounts/login/"
             target="_blank"
             rel="noopener noreferrer"
-            className="system-link"
+            className="profile-system-btn"
           >
-            Вход в LeetCode
+            <span className="profile-system-btn__text">
+              Подключить
+              <br />
+              LeetCode
+            </span>
+            <img
+              className="profile-system-btn__logo profile-system-btn__logo--leetcode"
+              src="/profile-assets/leetcode.png"
+              alt=""
+              aria-hidden="true"
+            />
           </a>
           <a
             href="https://icpc.global/login"
             target="_blank"
             rel="noopener noreferrer"
-            className="system-link"
+            className="profile-system-btn"
           >
-            Вход в ICPC
+            <span className="profile-system-btn__text">
+              Подключить
+              <br />
+              ICPC
+            </span>
+            <img
+              className="profile-system-btn__logo profile-system-btn__logo--icpc"
+              src="/profile-assets/codeforces.png"
+              alt=""
+              aria-hidden="true"
+            />
           </a>
+          </div>
         </div>
 
         {/* Модальное окно для привязки Codeforces */}
@@ -1719,12 +1767,14 @@ const ProfilePage: React.FC = () => {
           </div>
         )}
 
-        <h1>История участия и изменения рейтинга</h1>
+        <div className="profile-history-card">
+          <div className="profile-history-card__title">
+            История участия в соревнованиях
+          </div>
 
-        {/* Фильтры */}
-        <div className="filters-section">
+          <div className="profile-history-filters">
           {/* Дата */}
-          <div className="filter-group">
+          <div className="profile-history-filter">
             <label>Дата (от):</label>
             <input
               type="date"
@@ -1732,7 +1782,7 @@ const ProfilePage: React.FC = () => {
               onChange={(e) => setDateFrom(e.target.value)}
             />
           </div>
-          <div className="filter-group">
+          <div className="profile-history-filter">
             <label>Дата (до):</label>
             <input
               type="date"
@@ -1742,7 +1792,7 @@ const ProfilePage: React.FC = () => {
           </div>
 
           {/* Платформа */}
-          <div className="filter-group">
+          <div className="profile-history-filter">
             <label>Платформа:</label>
             <select
               value={platformFilter}
@@ -1758,7 +1808,7 @@ const ProfilePage: React.FC = () => {
           </div>
 
           {/* Место (диапазон) */}
-          <div className="filter-group">
+          <div className="profile-history-filter">
             <label>Место от:</label>
             <input
               type="number"
@@ -1768,7 +1818,7 @@ const ProfilePage: React.FC = () => {
               placeholder="1"
             />
           </div>
-          <div className="filter-group">
+          <div className="profile-history-filter">
             <label>Место до:</label>
             <input
               type="number"
@@ -1780,7 +1830,7 @@ const ProfilePage: React.FC = () => {
           </div>
 
           {/* Сортировка по рейтингу */}
-          <div className="filter-group">
+          <div className="profile-history-filter">
             <label>Рейтинг БЦСП:</label>
             <select
               value={ratingSort}
@@ -1796,7 +1846,7 @@ const ProfilePage: React.FC = () => {
 
           <button
             type="button"
-            className="btn-reset-filters"
+            className="profile-history-reset"
             onClick={handleResetFilters}
           >
             Сбросить
@@ -1804,7 +1854,7 @@ const ProfilePage: React.FC = () => {
         </div>
 
         {/* Таблица */}
-        <table>
+        <table className="profile-history-table">
           <thead>
             <tr>
               <th>Дата</th>
@@ -1815,8 +1865,8 @@ const ProfilePage: React.FC = () => {
             </tr>
           </thead>
           <tbody>
-            {filteredAndSortedHistory.length > 0 ? (
-              filteredAndSortedHistory.map((item, index) => {
+            {visibleHistory.length > 0 ? (
+              visibleHistory.map((item, index) => {
                 const uniqueKey = item.contest.id
                   ? `${item.contest.platform}_${item.contest.id}`
                   : null;
@@ -1961,8 +2011,23 @@ const ProfilePage: React.FC = () => {
           </tbody>
         </table>
 
-        <h1>Изменение личных данных</h1>
-        <form className="edit-form" onSubmit={handleSubmit}>
+        {filteredAndSortedHistory.length > visibleHistory.length && (
+          <div className="profile-history-more">
+            <button
+              type="button"
+              className="profile-history-more__btn"
+              onClick={() => setHistoryLimit((v) => v + 6)}
+            >
+              Показать еще
+            </button>
+          </div>
+        )}
+        </div>
+
+        {isEditing && (
+          <>
+            <h1>Изменение личных данных</h1>
+            <form className="edit-form" onSubmit={handleSubmit}>
           <label htmlFor="name">ФИО</label>
           <input
             type="text"
@@ -2009,7 +2074,9 @@ const ProfilePage: React.FC = () => {
               {saving ? 'Сохранение...' : 'Сохранить изменения'}
             </button>
           </div>
-        </form>
+            </form>
+          </>
+        )}
       </section>
 
       {/* Модальное окно статистики Codeforces */}
