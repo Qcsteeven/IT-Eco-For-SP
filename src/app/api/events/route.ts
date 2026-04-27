@@ -1,8 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
 import { getDB } from '@/lib/surreal/surreal';
-import { authOptions } from '@/lib/authOptions';
 import { toGroupThingId, toUserThingId } from '@/lib/surreal/ids';
+import { withRoleGuard } from '@/lib/rbac/guard';
 import type {
   Event,
   EventVisibility,
@@ -25,7 +24,7 @@ export async function GET() {
 
     if (!response.ok) {
       return NextResponse.json(
-        { error: 'Failed to fetch events' },
+        { ok: false, error: 'Failed to fetch events' },
         { status: response.status },
       );
     }
@@ -59,25 +58,9 @@ export async function GET() {
  * - description?: string
  * - platform_contest_id?: string
  */
-export async function POST(req: NextRequest) {
+export const POST = withRoleGuard(async (req: NextRequest, session) => {
   let rawBodyForLog: unknown = undefined;
   try {
-    const session = await getServerSession(authOptions);
-    if (!session?.user?.id) {
-      return NextResponse.json(
-        { ok: false, error: 'Неавторизован' },
-        { status: 401 },
-      );
-    }
-
-    // Только coach и admin могут создавать мероприятия
-    if (session.user.role !== 'coach' && session.user.role !== 'admin') {
-      return NextResponse.json(
-        { ok: false, error: 'Доступно только тренерам и администраторам' },
-        { status: 403 },
-      );
-    }
-
     rawBodyForLog = await req.json().catch(() => ({}));
     const body = rawBodyForLog as CreateEventData;
 
@@ -191,4 +174,4 @@ export async function POST(req: NextRequest) {
       { status: 500 },
     );
   }
-}
+}, { requiredRole: 'coach' });

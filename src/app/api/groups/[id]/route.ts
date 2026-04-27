@@ -1,9 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/lib/authOptions';
 import { getDB } from '@/lib/surreal/surreal';
 import { toGroupThingId, toUserThingId } from '@/lib/surreal/ids';
 import type { Group, UpdateGroupData } from '@/lib/types/group';
+import { withRoleGuard } from '@/lib/rbac/guard';
 
 async function canAccessGroup(db: Awaited<ReturnType<typeof getDB>>, groupId: string, userId: string, role: string) {
   if (role === 'admin') return true;
@@ -23,13 +22,8 @@ async function canAccessGroup(db: Awaited<ReturnType<typeof getDB>>, groupId: st
   return ((res[0] as unknown as unknown[]) || []).length > 0;
 }
 
-export async function GET(req: NextRequest) {
+export const GET = withRoleGuard(async (req: NextRequest, session) => {
   try {
-    const session = await getServerSession(authOptions);
-    if (!session?.user?.id) {
-      return NextResponse.json({ ok: false, error: 'Неавторизован' }, { status: 401 });
-    }
-
     const url = new URL(req.url);
     const rawId = decodeURIComponent(url.pathname.split('/').pop() || '');
     const groupId = toGroupThingId(rawId);
@@ -60,20 +54,11 @@ export async function GET(req: NextRequest) {
     console.error('API GET /groups/[id] Error:', errorMessage);
     return NextResponse.json({ ok: false, error: errorMessage }, { status: 500 });
   }
-}
+}, { requiredRole: 'user' });
 
-export async function PATCH(req: NextRequest) {
+export const PATCH = withRoleGuard(async (req: NextRequest, session) => {
   try {
-    const session = await getServerSession(authOptions);
-    if (!session?.user?.id) {
-      return NextResponse.json({ ok: false, error: 'Неавторизован' }, { status: 401 });
-    }
-
     const role = (session.user.role as string | undefined) || 'user';
-    if (role !== 'coach' && role !== 'admin') {
-      return NextResponse.json({ ok: false, error: 'Доступно только тренерам и администраторам' }, { status: 403 });
-    }
-
     const url = new URL(req.url);
     const rawId = decodeURIComponent(url.pathname.split('/').pop() || '');
     const groupId = toGroupThingId(rawId);
@@ -106,20 +91,11 @@ export async function PATCH(req: NextRequest) {
     console.error('API PATCH /groups/[id] Error:', errorMessage);
     return NextResponse.json({ ok: false, error: errorMessage }, { status: 500 });
   }
-}
+}, { requiredRole: 'coach' });
 
-export async function DELETE(req: NextRequest) {
+export const DELETE = withRoleGuard(async (req: NextRequest, session) => {
   try {
-    const session = await getServerSession(authOptions);
-    if (!session?.user?.id) {
-      return NextResponse.json({ ok: false, error: 'Неавторизован' }, { status: 401 });
-    }
-
     const role = (session.user.role as string | undefined) || 'user';
-    if (role !== 'coach' && role !== 'admin') {
-      return NextResponse.json({ ok: false, error: 'Доступно только тренерам и администраторам' }, { status: 403 });
-    }
-
     const url = new URL(req.url);
     const rawId = decodeURIComponent(url.pathname.split('/').pop() || '');
     const groupId = toGroupThingId(rawId);
@@ -145,5 +121,5 @@ export async function DELETE(req: NextRequest) {
     console.error('API DELETE /groups/[id] Error:', errorMessage);
     return NextResponse.json({ ok: false, error: errorMessage }, { status: 500 });
   }
-}
+}, { requiredRole: 'coach' });
 

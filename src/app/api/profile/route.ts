@@ -1,8 +1,7 @@
-import { NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
+import { NextRequest, NextResponse } from 'next/server';
 import { getDB } from '@/lib/surreal/surreal';
-import { authOptions } from '@/lib/authOptions';
 import { hashPassword, verifyPassword } from '@/lib/surreal/auth';
+import { withRoleGuard } from '@/lib/rbac/guard';
 import {
   fetchUserInfo,
   fetchUserContestList,
@@ -31,16 +30,8 @@ interface HistoryItem {
   };
 }
 
-export async function GET() {
+export const GET = withRoleGuard(async (_req: NextRequest, session) => {
   try {
-    const session = await getServerSession(authOptions);
-    if (!session?.user?.id) {
-      return NextResponse.json(
-        { ok: false, error: 'Неавторизован' },
-        { status: 401 },
-      );
-    }
-
     const db = await getDB();
     if (!db) throw new Error('Ошибка подключения к БД');
 
@@ -309,17 +300,10 @@ export async function GET() {
       { status: 500 },
     );
   }
-}
+}, { requiredRole: 'user' });
 
-export async function PUT(req: Request) {
+export const PUT = withRoleGuard(async (req: NextRequest, session) => {
   try {
-    const session = await getServerSession(authOptions);
-    if (!session?.user?.id)
-      return NextResponse.json(
-        { ok: false, error: 'Неавторизован' },
-        { status: 401 },
-      );
-
     const body = await req.json();
     const { full_name, phone, oldPassword, newPassword, cf_username } = body;
     const db = await getDB();
@@ -379,4 +363,4 @@ export async function PUT(req: Request) {
       { status: 500 },
     );
   }
-}
+}, { requiredRole: 'user' });

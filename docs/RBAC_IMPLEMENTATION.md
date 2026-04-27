@@ -11,14 +11,16 @@ This document summarizes the implementation of the Role-Based Access Control (RB
 - **Location**: `src/app/(otherpage)/coach/`
 - **Pages Created**:
   - `/coach/contests` — Contest management page with CRUD operations
-  - `/coach/analytics` — Analytics dashboard with user and platform statistics
+  - `/coach/groups` — Groups management (CRUD + members)
+  - `/coach/groups/[id]/analytics` — Analytics per group
+  - `/coach/events` — Events management (wrapper over `/events`)
 - **Features**:
   - Create new contests with platform, start time, and duration
   - View contests with status indicators (upcoming/active/completed)
   - Delete contests with confirmation
-  - View user analytics (total users, active users, average rating)
-  - View platform distribution (Codeforces, AtCoder, both, none)
-  - View recent karma adjustment logs (admin only)
+  - Manage groups and group members
+  - Assign private events to groups and/or users
+  - View analytics per group (membership, ratings, platforms, event stats)
 - **Styling**: `coach.scss` with green gradient theme
 
 #### 2. **Admin Karma Adjustment Page** (New)
@@ -47,8 +49,7 @@ This document summarizes the implementation of the Role-Based Access Control (RB
   - Conditional rendering based on user role:
     - `canUseAIAssistant` → Shows "ИИ Ассистент" link
     - `canViewPersonalDashboard` → Shows "Профиль" link
-    - `canManageContests` → Shows "Контесты" link (coach+)
-    - `canViewAnalytics` → Shows "Аналитика" link (coach+)
+    - `canManageContests` → Shows "Тренерская" link (coach+)
     - `canManageUsers` → Shows "Админ" link (admin only)
   - Admin link has special styling with gear icon
 - **Styling**: Updated `header.scss` with `.header-links-item-admin` class
@@ -152,7 +153,7 @@ Level 0: Guest (Гость)
 
 #### Middleware Protection
 - **File**: `src/middleware.js`
-- Protects routes: `/profile`, `/chat`, `/dashboard`, `/admin`, `/coach`
+- Protects routes: `/profile`, `/chat`, `/dashboard`, `/admin`, `/coach`, `/events`
 - Uses role hierarchy for access control
 
 #### Server-Side API Guards
@@ -191,8 +192,12 @@ src/
 │   │   └── coach/
 │   │       ├── contests/
 │   │       │   └── page.tsx (✅ New)
-│   │       ├── analytics/
+│   │       ├── events/
 │   │       │   └── page.tsx (✅ New)
+│   │       ├── groups/
+│   │       │   ├── page.tsx (✅ New)
+│   │       │   ├── [id]/page.tsx (✅ New)
+│   │       │   └── [id]/analytics/page.tsx (✅ New)
 │   │       └── coach.scss (✅ New)
 │   └── api/
 │       ├── chat/route.ts (✅ Enhanced with role-adaptive prompts)
@@ -226,9 +231,11 @@ docs/migrations/
 - [ ] Access `/profile` — should work for all authenticated users
 - [ ] Access `/chat` — should work for all authenticated users
 - [ ] Promote user to `coach` via admin panel
-- [ ] Login as coach — verify "Контесты" and "Аналитика" appear in header
+- [ ] Login as coach — verify "Тренерская" appears in header
 - [ ] Access `/coach/contests` — should load for coach
-- [ ] Access `/coach/analytics` — should load for coach
+- [ ] Access `/coach/events` (or `/events`) — should load for coach
+- [ ] Access `/coach/groups` — should load for coach
+- [ ] Access `/coach/groups/[id]/analytics` — should load for coach (per-group)
 - [ ] Promote user to `admin` via admin panel
 - [ ] Login as admin — verify "Админ" appears in header
 - [ ] Access `/admin` — should show dashboard

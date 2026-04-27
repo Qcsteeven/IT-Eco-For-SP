@@ -1,9 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
 import { getDB } from '@/lib/surreal/surreal';
-import { authOptions } from '@/lib/authOptions';
 import { toGroupThingId, toUserThingId } from '@/lib/surreal/ids';
 import type { Event, UpdateEventData } from '@/lib/types/event';
+import { withRoleGuard } from '@/lib/rbac/guard';
 
 function toEventThingId(id: string): string {
   const s = (id || '').trim();
@@ -18,24 +17,8 @@ function toEventThingId(id: string): string {
  * Coach может редактировать только свои созданные мероприятия.
  * Admin может редактировать все.
  */
-export async function PUT(req: NextRequest) {
+export const PUT = withRoleGuard(async (req: NextRequest, session) => {
   try {
-    const session = await getServerSession(authOptions);
-    if (!session?.user?.id) {
-      return NextResponse.json(
-        { ok: false, error: 'Неавторизован' },
-        { status: 401 },
-      );
-    }
-
-    // Только coach и admin могут обновлять
-    if (session.user.role !== 'coach' && session.user.role !== 'admin') {
-      return NextResponse.json(
-        { ok: false, error: 'Доступно только тренерам и администраторам' },
-        { status: 403 },
-      );
-    }
-
     const url = new URL(req.url);
     const rawId = decodeURIComponent(url.pathname.split('/').pop() || '');
     const eventId = toEventThingId(rawId);
@@ -224,7 +207,7 @@ export async function PUT(req: NextRequest) {
       { status: 500 },
     );
   }
-}
+}, { requiredRole: 'coach' });
 
 /**
  * DELETE /api/events/[id]
@@ -233,24 +216,8 @@ export async function PUT(req: NextRequest) {
  * Coach может удалять только свои созданные мероприятия.
  * Admin может удалять все.
  */
-export async function DELETE(req: NextRequest) {
+export const DELETE = withRoleGuard(async (req: NextRequest, session) => {
   try {
-    const session = await getServerSession(authOptions);
-    if (!session?.user?.id) {
-      return NextResponse.json(
-        { ok: false, error: 'Неавторизован' },
-        { status: 401 },
-      );
-    }
-
-    // Только coach и admin могут удалять
-    if (session.user.role !== 'coach' && session.user.role !== 'admin') {
-      return NextResponse.json(
-        { ok: false, error: 'Доступно только тренерам и администраторам' },
-        { status: 403 },
-      );
-    }
-
     const url = new URL(req.url);
     const rawId = decodeURIComponent(url.pathname.split('/').pop() || '');
     const eventId = toEventThingId(rawId);
@@ -299,4 +266,4 @@ export async function DELETE(req: NextRequest) {
       { status: 500 },
     );
   }
-}
+}, { requiredRole: 'coach' });

@@ -1,10 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
 import { getDB } from '@/lib/surreal/surreal';
-import { authOptions } from '@/lib/authOptions';
 import axios from 'axios';
 import type { Event } from '@/lib/types/event';
 import { toGroupThingId, toUserThingId } from '@/lib/surreal/ids';
+import { withRoleGuard } from '@/lib/rbac/guard';
+
+function toEventThingId(id: string): string {
+  const s = (id || '').trim();
+  if (!s) return '';
+  return s.startsWith('events:') ? s : `events:${s}`;
+}
 
 /**
  * POST /api/events/[id]/sync-results
@@ -23,25 +28,11 @@ import { toGroupThingId, toUserThingId } from '@/lib/surreal/ids';
  * Доступно только coach (свои мероприятия) и admin.
  */
 export async function POST(req: NextRequest) {
-  try {
-    const session = await getServerSession(authOptions);
-    if (!session?.user?.id) {
-      return NextResponse.json(
-        { ok: false, error: 'Неавторизован' },
-        { status: 401 },
-      );
-    }
-
-    // Только coach и admin
-    if (session.user.role !== 'coach' && session.user.role !== 'admin') {
-      return NextResponse.json(
-        { ok: false, error: 'Доступно только тренерам и администраторам' },
-        { status: 403 },
-      );
-    }
-
-    const url = new URL(req.url);
-    const eventId = url.pathname.split('/')[3]; // /api/events/[id]/sync-results
+  return withRoleGuard(async (req2, session) => {
+    try {
+    const url = new URL(req2.url);
+    const rawId = decodeURIComponent(url.pathname.split('/')[3] || ''); // /api/events/[id]/sync-results
+    const eventId = toEventThingId(rawId);
 
     if (!eventId) {
       return NextResponse.json(
@@ -55,8 +46,8 @@ export async function POST(req: NextRequest) {
 
     // Получаем мероприятие
     const eventResult = await db.query(
-      `SELECT * FROM type::thing($tableName, $id)`,
-      { tableName: 'events', id: eventId },
+      `SELECT * FROM type::thing($id)`,
+      { id: eventId },
     );
     const event = (eventResult[0] as unknown as Event[])?.[0];
 
@@ -70,7 +61,7 @@ export async function POST(req: NextRequest) {
     // Проверяем доступы coach
     if (session.user.role === 'coach') {
       const createdBy = event.created_by as string | undefined;
-      const userId = `users:${session.user.id}`;
+      const userId = toUserThingId(session.user.id.toString());
       if (createdBy !== userId) {
         return NextResponse.json(
           {
@@ -127,8 +118,8 @@ export async function POST(req: NextRequest) {
 
       // Сохраняем снапшот, чтобы состав группы не менял итоги задним числом
       await db.query(
-        `UPDATE type::thing($tableName, $id) SET participant_snapshot = $snapshot, updated_at = time::now();`,
-        { tableName: 'events', id: eventId, snapshot: participantList },
+        `UPDATE type::thing($id) SET participant_snapshot = $snapshot, updated_at = time::now();`,
+        { id: eventId, snapshot: participantList },
       );
     }
     const startTime = event.start_time_utc;
@@ -272,12 +263,13 @@ export async function POST(req: NextRequest) {
       },
       { status: 200 },
     );
-  } catch (err: unknown) {
-    const errorMessage = err instanceof Error ? err.message : String(err);
-    console.error('API Sync Error:', errorMessage);
-    return NextResponse.json(
-      { ok: false, error: 'Ошибка сервера' },
-      { status: 500 },
-    );
-  }
+    } catch (err: unknown) {
+      const errorMessage = err instanceof Error ? err.message : String(err);
+      console.error('API Sync Error:', errorMessage);
+      return NextResponse.json(
+        { ok: false, error: 'Ошибка сервера' },
+        { status: 500 },
+      );
+    }
+  }, { requiredRole: 'coach' })(req);
 }

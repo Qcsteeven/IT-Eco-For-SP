@@ -1,10 +1,9 @@
-import { NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
+import { NextRequest, NextResponse } from 'next/server';
 import { getDB } from '@/lib/surreal/surreal';
-import { authOptions } from '@/lib/authOptions';
 import crypto from 'crypto';
 import axios from 'axios';
 import { fetchUserInfo } from '@qatadaazzeh/atcoder-api';
+import { withRoleGuard } from '@/lib/rbac/guard';
 
 // Генерация кода верификации
 function generateVerificationCode(): string {
@@ -12,16 +11,8 @@ function generateVerificationCode(): string {
 }
 
 // GET - получение данных Codeforces пользователя
-export async function GET() {
+export const GET = withRoleGuard(async (_req: NextRequest, session) => {
   try {
-    const session = await getServerSession(authOptions);
-    if (!session?.user?.id) {
-      return NextResponse.json(
-        { ok: false, error: 'Неавторизован' },
-        { status: 401 },
-      );
-    }
-
     const db = await getDB();
     if (!db) throw new Error('Ошибка подключения к БД');
 
@@ -195,19 +186,12 @@ export async function GET() {
       { status: 500 },
     );
   }
-}
+}, { requiredRole: 'user' });
 
 // POST - начало процесса привязки (создание кода верификации)
-export async function POST(req: Request) {
+export const POST = withRoleGuard(async (req: NextRequest, session) => {
   try {
-    const session = await getServerSession(authOptions);
-    if (!session?.user?.id) {
-      return NextResponse.json(
-        { ok: false, error: 'Неавторизован' },
-        { status: 401 },
-      );
-    }
-
+    void session;
     const body = await req.json();
     const { cf_handle } = body;
 
@@ -346,18 +330,11 @@ export async function POST(req: Request) {
       { status: 500 },
     );
   }
-}
+}, { requiredRole: 'user' });
 
 // PUT - проверка кода в First Name и подтверждение привязки
-export async function PUT() {
+export const PUT = withRoleGuard(async (_req: NextRequest, session) => {
   try {
-    const session = await getServerSession(authOptions);
-    if (!session?.user?.id) {
-      return NextResponse.json(
-        { ok: false, error: 'Неавторизован' },
-        { status: 401 },
-      );
-    }
 
     const db = await getDB();
     if (!db) throw new Error('Ошибка подключения к БД');
@@ -513,18 +490,11 @@ export async function PUT() {
       { status: 500 },
     );
   }
-}
+}, { requiredRole: 'user' });
 
 // DELETE - отвязка аккаунта Codeforces
-export async function DELETE() {
+export const DELETE = withRoleGuard(async (_req: NextRequest, session) => {
   try {
-    const session = await getServerSession(authOptions);
-    if (!session?.user?.id) {
-      return NextResponse.json(
-        { ok: false, error: 'Неавторизован' },
-        { status: 401 },
-      );
-    }
 
     const db = await getDB();
     if (!db) throw new Error('Ошибка подключения к БД');
@@ -579,4 +549,4 @@ export async function DELETE() {
       { status: 500 },
     );
   }
-}
+}, { requiredRole: 'user' });

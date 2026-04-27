@@ -35,7 +35,7 @@ const getHandler = withRoleGuard(
       );
     }
   },
-  { requiredRole: 'coach' }
+  { requiredRole: 'admin' }
 );
 
 export { getHandler as GET };
@@ -107,7 +107,7 @@ const postHandler = withRoleGuard(
       );
     }
   },
-  { requiredRole: 'coach' }
+  { requiredRole: 'admin' }
 );
 
 export { postHandler as POST };

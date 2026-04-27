@@ -115,7 +115,8 @@ const agentRole = mapRBACRoleToAgentRole(session.user.role);
 
 ### Pages
 - `src/app/(otherpage)/coach/contests/` — Contest management
-- `src/app/(otherpage)/coach/analytics/` — Analytics dashboard
+- `src/app/(otherpage)/coach/events/` — Events management (wrapper over `/events`)
+- `src/app/(otherpage)/coach/groups/` — Groups (list, details, per-group analytics)
 - `src/app/(otherpage)/admin/` — Admin dashboard
 - `src/app/(otherpage)/admin/users/` — User management
 - `src/app/(otherpage)/admin/karma/` — Karma adjustment

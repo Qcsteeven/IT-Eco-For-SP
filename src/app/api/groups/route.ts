@@ -1,8 +1,6 @@
 import { NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
 import { getDB } from '@/lib/surreal/surreal';
 import { withRoleGuard } from '@/lib/rbac/guard';
-import { authOptions } from '@/lib/authOptions';
 import { toUserThingId } from '@/lib/surreal/ids';
 import type { CreateGroupData, Group } from '@/lib/types/group';
 
@@ -10,18 +8,10 @@ import type { CreateGroupData, Group } from '@/lib/types/group';
 // - admin: все
 // - coach: только свои (group_coaches)
 // - user: только где состоит (group_members)
-export const GET = async () => {
+export const GET = withRoleGuard(async (_req, session) => {
   try {
     const db = await getDB();
     if (!db) throw new Error('Не удалось подключиться к базе данных SurrealDB');
-
-    // auth опциональна: если не авторизован — вернём пусто
-    // (в проекте нет отдельного публичного сценария для групп)
-    const session = await getServerSession(authOptions);
-
-    if (!session?.user?.id) {
-      return NextResponse.json({ ok: true, data: [] }, { status: 200 });
-    }
 
     const userId = toUserThingId(session.user.id.toString());
     const role = (session.user.role as string | undefined) || 'user';
@@ -45,7 +35,7 @@ export const GET = async () => {
     console.error('API GET /groups Error:', errorMessage);
     return NextResponse.json({ ok: false, error: errorMessage }, { status: 500 });
   }
-};
+}, { requiredRole: 'user' });
 
 // POST /api/groups (coach/admin)
 export const POST = withRoleGuard(

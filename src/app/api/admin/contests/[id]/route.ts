@@ -89,7 +89,7 @@ const patchHandler = withRoleGuard(
       );
     }
   },
-  { requiredRole: 'coach' }
+  { requiredRole: 'admin' }
 );
 
 export { patchHandler as PATCH };
@@ -129,7 +129,7 @@ const deleteHandler = withRoleGuard(
       );
     }
   },
-  { requiredRole: 'coach' }
+  { requiredRole: 'admin' }
 );
 
 export { deleteHandler as DELETE };

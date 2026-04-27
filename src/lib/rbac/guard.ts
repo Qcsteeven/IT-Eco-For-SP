@@ -37,10 +37,18 @@ export function withRoleGuard(
 ) {
   return async function protectedHandler(req: NextRequest): Promise<NextResponse> {
     const session = await getServerSession(authOptions);
+    const pathname = req.nextUrl?.pathname || new URL(req.url).pathname;
+    const method = req.method || 'GET';
 
     if (!session?.user) {
+      console.warn('[RBAC] 401 unauthorized', {
+        pathname,
+        method,
+        requiredRole: options.requiredRole,
+        reason: 'no_session',
+      });
       return NextResponse.json(
-        { error: 'Не авторизован' },
+        { ok: false, error: 'Не авторизован' },
         { status: 401 }
       );
     }
@@ -48,15 +56,29 @@ export function withRoleGuard(
     const userRole = (session.user as { role?: string }).role;
 
     if (!userRole || !isValidUserRole(userRole)) {
+      console.warn('[RBAC] 403 forbidden', {
+        pathname,
+        method,
+        requiredRole: options.requiredRole,
+        userRole: userRole ?? null,
+        reason: 'invalid_role',
+      });
       return NextResponse.json(
-        { error: 'Некорректная роль пользователя' },
+        { ok: false, error: 'Некорректная роль пользователя' },
         { status: 403 }
       );
     }
 
     if (!hasRoleLevel(userRole as UserRole, options.requiredRole)) {
+      console.warn('[RBAC] 403 forbidden', {
+        pathname,
+        method,
+        requiredRole: options.requiredRole,
+        userRole,
+        reason: 'insufficient_role',
+      });
       return NextResponse.json(
-        { error: options.forbiddenMessage || 'Доступ запрещён: недостаточно прав' },
+        { ok: false, error: options.forbiddenMessage || 'Доступ запрещён: недостаточно прав' },
         { status: 403 }
       );
     }
