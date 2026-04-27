@@ -4,11 +4,13 @@ import { hashPassword } from '@/lib/surreal/auth';
 import { sendEmail } from '@/lib/email/sendEmail';
 import crypto from 'crypto';
 import { Surreal } from 'surrealdb';
+import { UserRole, isValidUserRole, getDefaultUserRole } from '@/lib/rbac';
 
 interface RegistrationRequestBody {
   email: string;
   password: string;
   full_name: string;
+  role?: string;
 }
 
 interface UserRecord {
@@ -20,14 +22,14 @@ interface UserRecord {
   verification_code: string;
   code_expiry: Date;
   registration_date: Date;
-  role: 'user' | 'admin';
+  role: UserRole;
 
   [key: string]: unknown;
 }
 
 export async function POST(request: NextRequest) {
   try {
-    const { email, password, full_name }: RegistrationRequestBody =
+    const { email, password, full_name, role: requestedRole }: RegistrationRequestBody =
       await request.json();
     const db: Surreal = await getDB();
 
@@ -63,6 +65,12 @@ export async function POST(request: NextRequest) {
 
     const passwordHash: string = await hashPassword(password);
 
+    // Валидация роли: если передана — проверяем, иначе — роль по умолчанию
+    const userRole: UserRole =
+      requestedRole && isValidUserRole(requestedRole)
+        ? requestedRole
+        : getDefaultUserRole();
+
     const newUserRecord: UserRecord = {
       email,
       password_hash: passwordHash,
@@ -72,7 +80,7 @@ export async function POST(request: NextRequest) {
       verification_code: verificationCode,
       code_expiry: expiryTime,
       registration_date: new Date(),
-      role: 'user',
+      role: userRole,
     };
 
     await db.create('users', newUserRecord);

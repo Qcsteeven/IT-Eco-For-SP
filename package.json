@@ -5,15 +5,26 @@
   "scripts": {
     "dev": "next dev --turbopack",
     "dev:docker": "next dev",
-    "build": "next build --turbopack",
+    "build": "next build",
+    "build:turbopack": "next build --turbopack",
     "build:docker": "docker compose build app",
     "start": "next start",
     "start:docker": "docker compose up app",
     "lint": "eslint . --ext .ts,.tsx --max-warnings 0",
-    "format": "prettier --write \"src/**/*.{ts,tsx}\"",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
     "type-check": "tsc --noEmit",
     "validate": "npm run lint && npm run format && npm run type-check",
+    "prepare": "husky",
     "cron": "tsx src/cron/scheduler.ts"
+  },
+  "lint-staged": {
+    "*.{js,jsx,ts,tsx}": [
+      "eslint --fix"
+    ],
+    "*.{json,md,yml,yaml,css,scss}": [
+      "prettier --write"
+    ]
   },
   "dependencies": {
     "@ai-sdk/deepinfra": "^1.0.23",
@@ -57,6 +68,8 @@
     "eslint-config-next": "15.5.4",
     "eslint-config-prettier": "^10.1.8",
     "eslint-plugin-prettier": "^5.5.4",
+    "husky": "^9.1.7",
+    "lint-staged": "^16.4.0",
     "prettier": "^3.6.2",
     "sass": "^1.96.0",
     "tailwindcss": "^4",

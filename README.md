@@ -82,7 +82,7 @@ docker compose up dev
 docker compose up app
 ```
 
-**Откройте:** http://localhost:3001 (dev) или http://localhost:3000 (production)
+**Откройте:** http://localhost:3000 (dev) или http://localhost:3000 (production)
 
 > ⚠️ **Важно:** Используйте команду `docker compose` (v2, через пробел), а не `docker-compose`.
 > Проверьте версию: `docker compose version`
@@ -103,7 +103,7 @@ npm run dev
 
 ### 4. Проверка работы
 
-- ✅ Откройте http://localhost:3001 в браузере
+- ✅ Откройте http://localhost:3000 в браузере
 - ✅ Проверьте консоль на наличие ошибок
 - ✅ Убедитесь, что подключение к SurrealDB успешно (логи в консоли)
 

@@ -2,6 +2,8 @@
 
 import React, { useState, FormEvent } from 'react';
 import { useRouter } from 'next/navigation';
+import Image from 'next/image';
+import Link from 'next/link';
 import { FiEye, FiEyeOff } from 'react-icons/fi';
 import styles from './SignUp.module.scss';
 
@@ -56,89 +58,105 @@ export default function SignUp() {
   };
 
   return (
-    <div className={styles.signupWrapper}>
-      <div className={styles.signupBox}>
-        <h1 className={styles.title}>📝 Регистрация</h1>
+    <div className={styles.page}>
+      <div className={styles.card}>
+        <div className={styles.cardLogo} aria-hidden="true">
+          <Image
+            src="/home-assets/hero/logo-full.png"
+            alt=""
+            width={354}
+            height={236}
+            priority
+          />
+        </div>
 
         <form onSubmit={handleSubmit} className={styles.form}>
           {error && <div className={styles.error}>{error}</div>}
 
-          <div className={styles.formGroup}>
-            <label className={styles.label}>ФИО</label>
+          <div className={styles.field}>
+            <label className={styles.srOnly} htmlFor="reg-fullname">
+              ФИО
+            </label>
             <input
+              id="reg-fullname"
               type="text"
               value={fullName}
               onChange={(e) => setFullName(e.target.value)}
-              placeholder="Иванов Иван Иванович"
+              placeholder="ФИО"
               required
+              autoComplete="name"
               className={styles.input}
             />
           </div>
 
-          <div className={styles.formGroup}>
-            <label className={styles.label}>Email</label>
+          <div className={styles.field}>
+            <label className={styles.srOnly} htmlFor="reg-email">
+              Email
+            </label>
             <input
+              id="reg-email"
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              placeholder="Введите ваш email"
+              placeholder="Email"
               required
+              autoComplete="email"
               className={styles.input}
             />
           </div>
 
-          <div className={styles.formGroup}>
-            <label className={styles.label}>Пароль</label>
-            <div className={styles.passwordWrapper}>
+          <div className={styles.field}>
+            <label className={styles.srOnly} htmlFor="reg-password">
+              Пароль
+            </label>
+            <div className={styles.password}>
               <input
+                id="reg-password"
                 type={showPassword ? 'text' : 'password'}
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                placeholder="Создайте пароль"
+                placeholder="Пароль"
                 required
+                autoComplete="new-password"
                 className={styles.input}
               />
               <button
                 type="button"
-                onClick={() => setShowPassword(!showPassword)}
-                className={styles.passwordToggle}
+                onClick={() => setShowPassword((v) => !v)}
+                className={styles.eyeBtn}
+                aria-label={showPassword ? 'Скрыть пароль' : 'Показать пароль'}
               >
-                {showPassword ? <FiEyeOff /> : <FiEye />}
+                {showPassword ? <FiEyeOff size={18} /> : <FiEye size={18} />}
               </button>
             </div>
           </div>
 
-          <div className={styles.formGroup}>
-            <label className={styles.label}>Подтвердите пароль</label>
-            <div className={styles.passwordWrapper}>
-              <input
-                type={showPassword ? 'text' : 'password'}
-                value={confirmPassword}
-                onChange={(e) => setConfirmPassword(e.target.value)}
-                placeholder="Повторите пароль"
-                required
-                className={styles.input}
-              />
-            </div>
+          <div className={styles.field}>
+            <label className={styles.srOnly} htmlFor="reg-password-confirm">
+              Подтверждение пароля
+            </label>
+            <input
+              id="reg-password-confirm"
+              type={showPassword ? 'text' : 'password'}
+              value={confirmPassword}
+              onChange={(e) => setConfirmPassword(e.target.value)}
+              placeholder="Повторите пароль"
+              required
+              autoComplete="new-password"
+              className={styles.input}
+            />
           </div>
 
-          <button
-            type="submit"
-            disabled={loading}
-            className={styles.submitButton}
-          >
+          <button type="submit" disabled={loading} className={styles.submitButton}>
             {loading ? 'Регистрация...' : 'Зарегистрироваться'}
           </button>
 
-          <p className={styles.signinText}>
-            Уже есть аккаунт?{' '}
-            <span
-              onClick={() => router.push('/auth/signin')}
-              className={styles.signinLink}
-            >
+          <div className={styles.linksRow}>
+            <span className={styles.linkMuted}>Уже есть аккаунт?</span>
+            <Link href="/auth/signin" className={styles.linkBtn}>
               Войти
-            </span>
-          </p>
+            </Link>
+          </div>
         </form>
       </div>
     </div>

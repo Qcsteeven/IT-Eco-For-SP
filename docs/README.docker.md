@@ -6,31 +6,31 @@
 
 ```bash
 # Запуск dev-сервера
-docker-compose up dev
+docker compose up dev
 
 # Или в фоновом режиме
-docker-compose up -d dev
+docker compose up -d dev
 
 # Просмотр логов
-docker-compose logs -f dev
+docker compose logs -f dev
 ```
 
 **Приложение доступно по адресу:** http://localhost:3000
 
-> ⚠️ **Важно:** Используйте `docker-compose` (с дефисом), а не `docker compose`.
-> Проверьте версию: `docker-compose --version` (требуется v2+)
+> ⚠️ **Важно:** Используйте Docker Compose v2 (`docker compose`).  
+> Проверьте версию: `docker compose version` (требуется v2+)
 
 ### Production режим
 
 ```bash
 # Сборка и запуск
-docker-compose up app
+docker compose up app
 
 # Или в фоновом режиме
-docker-compose up -d app
+docker compose up -d app
 
 # Просмотр логов
-docker-compose logs -f app
+docker compose logs -f app
 ```
 
 **Приложение доступно по адресу:** http://localhost:3000
