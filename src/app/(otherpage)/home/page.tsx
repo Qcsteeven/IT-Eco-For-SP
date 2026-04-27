@@ -1,16 +1,19 @@
-import IntroBlock from "./IntroBlock"
-import UpcomingEvents from './UpcomingEvents'
-
+import HomeHero from './HomeHero';
+import HomeWhySection from './HomeWhySection';
+import HomeFeaturesSection from './HomeFeaturesSection';
+import HomeContestsCarousel from './HomeContestsCarousel';
+import HomePartnersCarousel from './HomePartnersCarousel';
 
 export default function Home() {
   return (
     <div>
       <div className="main-section">
-        <IntroBlock />
+        <HomeHero />
+        <HomeWhySection />
+        <HomeFeaturesSection />
       </div>
-      <div className="upcoming-events">
-        <UpcomingEvents />
-      </div>
+      <HomeContestsCarousel />
+      <HomePartnersCarousel />
     </div>
   )
 }

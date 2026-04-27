@@ -36,7 +36,7 @@ ROUTERAI_API_KEY=ваш_api_ключ
 
 **Docker (рекомендуется):**
 ```bash
-docker-compose up dev
+docker compose up dev
 ```
 
 **Локально:**
@@ -69,10 +69,10 @@ APP_PORT=3001
 
 ```bash
 # Docker автоматически выберет свободный порт
-docker-compose up dev
+docker compose up dev
 
 # Узнать назначенный порт
-docker-compose port dev 3000
+docker compose port dev 3000
 ```
 
 ---

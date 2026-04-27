@@ -2,6 +2,8 @@
 
 import React, { useState, FormEvent, ChangeEvent, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
+import Image from 'next/image';
+import Link from 'next/link';
 // 1. ИМПОРТИРУЕМ СТИЛИ КАК МОДУЛЬ
 import styles from './VerifyEmail.module.scss';
 
@@ -133,75 +135,95 @@ function VerifyEmailContent() {
   };
 
   return (
-    <div className={styles.verifyEmailContainer}>
-      <h2 className={styles.title}>Подтверждение Email 📧</h2>
-      <p className={styles.description}>
-        Введите email и код, который вы получили на почту.
-      </p>
-
-      <form onSubmit={handleSubmit}>
-        <div className={styles.formGroup}>
-          <label htmlFor="email" className={styles.label}>
-            Email:
-          </label>
-          <input
-            id="email"
-            className={styles.input}
-            type="email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            required
-            disabled={loading || isSuccess}
+    <div className={styles.page}>
+      <div className={styles.card}>
+        <div className={styles.cardLogo} aria-hidden="true">
+          <Image
+            src="/home-assets/hero/logo-full.png"
+            alt=""
+            width={354}
+            height={236}
+            priority
           />
         </div>
 
-        <div className={styles.formGroup}>
-          <label htmlFor="code" className={styles.label}>
-            Код подтверждения (6 цифр):
-          </label>
-          <input
-            id="code"
-            className={styles.input}
-            type="text"
-            value={code}
-            onChange={handleCodeChange}
-            maxLength={6}
-            required
-            disabled={loading || isSuccess}
-          />
+        <div className={styles.head}>
+          <h2 className={styles.title}>Подтверждение Email</h2>
+          <p className={styles.description}>
+            Введите email и код, который вы получили на почту.
+          </p>
         </div>
 
-        <button
-          type="submit"
-          className={styles.submitButton}
-          disabled={loading || isSuccess}
-        >
-          {loading && !isSuccess
-            ? 'Проверка...'
-            : isSuccess
-              ? 'Аккаунт верифицирован!'
-              : 'Подтвердить'}
-        </button>
-      </form>
+        <form onSubmit={handleSubmit} className={styles.form}>
+          <div className={styles.field}>
+            <label htmlFor="email" className={styles.srOnly}>
+              Email
+            </label>
+            <input
+              id="email"
+              className={styles.input}
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="Email"
+              required
+              disabled={loading || isSuccess}
+            />
+          </div>
 
-      {message && (
-        <p className={isSuccess ? styles.successMessage : styles.errorMessage}>
-          {message}
-        </p>
-      )}
+          <div className={styles.field}>
+            <label htmlFor="code" className={styles.srOnly}>
+              Код подтверждения
+            </label>
+            <input
+              id="code"
+              className={styles.input}
+              type="text"
+              value={code}
+              onChange={handleCodeChange}
+              placeholder="Код (6 цифр)"
+              maxLength={6}
+              required
+              disabled={loading || isSuccess}
+              inputMode="numeric"
+            />
+          </div>
 
-      {!isSuccess && (
-        <div className={styles.resendCodeSection}>
-          Не получили код?
           <button
-            onClick={handleResendCode}
-            className={styles.resendButton}
+            type="submit"
+            className={styles.submitButton}
             disabled={loading || isSuccess}
           >
-            {loading ? 'Отправляем...' : 'Отправить повторно'}
+            {loading && !isSuccess
+              ? 'Проверка...'
+              : isSuccess
+                ? 'Аккаунт верифицирован!'
+                : 'Подтвердить'}
           </button>
-        </div>
-      )}
+        </form>
+
+        {message && (
+          <p className={isSuccess ? styles.successMessage : styles.errorMessage}>
+            {message}
+          </p>
+        )}
+
+        {!isSuccess && (
+          <div className={styles.linksRow}>
+            <button
+              type="button"
+              onClick={handleResendCode}
+              className={styles.linkBtn}
+              disabled={loading || isSuccess}
+            >
+              {loading ? 'Отправляем...' : 'Отправить код повторно'}
+            </button>
+            <Link href="/auth/signin" className={styles.linkBtn}>
+              Войти
+            </Link>
+          </div>
+        )}
+      </div>
     </div>
   );
 }

@@ -1,60 +1,46 @@
 import Link from 'next/link';
+import './footer.scss';
 
 export default function Footer() {
   const currentYear = new Date().getFullYear();
 
   return (
-    <footer className="bg-gray-900 text-gray-300 py-8">
-      <div className="container mx-auto px-4">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-          {/* О проекте */}
-          <div>
-            <h3 className="text-white font-semibold text-lg mb-4">IT-Eco-For-SP</h3>
-            <p className="text-sm text-gray-400">
-              Образовательная экосистема для студентов с ИИ-ассистентом, 
-              интеграцией с Codeforces и AtCoder, и системой рейтингов.
-            </p>
-          </div>
-
-          {/* Навигация */}
-          <div>
-            <h3 className="text-white font-semibold text-lg mb-4">Навигация</h3>
-            <ul className="space-y-2 text-sm">
-              <li>
-                <Link href="/" className="hover:text-white transition-colors">
-                  Главная
-                </Link>
-              </li>
-              <li>
-                <Link href="/chat" className="hover:text-white transition-colors">
-                  ИИ-ассистент
-                </Link>
-              </li>
-              <li>
-                <Link href="/profile" className="hover:text-white transition-colors">
-                  Профиль
-                </Link>
-              </li>
-              <li>
-                <Link href="/calendar" className="hover:text-white transition-colors">
-                  Календарь соревнований
-                </Link>
-              </li>
-            </ul>
-          </div>
-
-          {/* Контакты */}
-          <div>
-            <h3 className="text-white font-semibold text-lg mb-4">Контакты</h3>
-            <ul className="space-y-2 text-sm text-gray-400">
-              <li>Email: support@it-eco-for-sp.ru</li>
-              <li>GitHub: @Qcsteeven</li>
-            </ul>
-          </div>
+    <footer className="site-footer">
+      <div className="site-footer__inner">
+        <div className="site-footer__about">
+          <p className="site-footer__about-text">
+            IT-Eco-For-SP — платформа для спортсменов программистов с
+            ИИ-ассистентом, агрегацией рейтингов и календарём соревнований
+          </p>
         </div>
 
-        <div className="border-t border-gray-800 mt-8 pt-6 text-center text-sm text-gray-500">
-          <p>&copy; {currentYear} IT-Eco-For-SP. Все права защищены.</p>
+        <nav className="site-footer__nav" aria-label="Навигация в футере">
+          <div className="site-footer__nav-title">Навигация</div>
+          <div className="site-footer__nav-line" aria-hidden="true" />
+          <ul className="site-footer__nav-list">
+            <li>
+              <Link href="/home">Главная</Link>
+            </li>
+            <li>
+              <Link href="/base">База знаний</Link>
+            </li>
+            <li>
+              <Link href="/chat">ИИ-ассистент</Link>
+            </li>
+            <li>
+              <Link href="/calendar">Календарь соревнований</Link>
+            </li>
+            <li>
+              <Link href="/profile">Профиль</Link>
+            </li>
+          </ul>
+        </nav>
+
+        <div className="site-footer__bottom">
+          <div className="site-footer__copyright">
+            © {currentYear} IT-Eco-For-SP. Все права защищены.
+          </div>
+          <div className="site-footer__email">support@it-eco-for-sp.ru</div>
         </div>
       </div>
     </footer>

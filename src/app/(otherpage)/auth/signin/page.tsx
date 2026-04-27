@@ -4,6 +4,8 @@ import React, { useState, useEffect, FormEvent, Suspense } from 'react';
 import { signIn, useSession, LiteralUnion } from 'next-auth/react';
 import { BuiltInProviderType } from 'next-auth/providers/index';
 import { useRouter, useSearchParams } from 'next/navigation';
+import Image from 'next/image';
+import Link from 'next/link';
 import { FiEye, FiEyeOff } from 'react-icons/fi';
 import styles from './SignIn.module.scss';
 
@@ -68,42 +70,59 @@ function SignInForm() {
   };
 
   return (
-    <div className={styles.signinWrapper}>
-      <div className={styles.signinBox}>
-        <h1 className={styles.title}>🔑 Вход</h1>
+    <div className={styles.page}>
+      <div className={styles.card}>
+        <div className={styles.cardLogo} aria-hidden="true">
+          <Image
+            src="/home-assets/hero/logo-full.png"
+            alt=""
+            width={354}
+            height={236}
+            priority
+          />
+        </div>
 
         <form onSubmit={handleSubmit} className={styles.form}>
           {error && <div className={styles.error}>{error}</div>}
 
-          <div className={styles.formGroup}>
-            <label className={styles.label}>Email</label>
+          <div className={styles.field}>
+            <label className={styles.srOnly} htmlFor="auth-email">
+              Email
+            </label>
             <input
+              id="auth-email"
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              placeholder="Введите ваш email"
+              placeholder="Email"
               required
+              autoComplete="email"
               className={styles.input}
             />
           </div>
 
-          <div className={styles.formGroup}>
-            <label className={styles.label}>Пароль</label>
-            <div className={styles.passwordInputWrapper}>
+          <div className={styles.field}>
+            <label className={styles.srOnly} htmlFor="auth-password">
+              Пароль
+            </label>
+            <div className={styles.password}>
               <input
+                id="auth-password"
                 type={showPassword ? 'text' : 'password'}
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                placeholder="********"
+                placeholder="Пароль"
                 required
+                autoComplete="current-password"
                 className={styles.input}
               />
               <button
                 type="button"
                 className={styles.eyeBtn}
-                onClick={() => setShowPassword(!showPassword)}
+                onClick={() => setShowPassword((v) => !v)}
+                aria-label={showPassword ? 'Скрыть пароль' : 'Показать пароль'}
               >
-                {showPassword ? <FiEyeOff size={20} /> : <FiEye size={20} />}
+                {showPassword ? <FiEyeOff size={18} /> : <FiEye size={18} />}
               </button>
             </div>
           </div>
@@ -112,15 +131,18 @@ function SignInForm() {
             Войти
           </button>
 
-          <p className={styles.signupText}>
-            Нет аккаунта?{' '}
-            <span
-              onClick={() => router.push('/auth/signup')}
-              className={styles.signupLink}
+          <div className={styles.linksRow}>
+            <button
+              type="button"
+              className={styles.linkBtn}
+              onClick={() => setError('Восстановление пароля пока не реализовано.')}
             >
-              Зарегистрироваться
-            </span>
-          </p>
+              Забыли пароль?
+            </button>
+            <Link href="/auth/signup" className={styles.linkBtn}>
+              Регистрация
+            </Link>
+          </div>
         </form>
       </div>
     </div>

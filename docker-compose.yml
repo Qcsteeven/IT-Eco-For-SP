@@ -6,6 +6,8 @@ services:
     container_name: it-eco-app
     ports:
       - "${APP_PORT:-3000}:3000"
+    env_file:
+      - .env.local
     environment:
       - NODE_ENV=production
     volumes:
@@ -14,6 +16,7 @@ services:
 
   # Dev service with hot reload (опционально)
   dev:
+    profiles: ["dev"]
     image: node:20-alpine
     container_name: it-eco-dev
     working_dir: /app
@@ -23,9 +26,12 @@ services:
       - .:/app
       - /app/node_modules
       - /app/.next
+    env_file:
+      - .env.local
     environment:
       - NODE_ENV=development
       - WATCHPACK_POLLING=false
+    user: "${UID:-1000}:${GID:-1000}"
     command: sh -c "npm install && npm run dev:docker"
     restart: unless-stopped
 

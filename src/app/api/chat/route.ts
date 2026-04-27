@@ -1,6 +1,9 @@
 import { UIMessage } from 'ai';
-import { createSystemPrompt } from '@/lib/prompts';
+import { getServerSession } from 'next-auth';
+import { authOptions } from '@/lib/authOptions';
+import { AgentRole, createSystemPrompt, mapRBACRoleToAgentRole } from '@/lib/prompts';
 import { getRagContext } from '@/lib/rag';
+import { UserRole } from '@/lib/rbac';
 
 export const maxDuration = 30;
 
@@ -9,6 +12,17 @@ export const dynamic = 'force-dynamic';
 
 export async function POST(req: Request) {
   try {
+    // Получаем сессию для определения роли пользователя
+    const session = await getServerSession(authOptions);
+    
+    // Определяем роль пользователя (по умолчанию 'student' для неавторизованных)
+    let agentRole: AgentRole = 'student';
+    
+    if (session?.user?.role) {
+      const userRole = session.user.role as UserRole;
+      agentRole = mapRBACRoleToAgentRole(userRole);
+    }
+
     const { messages }: { messages: UIMessage[] } = await req.json();
 
     // Извлекаем текст из последнего сообщения пользователя
@@ -30,9 +44,7 @@ export async function POST(req: Request) {
       throw new Error('Empty user message after extracting from parts');
     }
 
-    const agentRole = 'student';
-
-    // RAG + промпт
+    // RAG + промпт с роль-адаптивным поведением
     const ragContext = await getRagContext(userMessage);
     const mode = /json/i.test(userMessage) ? 'action' : 'chat';
     const systemPrompt = createSystemPrompt({ ragContext, agentRole, mode });
