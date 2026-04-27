@@ -1,5 +1,6 @@
 'use client';
 
+import Image from 'next/image';
 import React, { useMemo, useState } from 'react';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 
@@ -53,7 +54,7 @@ export default function HomePartnersCarousel() {
           <div className="home-partners__list">
             {visible.map((p) => (
               <div key={p.name} className="home-partners__logo" title={p.name}>
-                <img src={p.logoSrc} alt={p.name} />
+                <Image src={p.logoSrc} alt={p.name} width={220} height={80} />
               </div>
             ))}
           </div>

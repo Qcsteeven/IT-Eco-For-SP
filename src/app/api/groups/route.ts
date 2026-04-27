@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { getDB } from '@/lib/surreal/surreal';
 import { withRoleGuard } from '@/lib/rbac/guard';
@@ -10,7 +10,7 @@ import type { CreateGroupData, Group } from '@/lib/types/group';
 // - admin: все
 // - coach: только свои (group_coaches)
 // - user: только где состоит (group_members)
-export const GET = async (req: NextRequest) => {
+export const GET = async () => {
   try {
     const db = await getDB();
     if (!db) throw new Error('Не удалось подключиться к базе данных SurrealDB');

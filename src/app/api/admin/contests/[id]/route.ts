@@ -12,6 +12,7 @@ import { withRoleGuard } from '@/lib/rbac/guard';
 const patchHandler = withRoleGuard(
   async (req: NextRequest, _session) => {
     try {
+      void _session;
       const urlPath = req.url.split('/api/admin/contests/')[1];
       const contestId = urlPath;
 
@@ -100,6 +101,7 @@ export { patchHandler as PATCH };
 const deleteHandler = withRoleGuard(
   async (req: NextRequest, _session) => {
     try {
+      void _session;
       const urlPath = req.url.split('/api/admin/contests/')[1];
       const contestId = urlPath;
 

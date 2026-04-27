@@ -80,7 +80,7 @@ export function usePermissions(role: UserRole) {
 export function getAvailableFeatures(role: UserRole): string[] {
   const permissions = ROLE_PERMISSIONS[role];
   return Object.entries(permissions)
-    .filter(([_, value]) => value)
+    .filter(([, value]) => value)
     .map(([key]) => key);
 }
 

@@ -7,6 +7,8 @@ import { withRoleGuard } from '@/lib/rbac/guard';
 const handler = withRoleGuard(
   async (_req: NextRequest, session) => {
     try {
+      void _req;
+      void session;
       const db = await getDB();
 
       const result = (await db.query(

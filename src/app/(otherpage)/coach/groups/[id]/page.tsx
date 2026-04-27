@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useSession } from 'next-auth/react';
 import { useRoleGuard } from '@/lib/rbac/client';
@@ -47,11 +47,7 @@ export default function CoachGroupDetailsPage() {
     }
   }, [authorized, isLoading, router, status]);
 
-  useEffect(() => {
-    if (authorized && groupId) fetchAll();
-  }, [authorized, groupId]);
-
-  async function fetchAll() {
+  const fetchAll = useCallback(async () => {
     try {
       setLoading(true);
       setError(null);
@@ -79,7 +75,11 @@ export default function CoachGroupDetailsPage() {
     } finally {
       setLoading(false);
     }
-  }
+  }, [groupId]);
+
+  useEffect(() => {
+    if (authorized && groupId) fetchAll();
+  }, [authorized, fetchAll, groupId]);
 
   const filteredUsers = useMemo(() => {
     const q = search.trim().toLowerCase();

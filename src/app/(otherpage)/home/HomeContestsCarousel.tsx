@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import Image from 'next/image';
 import React, { useEffect, useMemo, useState } from 'react';
 
 import { ApiResponse } from '@/lib/types/api';
@@ -127,10 +128,12 @@ export default function HomeContestsCarousel() {
                     </h3>
 
                     <div className="home-contests__platform">
-                      <img
+                      <Image
                         className="home-contests__bell"
                         src="/home-assets/contests/icon-bell.svg"
                         alt=""
+                        width={18}
+                        height={18}
                         aria-hidden="true"
                       />
                       <span>[{contest.platform}]</span>
@@ -148,20 +151,24 @@ export default function HomeContestsCarousel() {
                         rel="noreferrer"
                       >
                         Регистрация
-                        <img
+                        <Image
                           className="home-contests__cta-arrow"
                           src="/home-assets/contests/icon-reg-arrow-lg.svg"
                           alt=""
+                          width={26}
+                          height={18}
                           aria-hidden="true"
                         />
                       </a>
                     ) : (
                       <span className="home-contests__cta" style={{ opacity: 0.6 }}>
                         Регистрация
-                        <img
+                        <Image
                           className="home-contests__cta-arrow"
                           src="/home-assets/contests/icon-reg-arrow-lg.svg"
                           alt=""
+                          width={26}
+                          height={18}
                           aria-hidden="true"
                         />
                       </span>
@@ -179,10 +186,12 @@ export default function HomeContestsCarousel() {
                 disabled={!canNav}
                 aria-label="Предыдущее соревнование"
               >
-                <img
+                <Image
                   className="home-contests__nav-icon"
                   src="/home-assets/contests/nav-chevron-left.svg"
                   alt=""
+                  width={22}
+                  height={22}
                   aria-hidden="true"
                 />
               </button>
@@ -193,10 +202,12 @@ export default function HomeContestsCarousel() {
                 disabled={!canNav}
                 aria-label="Следующее соревнование"
               >
-                <img
+                <Image
                   className="home-contests__nav-icon"
                   src="/home-assets/contests/nav-chevron-right.svg"
                   alt=""
+                  width={22}
+                  height={22}
                   aria-hidden="true"
                 />
               </button>
