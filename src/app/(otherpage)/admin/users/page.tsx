@@ -5,16 +5,59 @@ import { useRoleGuard } from '@/lib/rbac/client';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
+import {
+  getRoleDisplayName,
+  ROLE_PERMISSIONS,
+  UserRole,
+} from '@/lib/rbac';
+import type { RolePermissions } from '@/lib/rbac';
 import './users.scss';
 
 interface User {
   id: string;
   email: string;
   full_name: string;
+  phone?: string;
   role: string;
   is_verified: boolean;
+  is_blocked?: boolean;
+  bscp_rating?: number;
+  codeforces_karma?: number;
   registration_date: string;
 }
+
+type UserForm = {
+  email: string;
+  password: string;
+  full_name: string;
+  phone: string;
+  role: UserRole;
+  is_verified: boolean;
+  is_blocked: boolean;
+};
+
+const emptyCreateForm: UserForm = {
+  email: '',
+  password: '',
+  full_name: '',
+  phone: '',
+  role: 'user',
+  is_verified: true,
+  is_blocked: false,
+};
+
+const permissionLabels: Record<keyof RolePermissions, string> = {
+  canViewLanding: 'Лендинг и маркетинг',
+  canViewGlobalRating: 'Глобальный рейтинг',
+  canViewUpcomingContests: 'Календарь соревнований',
+  canUseAIAssistant: 'AI-ассистент',
+  canParticipateInContests: 'Участие в контестах',
+  canViewPersonalDashboard: 'Личный dashboard',
+  canManageContests: 'Управление контестами',
+  canViewAnalytics: 'Аналитика групп',
+  canManageUsers: 'Управление аккаунтами',
+  canAdjustKarma: 'Корректировка кармы',
+};
 
 export default function AdminUsersPage() {
   const { status } = useSession();
@@ -26,7 +69,9 @@ export default function AdminUsersPage() {
   const [success, setSuccess] = useState<string | null>(null);
   const [editingUser, setEditingUser] = useState<User | null>(null);
   const [showDeleteModal, setShowDeleteModal] = useState<User | null>(null);
-  const [editRole, setEditRole] = useState('');
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [editForm, setEditForm] = useState<UserForm>(emptyCreateForm);
+  const [createForm, setCreateForm] = useState<UserForm>(emptyCreateForm);
 
   useEffect(() => {
     if (!isLoading && !authorized && status === 'authenticated') {
@@ -61,7 +106,15 @@ export default function AdminUsersPage() {
 
   const handleEditClick = (user: User) => {
     setEditingUser(user);
-    setEditRole(user.role);
+    setEditForm({
+      email: user.email || '',
+      password: '',
+      full_name: user.full_name || '',
+      phone: user.phone || '',
+      role: (user.role || 'user') as UserRole,
+      is_verified: !!user.is_verified,
+      is_blocked: !!user.is_blocked,
+    });
   };
 
   const handleSaveEdit = async () => {
@@ -72,20 +125,51 @@ export default function AdminUsersPage() {
       const res = await fetch(`/api/admin/users/${editingUser.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ role: editRole }),
+        body: JSON.stringify({
+          email: editForm.email,
+          full_name: editForm.full_name,
+          phone: editForm.phone,
+          role: editForm.role,
+          is_verified: editForm.is_verified,
+          is_blocked: editForm.is_blocked,
+        }),
       });
 
       const data = await res.json();
 
       if (data.ok) {
-        setSuccess('Роль пользователя успешно обновлена');
+        setSuccess('Пользователь успешно обновлён');
         setEditingUser(null);
         await fetchUsers();
       } else {
-        setError(data.error || 'Ошибка обновления роли');
+        setError(data.error || 'Ошибка обновления пользователя');
       }
     } catch (err) {
-      setError('Не удалось обновить роль пользователя');
+      setError('Не удалось обновить пользователя');
+      console.error(err);
+    }
+  };
+
+  const handleCreateUser = async () => {
+    try {
+      setError(null);
+      const res = await fetch('/api/admin/users', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(createForm),
+      });
+      const data = await res.json();
+
+      if (data.ok) {
+        setSuccess('Пользователь успешно создан');
+        setShowCreateModal(false);
+        setCreateForm(emptyCreateForm);
+        await fetchUsers();
+      } else {
+        setError(data.error || 'Ошибка создания пользователя');
+      }
+    } catch (err) {
+      setError('Не удалось создать пользователя');
       console.error(err);
     }
   };
@@ -141,7 +225,15 @@ export default function AdminUsersPage() {
       <div className="users-container">
         <div className="users-header">
           <Link href="/admin" className="users-back-link">← Назад</Link>
-          <h1>Управление пользователями</h1>
+          <div className="users-header-row">
+            <h1>Управление пользователями</h1>
+            <button
+              className="users-primary-btn"
+              onClick={() => setShowCreateModal(true)}
+            >
+              Создать пользователя
+            </button>
+          </div>
         </div>
 
         {error && (
@@ -169,6 +261,8 @@ export default function AdminUsersPage() {
                   <th>Имя</th>
                   <th>Роль</th>
                   <th>Верификация</th>
+                  <th>Статус</th>
+                  <th>Рейтинг</th>
                   <th>Дата регистрации</th>
                   <th>Действия</th>
                 </tr>
@@ -180,16 +274,22 @@ export default function AdminUsersPage() {
                     <td>{user.full_name || '—'}</td>
                     <td>
                       <span className={`user-role user-role-${user.role}`}>
-                        {user.role === 'admin' && 'Администратор'}
-                        {user.role === 'coach' && 'Тренер'}
-                        {user.role === 'user' && 'Участник'}
-                        {user.role === 'guest' && 'Гость'}
+                        {getRoleDisplayName((user.role || 'user') as UserRole)}
                       </span>
                     </td>
                     <td>
                       <span className={`user-verified ${user.is_verified ? 'verified' : 'not-verified'}`}>
                         {user.is_verified ? '✓ Да' : '✗ Нет'}
                       </span>
+                    </td>
+                    <td>
+                      <span className={`user-status ${user.is_blocked ? 'blocked' : 'active'}`}>
+                        {user.is_blocked ? 'Заблокирован' : 'Активен'}
+                      </span>
+                    </td>
+                    <td>
+                      <span>{user.bscp_rating ?? 0}</span>
+                      <span className="users-muted"> / {user.codeforces_karma ?? 0}</span>
                     </td>
                     <td>
                       {new Date(user.registration_date).toLocaleDateString('ru-RU')}
@@ -224,29 +324,116 @@ export default function AdminUsersPage() {
         )}
       </div>
 
-      {/* Edit Modal */}
-      {editingUser && (
-        <div className="users-modal-overlay" onClick={() => setEditingUser(null)}>
-          <div className="users-modal" onClick={(e) => e.stopPropagation()}>
-            <h2>Редактировать пользователя</h2>
-            <div className="users-modal-form">
+      {/* Create Modal */}
+      {showCreateModal && (
+        <div className="users-modal-overlay" onClick={() => setShowCreateModal(false)}>
+          <div className="users-modal users-modal-wide" onClick={(e) => e.stopPropagation()}>
+            <h2>Создать пользователя</h2>
+            <div className="users-modal-form users-modal-grid">
               <div className="users-modal-group">
                 <label>Email</label>
-                <input type="text" value={editingUser.email} disabled />
+                <input
+                  type="email"
+                  value={createForm.email}
+                  onChange={(e) => setCreateForm({ ...createForm, email: e.target.value })}
+                />
+              </div>
+              <div className="users-modal-group">
+                <label>Пароль</label>
+                <input
+                  type="password"
+                  value={createForm.password}
+                  onChange={(e) => setCreateForm({ ...createForm, password: e.target.value })}
+                />
               </div>
               <div className="users-modal-group">
                 <label>Имя</label>
-                <input type="text" value={editingUser.full_name || '—'} disabled />
+                <input
+                  type="text"
+                  value={createForm.full_name}
+                  onChange={(e) => setCreateForm({ ...createForm, full_name: e.target.value })}
+                />
               </div>
               <div className="users-modal-group">
-                <label>Роль</label>
-                <select value={editRole} onChange={(e) => setEditRole(e.target.value)}>
-                  <option value="user">Участник</option>
-                  <option value="coach">Тренер</option>
-                  <option value="admin">Администратор</option>
-                </select>
+                <label>Телефон</label>
+                <input
+                  type="text"
+                  value={createForm.phone}
+                  onChange={(e) => setCreateForm({ ...createForm, phone: e.target.value })}
+                />
               </div>
+              <RoleSelect
+                value={createForm.role}
+                onChange={(role) => setCreateForm({ ...createForm, role })}
+              />
+              <StatusControls
+                verified={createForm.is_verified}
+                blocked={createForm.is_blocked}
+                onVerifiedChange={(is_verified) => setCreateForm({ ...createForm, is_verified })}
+                onBlockedChange={(is_blocked) => setCreateForm({ ...createForm, is_blocked })}
+              />
             </div>
+            <PermissionPreview role={createForm.role} />
+            <div className="users-modal-actions">
+              <button
+                className="users-modal-btn users-modal-btn-cancel"
+                onClick={() => setShowCreateModal(false)}
+              >
+                Отмена
+              </button>
+              <button
+                className="users-modal-btn users-modal-btn-save"
+                onClick={handleCreateUser}
+              >
+                Создать
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Modal */}
+      {editingUser && (
+        <div className="users-modal-overlay" onClick={() => setEditingUser(null)}>
+          <div className="users-modal users-modal-wide" onClick={(e) => e.stopPropagation()}>
+            <h2>Редактировать пользователя</h2>
+            <div className="users-modal-form users-modal-grid">
+              <div className="users-modal-group">
+                <label>Email</label>
+                <input
+                  type="email"
+                  value={editForm.email}
+                  onChange={(e) => setEditForm({ ...editForm, email: e.target.value })}
+                />
+              </div>
+              <div className="users-modal-group">
+                <label>Имя</label>
+                <input
+                  type="text"
+                  value={editForm.full_name}
+                  onChange={(e) => setEditForm({ ...editForm, full_name: e.target.value })}
+                />
+              </div>
+              <div className="users-modal-group">
+                <label>Телефон</label>
+                <input
+                  type="text"
+                  value={editForm.phone}
+                  onChange={(e) => setEditForm({ ...editForm, phone: e.target.value })}
+                />
+              </div>
+              <RoleSelect
+                value={editForm.role}
+                onChange={(role) => setEditForm({ ...editForm, role })}
+              />
+              <StatusControls
+                verified={editForm.is_verified}
+                blocked={editForm.is_blocked}
+                onVerifiedChange={(is_verified) => setEditForm({ ...editForm, is_verified })}
+                onBlockedChange={(is_blocked) => setEditForm({ ...editForm, is_blocked })}
+              />
+            </div>
+            <PermissionPreview role={editForm.role} />
             <div className="users-modal-actions">
               <button
                 className="users-modal-btn users-modal-btn-cancel"
@@ -291,6 +478,82 @@ export default function AdminUsersPage() {
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+function RoleSelect({
+  value,
+  onChange,
+}: {
+  value: UserRole;
+  onChange: (role: UserRole) => void;
+}) {
+  return (
+    <div className="users-modal-group">
+      <label>Роль</label>
+      <select value={value} onChange={(e) => onChange(e.target.value as UserRole)}>
+        <option value="guest">Гость</option>
+        <option value="user">Участник</option>
+        <option value="coach">Тренер</option>
+        <option value="admin">Администратор</option>
+      </select>
+    </div>
+  );
+}
+
+function StatusControls({
+  verified,
+  blocked,
+  onVerifiedChange,
+  onBlockedChange,
+}: {
+  verified: boolean;
+  blocked: boolean;
+  onVerifiedChange: (value: boolean) => void;
+  onBlockedChange: (value: boolean) => void;
+}) {
+  return (
+    <div className="users-modal-group users-checkbox-group">
+      <label>
+        <input
+          type="checkbox"
+          checked={verified}
+          onChange={(e) => onVerifiedChange(e.target.checked)}
+        />
+        Email подтверждён
+      </label>
+      <label>
+        <input
+          type="checkbox"
+          checked={blocked}
+          onChange={(e) => onBlockedChange(e.target.checked)}
+        />
+        Аккаунт заблокирован
+      </label>
+    </div>
+  );
+}
+
+function PermissionPreview({ role }: { role: UserRole }) {
+  const permissions = ROLE_PERMISSIONS[role];
+
+  return (
+    <div className="users-permissions">
+      <h3>Права роли: {getRoleDisplayName(role)}</h3>
+      <div className="users-permissions-grid">
+        {(Object.entries(permissions) as [keyof RolePermissions, boolean][]).map(
+          ([permission, enabled]) => (
+            <div
+              key={permission}
+              className={`users-permission-item ${enabled ? 'enabled' : 'disabled'}`}
+            >
+              <span>{enabled ? '✓' : '—'}</span>
+              {permissionLabels[permission]}
+            </div>
+          ),
+        )}
+      </div>
     </div>
   );
 }

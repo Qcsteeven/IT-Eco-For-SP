@@ -33,6 +33,32 @@
   }
 }
 
+.users-header-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.users-primary-btn {
+  border: none;
+  border-radius: 8px;
+  background: white;
+  color: #334155;
+  cursor: pointer;
+  font-weight: 700;
+  padding: 0.85rem 1.2rem;
+  transition:
+    transform 0.2s,
+    box-shadow 0.2s;
+
+  &:hover {
+    box-shadow: 0 8px 16px rgba(15, 23, 42, 0.18);
+    transform: translateY(-1px);
+  }
+}
+
 .users-loading,
 .users-access-denied {
   min-height: 100vh;
@@ -198,6 +224,29 @@
   }
 }
 
+.user-status {
+  border-radius: 999px;
+  display: inline-block;
+  font-size: 0.85rem;
+  font-weight: 600;
+  padding: 0.25rem 0.7rem;
+
+  &.active {
+    background: #e8f5e9;
+    color: #1b5e20;
+  }
+
+  &.blocked {
+    background: #ffebee;
+    color: #b71c1c;
+  }
+}
+
+.users-muted {
+  color: #94a3b8;
+  font-size: 0.85rem;
+}
+
 .users-actions {
   white-space: nowrap;
 }
@@ -266,6 +315,10 @@
   }
 }
 
+.users-modal-wide {
+  max-width: 760px;
+}
+
 .users-modal-form {
   display: flex;
   flex-direction: column;
@@ -295,6 +348,73 @@
         border-color: #667eea;
       }
     }
+  }
+}
+
+.users-modal-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.users-checkbox-group {
+  justify-content: center;
+
+  label {
+    align-items: center;
+    display: flex;
+    gap: 0.5rem;
+  }
+
+  input {
+    width: auto;
+  }
+}
+
+.users-permissions {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  margin-top: 1.25rem;
+  padding: 1rem;
+
+  h3 {
+    color: #334155;
+    font-size: 1rem;
+    margin: 0 0 0.8rem;
+  }
+}
+
+.users-permissions-grid {
+  display: grid;
+  gap: 0.5rem;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.users-permission-item {
+  align-items: center;
+  background: white;
+  border-radius: 6px;
+  color: #64748b;
+  display: flex;
+  font-size: 0.9rem;
+  gap: 0.5rem;
+  padding: 0.55rem 0.7rem;
+
+  span {
+    font-weight: 700;
+    min-width: 1rem;
+  }
+
+  &.enabled {
+    color: #166534;
+
+    span {
+      color: #16a34a;
+    }
+  }
+
+  &.disabled {
+    color: #94a3b8;
   }
 }
 
@@ -343,5 +463,12 @@
         box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
       }
     }
+  }
+}
+
+@media (max-width: 720px) {
+  .users-modal-grid,
+  .users-permissions-grid {
+    grid-template-columns: 1fr;
   }
 }

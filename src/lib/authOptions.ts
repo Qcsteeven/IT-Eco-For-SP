@@ -53,6 +53,13 @@ export const authOptions: NextAuthOptions = {
           );
 
           if (isMatch) {
+            if ((user as Record<string, unknown>).is_blocked) {
+              console.warn(
+                `[AUTH] БЛОКИРОВКА ВХОДА: Аккаунт ${user.email} заблокирован.`,
+              );
+              throw new Error('AccountBlocked');
+            }
+
             if (!user.is_verified) {
               console.warn(
                 `[AUTH] БЛОКИРОВКА ВХОДА: Email ${user.email} не верифицирован.`,

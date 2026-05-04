@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { getDB } from '@/lib/surreal/surreal';
 import { authOptions } from '@/lib/authOptions';
+import { toUserThingId } from '@/lib/surreal/ids';
 
 function toRecordIdString(v: unknown): string {
   if (v == null) return '';
@@ -50,11 +51,50 @@ export async function GET(req: Request) {
     // Parse query params
     const url = new URL(req.url);
     const search = url.searchParams.get('search');
+    const group = url.searchParams.get('group');
     const limit = parseInt(url.searchParams.get('limit') || '50', 10);
+    const role = session.user.role as string;
+    const coachId = toUserThingId(session.user.id.toString());
 
     // Базовый запрос — только верифицированные пользователи
     let query = `SELECT id, full_name, email, role, registration_date FROM users WHERE is_verified = true`;
-    const params: Record<string, unknown> = {};
+    const params: Record<string, unknown> = { coachId };
+
+    if (role === 'coach') {
+      if (group) {
+        query += `
+          AND id IN (
+            SELECT VALUE user_id
+            FROM group_members
+            WHERE group_id = type::thing($group)
+              AND group_id IN (
+                SELECT VALUE group_id
+                FROM group_coaches
+                WHERE coach_id = type::thing($coachId)
+              )
+          )`;
+        params.group = group;
+      } else {
+        query += `
+          AND id IN (
+            SELECT VALUE user_id
+            FROM group_members
+            WHERE group_id IN (
+              SELECT VALUE group_id
+              FROM group_coaches
+              WHERE coach_id = type::thing($coachId)
+            )
+          )`;
+      }
+    } else if (group) {
+      query += `
+        AND id IN (
+          SELECT VALUE user_id
+          FROM group_members
+          WHERE group_id = type::thing($group)
+        )`;
+      params.group = group;
+    }
 
     if (search) {
       query += ` AND (full_name CONTAINS $search OR email CONTAINS $search)`;
