@@ -12,6 +12,8 @@ declare module 'next-auth' {
     user: {
       id: string;
       role: string;
+      is_verified?: boolean;
+      is_blocked?: boolean;
     } & DefaultSession['user'];
   }
 
@@ -20,6 +22,8 @@ declare module 'next-auth' {
     role: string;
     email: string;
     name?: string;
+    is_verified?: boolean;
+    is_blocked?: boolean;
   }
 }
 
@@ -27,6 +31,8 @@ declare module 'next-auth/jwt' {
   interface JWT {
     id: string;
     role: string;
+    is_verified?: boolean;
+    is_blocked?: boolean;
   }
 }
 
@@ -72,6 +78,8 @@ export const authOptions: NextAuthOptions = {
               email: user.email,
               name: user.full_name || user.name,
               role: user.role || 'user',
+              is_verified: !!user.is_verified,
+              is_blocked: !!(user as Record<string, unknown>).is_blocked,
             } as NextAuthUser;
           }
         }
@@ -90,6 +98,8 @@ export const authOptions: NextAuthOptions = {
       if (user) {
         token.id = user.id;
         token.role = user.role;
+        token.is_verified = (user as unknown as { is_verified?: boolean }).is_verified;
+        token.is_blocked = (user as unknown as { is_blocked?: boolean }).is_blocked;
       }
       return token as JWT;
     },
@@ -97,6 +107,8 @@ export const authOptions: NextAuthOptions = {
       if (token && session.user) {
         session.user.id = token.id;
         session.user.role = token.role;
+        session.user.is_verified = token.is_verified;
+        session.user.is_blocked = token.is_blocked;
       }
       return session;
     },

@@ -7,6 +7,8 @@ import { getServerSession } from 'next-auth';
 import type { Session } from 'next-auth';
 import { authOptions } from '@/lib/authOptions';
 import { UserRole, hasRoleLevel, isValidUserRole } from '@/lib/rbac';
+import { getDB } from '@/lib/surreal/surreal';
+import { parseUsersRecordKey } from '@/lib/surreal/ids';
 
 type SessionWithUserAndRole = Session & {
   user: NonNullable<Session['user']> & { role?: string };
@@ -45,6 +47,28 @@ export function withRoleGuard(
       );
     }
 
+    // Если аккаунт заблокирован/не верифицирован — ведём себя как гость (401)
+    try {
+      const db = await getDB();
+      const key = parseUsersRecordKey(String((session.user as { id?: string }).id || ''));
+      if (db && key) {
+        const res = await db.query(
+          `SELECT is_verified, is_blocked FROM type::thing("users", $id) LIMIT 1;`,
+          { id: key },
+        );
+        const rows = (Array.isArray(res) ? (res[0] as unknown[]) : []) || [];
+        const row = (rows[0] as Record<string, unknown> | undefined) || undefined;
+        const isVerified = row?.is_verified;
+        const isBlocked = row?.is_blocked;
+        if (isBlocked === true || isVerified === false) {
+          return NextResponse.json({ error: 'Не авторизован' }, { status: 401 });
+        }
+      }
+    } catch {
+      // Если БД недоступна — не даём выполнять защищённые действия
+      return NextResponse.json({ error: 'Не авторизован' }, { status: 401 });
+    }
+
     const userRole = (session.user as { role?: string }).role;
 
     if (!userRole || !isValidUserRole(userRole)) {
@@ -73,6 +97,23 @@ export async function getSessionWithRole() {
   const session = await getServerSession(authOptions);
 
   if (!session?.user) {
+    return null;
+  }
+
+  // Неактивные аккаунты считаем гостями
+  try {
+    const db = await getDB();
+    const key = parseUsersRecordKey(String((session.user as { id?: string }).id || ''));
+    if (db && key) {
+      const res = await db.query(
+        `SELECT is_verified, is_blocked FROM type::thing("users", $id) LIMIT 1;`,
+        { id: key },
+      );
+      const rows = (Array.isArray(res) ? (res[0] as unknown[]) : []) || [];
+      const row = (rows[0] as Record<string, unknown> | undefined) || undefined;
+      if (row?.is_blocked === true || row?.is_verified === false) return null;
+    }
+  } catch {
     return null;
   }
 

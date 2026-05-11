@@ -98,7 +98,7 @@ export default function EventsManagementPage() {
     } else if (sessionStatus === 'unauthenticated') {
       router.push('/auth/signin');
     }
-  }, [sessionStatus, session, router]);
+  }, [sessionStatus, role, router]);
 
   // Загрузка данных
   useEffect(() => {

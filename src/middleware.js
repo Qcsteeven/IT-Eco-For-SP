@@ -13,6 +13,10 @@ export default withAuth({
     authorized: ({ token, req }) => {
       const { pathname } = req.nextUrl;
 
+      // Заблокированные/неверифицированные считаются гостями
+      if (token?.is_blocked === true) return false;
+      if (token?.is_verified === false) return false;
+
       // Проверяем, требует ли маршрут определённой роли
       for (const [routePrefix, requiredRole] of Object.entries(ROLE_ROUTES)) {
         if (pathname.startsWith(routePrefix)) {
