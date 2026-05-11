@@ -1,0 +1,127 @@
+﻿/* AtCoder section styles */
+.atcoder-section {
+  background-color: #f8f9fa;
+  border-radius: 8px;
+  padding: 20px;
+  margin-bottom: 30px;
+
+  .atcoder-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 20px;
+
+    h2 {
+      margin: 0;
+      font-size: 1.4em;
+      color: #333;
+    }
+
+    .btn-disconnect {
+      padding: 8px 16px;
+      background-color: #dc3545;
+      color: #fff;
+      border: none;
+      border-radius: 6px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: background-color 0.2s ease;
+
+      &:hover {
+        background-color: #c82333;
+      }
+    }
+  }
+
+  .atcoder-stats {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 15px;
+    margin-bottom: 20px;
+    padding: 15px;
+    background-color: #fff;
+    border-radius: 8px;
+
+    .stat-item {
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+
+      .stat-label {
+        font-size: 0.85em;
+        color: #666;
+      }
+
+      .stat-value {
+        font-size: 1.3em;
+        font-weight: bold;
+        color: #007bff;
+      }
+    }
+  }
+
+  h3 {
+    font-size: 1.2em;
+    color: #444;
+    margin-bottom: 15px;
+  }
+
+  .atcoder-submissions {
+    width: 100%;
+    border-collapse: collapse;
+    background-color: #fff;
+    border-radius: 8px;
+    overflow: hidden;
+
+    th,
+    td {
+      padding: 12px 15px;
+      text-align: left;
+      border-bottom: 1px solid #ddd;
+    }
+
+    th {
+      background-color: #007bff;
+      color: #fff;
+      font-weight: 600;
+      text-transform: uppercase;
+      font-size: 0.85em;
+    }
+
+    tbody tr:hover {
+      background-color: #f1f1f1;
+    }
+
+    .status-ac {
+      color: #28a745;
+      font-weight: bold;
+    }
+  }
+}
+
+@media (max-width: 768px) {
+  .atcoder-section {
+    .atcoder-header {
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 10px;
+
+      .btn-disconnect {
+        width: 100%;
+      }
+    }
+
+    .atcoder-stats {
+      grid-template-columns: repeat(2, 1fr);
+    }
+
+    .atcoder-submissions {
+      th,
+      td {
+        padding: 8px 10px;
+        font-size: 0.85em;
+      }
+    }
+  }
+}
+

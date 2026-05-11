@@ -60,6 +60,11 @@ export const authOptions: NextAuthOptions = {
               throw new Error('EmailNotVerified');
             }
 
+            if ((user as Record<string, unknown>).is_blocked) {
+              console.warn(`[AUTH] BLOCKED LOGIN: Email ${user.email} is blocked.`);
+              throw new Error('AccountBlocked');
+            }
+
             return {
               id: user.id,
               email: user.email,

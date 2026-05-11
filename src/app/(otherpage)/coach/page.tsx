@@ -1,11 +1,36 @@
 'use client';
 
 import Link from 'next/link';
-import { useSession } from 'next-auth/react';
-import { useRoleGuard } from '@/lib/rbac/client';
-import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
+import { useSession } from 'next-auth/react';
+import {
+  ArrowLeft,
+  CalendarCheck,
+  ChevronRight,
+  UsersRound,
+} from 'lucide-react';
+import { useEffect } from 'react';
+
+import { useRoleGuard } from '@/lib/rbac/client';
+
 import './coach.scss';
+
+const COACH_SECTIONS = [
+  {
+    href: '/coach/events',
+    title: 'Мероприятия',
+    description:
+      'Создавайте события, назначайте группы и управляйте расписанием тренировок.',
+    icon: CalendarCheck,
+  },
+  {
+    href: '/coach/groups',
+    title: 'Группы',
+    description:
+      'Собирайте участников в группы, следите за составом и переходите к аналитике.',
+    icon: UsersRound,
+  },
+] as const;
 
 export default function CoachHomePage() {
   const { status } = useSession();
@@ -25,7 +50,7 @@ export default function CoachHomePage() {
   if (!authorized) {
     return (
       <div className="coach-access-denied">
-        <h1>Доступ запрещён</h1>
+        <h1>Доступ запрещен</h1>
         <p>У вас недостаточно прав для просмотра этой страницы.</p>
         <Link href="/dashboard">Вернуться</Link>
       </div>
@@ -33,37 +58,49 @@ export default function CoachHomePage() {
   }
 
   return (
-    <div className="coach-page">
+    <main className="coach-page coach-home-page">
       <div className="coach-container">
-        <div className="coach-header">
-          <Link href="/home" className="coach-back-link">
-            ← Назад
-          </Link>
-          <div className="coach-header-content">
-            <h1>Тренерская</h1>
-          </div>
-        </div>
+        <Link href="/home" className="coach-home-back">
+          <ArrowLeft aria-hidden="true" size={18} />
+          Назад
+        </Link>
 
-        <div className="coach-section">
-          <h2>Разделы</h2>
-          <div className="coach-coach-links">
-            <Link className="coach-btn coach-btn-primary" href="/coach/events">
-              Мероприятия
-            </Link>
-            <Link className="coach-btn coach-btn-secondary" href="/coach/groups">
-              Группы
-            </Link>
-          </div>
-        </div>
+        <section className="coach-home-hero" aria-labelledby="coach-title">
+          <p className="coach-home-eyebrow">Рабочее пространство тренера</p>
+          <h1 id="coach-title">Тренерская</h1>
+          <p>
+            Управляйте учебными группами и мероприятиями в одном месте. Экран
+            повторяет структуру макета, но ведет в реальные разделы системы.
+          </p>
+        </section>
+
+        <section className="coach-home-grid" aria-label="Разделы тренерской">
+          {COACH_SECTIONS.map((section) => {
+            const Icon = section.icon;
+
+            return (
+              <Link
+                key={section.href}
+                href={section.href}
+                className="coach-home-card"
+              >
+                <span className="coach-home-card__icon">
+                  <Icon aria-hidden="true" size={28} />
+                </span>
+                <span className="coach-home-card__content">
+                  <h2>{section.title}</h2>
+                  <p>{section.description}</p>
+                </span>
+                <ChevronRight
+                  className="coach-home-card__arrow"
+                  aria-hidden="true"
+                  size={22}
+                />
+              </Link>
+            );
+          })}
+        </section>
       </div>
-      <style jsx>{`
-        .coach-coach-links {
-          display: flex;
-          gap: 1rem;
-          flex-wrap: wrap;
-        }
-      `}</style>
-    </div>
+    </main>
   );
 }
-

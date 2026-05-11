@@ -1,5 +1,5 @@
-import Link from 'next/link';
 import Image from 'next/image';
+import Link from 'next/link';
 
 import './home-features.scss';
 
@@ -12,14 +12,12 @@ type Feature = {
 const TOP: Feature[] = [
   {
     title: 'Агрегатор площадок',
-    body:
-      'Подключи аккаунты Codeforces и AtCoder — и смотри объединённый рейтинг, историю\nконтестов и статистику. Без переключения\nмежду сайтами',
+    body: 'Подключи аккаунты Codeforces и AtCoder, чтобы видеть объединенный рейтинг, историю контестов и статистику без переключения между сайтами.',
     iconSrc: '/home-assets/features/icon-integrations.svg',
   },
   {
     title: 'ИИ-ассистент',
-    body:
-      'Задай вопрос — получи ответ. ИИ\nзнает актуальные новости, даты\nсоревнований и помогает с разбором\nзадач. Работает на\nбазе Qwen с RAG-поиском',
+    body: 'Задай вопрос и получи ответ. Ассистент помогает с разбором задач, поиском материалов и подготовкой к соревнованиям.',
     iconSrc: '/home-assets/features/icon-aggregator-extra.svg',
   },
 ];
@@ -27,25 +25,27 @@ const TOP: Feature[] = [
 const BOTTOM: Feature[] = [
   {
     title: 'Система кармы',
-    body:
-      'Уникальный объединённый\nрейтинг, который учитывает\nваши достижения на всех\nплощадках. Рост на одной\nплатформе = рост общего\nрейтинга',
+    body: 'Объединенный рейтинг учитывает достижения на разных платформах. Рост на одной площадке повышает общий профиль участника.',
     iconSrc: '/home-assets/features/icon-approval.svg',
   },
   {
-    title: 'Календарь\nсоревнований',
-    body:
-      'Автоматический календарь\nвсех ближайших\nсоревнований с Codeforces,\nAtCoder и других площадок',
+    title: 'Календарь соревнований',
+    body: 'Ближайшие контесты Codeforces, AtCoder и внутренних мероприятий собраны в одном календаре с актуальными ссылками.',
     iconSrc: '/home-assets/features/icon-info.svg',
   },
   {
-    title: 'Создание\nсоревнований',
-    body:
-      'Организируй внутреннее\nсоревнование. Создавай\nзадачи, назначай дедлайны\nи отслеживай\nрезультаты',
+    title: 'Создание соревнований',
+    body: 'Тренеры могут организовывать внутренние мероприятия, назначать группы, следить за участием и результатами.',
     iconSrc: '/home-assets/features/icon-application.svg',
   },
 ];
 
-function FeatureCard({ title, body, iconSrc, small }: Feature & { small?: boolean }) {
+function FeatureCard({
+  title,
+  body,
+  iconSrc,
+  small,
+}: Feature & { small?: boolean }) {
   return (
     <article className={`feature-card ${small ? 'feature-card--small' : ''}`}>
       <Image
@@ -70,19 +70,19 @@ export default function HomeFeaturesSection() {
           Все для спортсмена-программиста в одном месте
         </h2>
         <p className="home-features__lead">
-          Мы собираем данные со всех площадок, добавляем ИИ-помощника и инструменты,
-          которых нет ни на одной платформе.
+          Мы собираем данные с разных площадок, добавляем ИИ-помощника и
+          инструменты, которых обычно не хватает на отдельных платформах.
         </p>
 
         <div className="home-features__grid-top">
-          {TOP.map((f) => (
-            <FeatureCard key={f.title} {...f} />
+          {TOP.map((feature) => (
+            <FeatureCard key={feature.title} {...feature} />
           ))}
         </div>
 
         <div className="home-features__grid-bottom">
-          {BOTTOM.map((f) => (
-            <FeatureCard key={f.title} {...f} small />
+          {BOTTOM.map((feature) => (
+            <FeatureCard key={feature.title} {...feature} small />
           ))}
         </div>
 
@@ -101,4 +101,3 @@ export default function HomeFeaturesSection() {
     </section>
   );
 }
-

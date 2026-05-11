@@ -167,14 +167,9 @@ function VerifyEmailContent() {
 
         {!isSuccess && (
           <div className={styles.linksRow}>
-            <button
-              type="button"
-              className={styles.linkBtn}
-              onClick={() => setMessage('Восстановление пароля пока не реализовано.')}
-              disabled={loading || isSuccess}
-            >
+            <Link href="/auth/forgot-password" className={styles.linkBtn}>
               Забыли пароль?
-            </button>
+            </Link>
             <Link href="/auth/signup" className={styles.linkBtn}>
               Регистрация
             </Link>
