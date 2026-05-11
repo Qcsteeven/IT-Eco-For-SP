@@ -10,12 +10,33 @@ const ROLE_ROUTES = {
 
 export default withAuth({
   callbacks: {
-    authorized: ({ token, req }) => {
+    authorized: async ({ token, req }) => {
       const { pathname } = req.nextUrl;
 
       // Заблокированные/неверифицированные считаются гостями
       if (token?.is_blocked === true) return false;
       if (token?.is_verified === false) return false;
+
+      // Если токен старый и флаги не проставлены — проверяем статус через сервер (БД)
+      if (token && (token.is_blocked == null || token.is_verified == null)) {
+        try {
+          const url = new URL('/api/internal/auth/status', req.url);
+          const res = await fetch(url, {
+            headers: {
+              cookie: req.headers.get('cookie') || '',
+            },
+          });
+          if (res.ok) {
+            const json = await res.json();
+            if (json?.active === false) return false;
+          } else {
+            // если не можем проверить — считаем гостем (fail closed)
+            return false;
+          }
+        } catch {
+          return false;
+        }
+      }
 
       // Проверяем, требует ли маршрут определённой роли
       for (const [routePrefix, requiredRole] of Object.entries(ROLE_ROUTES)) {
