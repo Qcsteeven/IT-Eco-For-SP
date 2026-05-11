@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { useSession } from 'next-auth/react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import axios from 'axios';
 import { toGroupThingId, toUserThingId } from '@/lib/surreal/ids';
 
@@ -60,6 +60,9 @@ function toISODate(local: string): string {
 export default function EventsManagementPage() {
   const { data: session, status: sessionStatus } = useSession();
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const fromAdmin = searchParams.get('from') === 'admin';
+  const role = (session?.user as { role?: string })?.role;
 
   const [events, setEvents] = useState<Event[]>([]);
   const [users, setUsers] = useState<User[]>([]);
@@ -87,7 +90,6 @@ export default function EventsManagementPage() {
   // Проверка доступа
   useEffect(() => {
     if (sessionStatus === 'authenticated') {
-      const role = (session?.user as { role?: string })?.role;
       if (role === 'coach' || role === 'admin') {
         setHasAccess(true);
       } else {
@@ -303,7 +305,7 @@ export default function EventsManagementPage() {
       <div className="events-header">
         <h1>Управление мероприятиями</h1>
         <a
-          href="/coach"
+          href={fromAdmin ? '/admin' : '/coach'}
           style={{
             marginLeft: 'auto',
             marginRight: '1rem',
@@ -312,7 +314,7 @@ export default function EventsManagementPage() {
             textDecoration: 'none',
           }}
         >
-          ← В тренерскую
+          ← {fromAdmin ? 'В админку' : 'В тренерскую'}
         </a>
         <button className="btn-primary" onClick={() => setShowForm(!showForm)}>
           {showForm ? 'Отмена' : '+ Создать мероприятие'}

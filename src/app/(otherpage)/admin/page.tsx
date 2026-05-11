@@ -51,10 +51,10 @@ export default function AdminDashboardPage() {
             <p>Ручное изменение кармы пользователей</p>
           </Link>
 
-          <Link href="/coach/contests" className="admin-card">
+          <Link href="/coach/events?from=admin" className="admin-card">
             <div className="admin-card-icon">🏆</div>
             <h3>Управление контестами</h3>
-            <p>Создание и редактирование соревнований</p>
+            <p>Создание, редактирование и управление мероприятиями</p>
           </Link>
         </div>
 
