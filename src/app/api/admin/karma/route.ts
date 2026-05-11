@@ -3,6 +3,14 @@
 import { NextResponse, NextRequest } from 'next/server';
 import { getDB } from '@/lib/surreal/surreal';
 import { withRoleGuard } from '@/lib/rbac/guard';
+import { parseUsersRecordKey } from '@/lib/surreal/ids';
+
+function getFirstStatementRows(result: unknown): unknown[] {
+  if (!Array.isArray(result) || result.length === 0) return [];
+  const first = result[0];
+  if (Array.isArray(first)) return first;
+  return [];
+}
 
 interface KarmaAdjustmentBody {
   userId: string;
@@ -32,41 +40,54 @@ const handler = withRoleGuard(
 
       const db = await getDB();
 
-      // Получаем текущего пользователя
+      const recordKey = parseUsersRecordKey(userId);
+      if (!recordKey) {
+        return NextResponse.json(
+          { ok: false, error: 'Некорректный userId' },
+          { status: 400 },
+        );
+      }
+
       const userResult = await db.query(
         'SELECT * FROM type::thing("users", $id)',
-        { id: userId }
+        { id: recordKey },
       );
 
-      const user = (userResult as unknown as Record<string, { result?: Array<Record<string, unknown>> }>)['0']?.result?.[0];
+      const rows = getFirstStatementRows(userResult);
+      const user = rows[0] as Record<string, unknown> | undefined;
 
-      if (!user) {
+      if (!user || typeof user !== 'object') {
         return NextResponse.json(
           { ok: false, error: 'Пользователь не найден' },
           { status: 404 }
         );
       }
 
-      const currentKarma = (user.karma as number) || 0;
+      const existingCf =
+        typeof user.codeforces_karma === 'number' ? user.codeforces_karma : null;
+      const legacyKarma =
+        typeof user.karma === 'number' ? user.karma : null;
+      const currentKarma = existingCf ?? legacyKarma ?? 0;
       const newKarma = currentKarma + amount;
 
-      // Обновляем карму и логируем изменение
       await db.query(
-        'UPDATE type::thing("users", $id) SET karma = $karma',
-        { id: userId, karma: newKarma }
+        'UPDATE type::thing("users", $id) SET codeforces_karma = $karma',
+        { id: recordKey, karma: newKarma },
       );
 
-      // Логируем в таблицу karma_logs (если существует)
       try {
-        await db.query(
-          'CREATE karma_logs SET user = type::thing("users", $userId), amount = $amount, reason = $reason, admin_id = $adminId, created_at = time::now()',
-          {
-            userId,
-            amount,
-            reason: reason || 'Ручная корректировка',
-            adminId: _session.user.id,
-          }
-        );
+        const adminKey = parseUsersRecordKey(String(_session.user.id));
+        if (adminKey) {
+          await db.query(
+            'CREATE karma_logs SET user = type::thing("users", $userId), amount = $amount, reason = $reason, admin_id = type::thing("users", $adminKey), created_at = time::now()',
+            {
+              userId: recordKey,
+              amount,
+              reason: reason || 'Ручная корректировка',
+              adminKey,
+            },
+          );
+        }
       } catch (logError) {
         console.warn('[Admin/Karma] Не удалось записать лог (таблица может не существовать):', logError);
       }

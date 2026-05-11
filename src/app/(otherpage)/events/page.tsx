@@ -48,10 +48,13 @@ const STATUSES = [
   { value: 'cancelled', label: 'Отменён' },
 ];
 
+/** Значение `datetime-local` — локальное время без TZ; переводим в UTC через Date. */
 function toISODate(local: string): string {
   if (!local) return '';
   if (local.endsWith('Z')) return local;
-  return local + ':00.000Z';
+  const d = new Date(local);
+  if (Number.isNaN(d.getTime())) return '';
+  return d.toISOString();
 }
 
 export default function EventsManagementPage() {

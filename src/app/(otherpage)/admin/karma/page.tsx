@@ -11,7 +11,7 @@ interface User {
   id: string;
   email: string;
   full_name: string;
-  karma: number;
+  codeforces_karma?: number;
 }
 
 interface KarmaLog {
@@ -84,8 +84,14 @@ export default function AdminKarmaPage() {
     setError(null);
     setSuccess(null);
 
-    if (!selectedUserId || !karmaAmount) {
+    if (!selectedUserId || karmaAmount.trim() === '') {
       setError('Выберите пользователя и укажите сумму');
+      return;
+    }
+
+    const amountNum = parseInt(karmaAmount, 10);
+    if (Number.isNaN(amountNum)) {
+      setError('Укажите целое число для изменения кармы');
       return;
     }
 
@@ -95,7 +101,7 @@ export default function AdminKarmaPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           userId: selectedUserId,
-          amount: parseInt(karmaAmount, 10),
+          amount: amountNum,
           reason: karmaReason || 'Ручная корректировка',
         }),
       });
@@ -178,7 +184,8 @@ export default function AdminKarmaPage() {
                   <option value="">Выберите пользователя</option>
                   {users.map((user) => (
                     <option key={user.id} value={user.id}>
-                      {user.email} {user.full_name ? `(${user.full_name})` : ''} — Карма: {user.karma || 0}
+                      {user.email} {user.full_name ? `(${user.full_name})` : ''} — Карма:{' '}
+                      {user.codeforces_karma ?? 0}
                     </option>
                   ))}
                 </select>

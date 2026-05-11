@@ -181,10 +181,6 @@ export default function AdminUsersPage() {
   const handleConfirmDelete = async () => {
     if (!showDeleteModal) return;
 
-    if (!confirm(`Вы уверены, что хотите удалить пользователя ${showDeleteModal.email}?`)) {
-      return;
-    }
-
     try {
       setError(null);
       const res = await fetch(`/api/admin/users/${showDeleteModal.id}`, {
