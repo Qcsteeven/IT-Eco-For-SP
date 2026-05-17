@@ -22,11 +22,21 @@ function rowsFromQuery(result: unknown): UserRow[] {
   if (!Array.isArray(result)) return [];
 
   const first = result[0] as { result?: unknown } | undefined;
-  if (first && typeof first === 'object' && Array.isArray(first.result)) {
-    return first.result.filter((row): row is UserRow => typeof row === 'object' && row !== null);
+  if (Array.isArray(first)) {
+    return first.filter(
+      (row): row is UserRow => typeof row === 'object' && row !== null,
+    );
   }
 
-  return result.filter((row): row is UserRow => typeof row === 'object' && row !== null);
+  if (first && typeof first === 'object' && Array.isArray(first.result)) {
+    return first.result.filter(
+      (row): row is UserRow => typeof row === 'object' && row !== null,
+    );
+  }
+
+  return result.filter(
+    (row): row is UserRow => typeof row === 'object' && row !== null,
+  );
 }
 
 function normalizeUserId(value: unknown): string {
@@ -34,7 +44,9 @@ function normalizeUserId(value: unknown): string {
 
   if (typeof value === 'string') {
     const decoded = decodeURIComponent(value);
-    return decoded.includes(':') ? decoded.split(':').pop() ?? decoded : decoded;
+    return decoded.includes(':')
+      ? (decoded.split(':').pop() ?? decoded)
+      : decoded;
   }
 
   if (typeof value === 'object') {
@@ -56,6 +68,7 @@ function serializeUser(row: UserRow) {
     is_blocked: Boolean(row.is_blocked),
     registration_date: String(row.registration_date ?? ''),
     bscp_rating: Number(row.bscp_rating ?? row.karma ?? 0),
+    karma: Number(row.karma ?? 0),
   };
 }
 
@@ -84,7 +97,9 @@ const getHandler = withRoleGuard(
   async () => {
     try {
       const db = await getDB();
-      const result = await db.query(`${selectUserFields} ORDER BY registration_date DESC`);
+      const result = await db.query(
+        `${selectUserFields} ORDER BY registration_date DESC`,
+      );
       const users = rowsFromQuery(result).map(serializeUser);
 
       return NextResponse.json({
@@ -92,7 +107,8 @@ const getHandler = withRoleGuard(
         data: users,
       });
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : String(error);
+      const errorMessage =
+        error instanceof Error ? error.message : String(error);
       console.error('[Admin/Users] Failed to load users:', errorMessage);
       return NextResponse.json(
         { ok: false, error: 'Не удалось получить список пользователей' },
@@ -111,7 +127,9 @@ const postHandler = withRoleGuard(
       const fullName = body.full_name?.trim() ?? '';
       const password = body.password ?? '';
       const role: UserRole =
-        body.role && isValidUserRole(body.role) ? body.role : getDefaultUserRole();
+        body.role && isValidUserRole(body.role)
+          ? body.role
+          : getDefaultUserRole();
       const rating = getRating(body.bscp_rating);
 
       if (!email || !password || !fullName) {
@@ -137,7 +155,9 @@ const postHandler = withRoleGuard(
 
       const db = await getDB();
       const existing = rowsFromQuery(
-        await db.query('SELECT id FROM users WHERE email = $email LIMIT 1', { email }),
+        await db.query('SELECT id FROM users WHERE email = $email LIMIT 1', {
+          email,
+        }),
       );
 
       if (existing.length > 0) {
@@ -164,7 +184,9 @@ const postHandler = withRoleGuard(
       });
 
       const created = rowsFromQuery(
-        await db.query(`${selectUserFields} WHERE email = $email LIMIT 1`, { email }),
+        await db.query(`${selectUserFields} WHERE email = $email LIMIT 1`, {
+          email,
+        }),
       )[0];
 
       return NextResponse.json(
@@ -176,7 +198,8 @@ const postHandler = withRoleGuard(
         { status: 201 },
       );
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : String(error);
+      const errorMessage =
+        error instanceof Error ? error.message : String(error);
       console.error('[Admin/Users] Failed to create user:', errorMessage);
       return NextResponse.json(
         { ok: false, error: 'Не удалось создать пользователя' },

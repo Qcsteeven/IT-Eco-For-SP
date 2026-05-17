@@ -23,18 +23,21 @@ const MANAGEMENT_CARDS = [
     title: 'Пользователи',
     text: 'Создание аккаунтов, роли, блокировка и ручная настройка рейтинга.',
     icon: Users,
+    tone: 'violet',
   },
   {
     href: '/admin/karma',
     title: 'Корректировка кармы',
     text: 'Ручные правки кармы с понятным контекстом для администратора.',
     icon: Star,
+    tone: 'cyan',
   },
   {
     href: '/coach/events',
     title: 'Мероприятия',
-    text: 'Контроль внутренних событий, групп участников и расписания.',
+    text: 'Внутренние события, группы участников, расписание и синхронизация результатов.',
     icon: CalendarCheck,
+    tone: 'green',
   },
 ] as const;
 
@@ -43,16 +46,19 @@ const QUICK_ACTIONS = [
     href: '/admin/users',
     title: 'Добавить пользователя',
     icon: UserPlus,
+    variant: 'primary',
   },
   {
     href: '/admin/karma',
     title: 'Изменить карму',
     icon: Sparkles,
+    variant: 'secondary',
   },
   {
     href: '/coach/events',
     title: 'Открыть мероприятия',
     icon: CalendarCheck,
+    variant: 'secondary',
   },
 ] as const;
 
@@ -84,28 +90,26 @@ export default function AdminDashboardPage() {
   return (
     <main className="admin-dashboard">
       <div className="admin-container">
-        <section className="admin-hero" aria-labelledby="admin-title">
-          <div>
-            <p className="admin-eyebrow">
-              <ShieldCheck aria-hidden="true" size={18} />
-              Администрирование
-            </p>
-            <h1 id="admin-title">Панель администратора</h1>
-            <p className="admin-subtitle">
-              Управляйте пользователями, кармой и мероприятиями из одного
-              рабочего экрана.
-            </p>
-          </div>
-        </section>
+        <header className="admin-title-row" aria-labelledby="admin-title">
+          <p>
+            <ShieldCheck aria-hidden="true" size={18} />
+            Администрирование
+          </p>
+          <h1 id="admin-title">Панель администратора</h1>
+        </header>
 
         <section className="admin-grid" aria-label="Разделы администрирования">
           {MANAGEMENT_CARDS.map((card) => {
             const Icon = card.icon;
 
             return (
-              <Link key={card.href} href={card.href} className="admin-card">
-                <span className="admin-card-icon">
-                  <Icon aria-hidden="true" size={24} />
+              <Link
+                key={card.href}
+                href={card.href}
+                className={`admin-card admin-card--${card.tone}`}
+              >
+                <span className="admin-card__icon">
+                  <Icon aria-hidden="true" size={30} />
                 </span>
                 <span>
                   <h2>{card.title}</h2>
@@ -117,16 +121,10 @@ export default function AdminDashboardPage() {
         </section>
 
         <section
-          className="admin-section"
+          className="admin-actions-section"
           aria-labelledby="admin-actions-title"
         >
-          <div>
-            <h2 id="admin-actions-title">Быстрые действия</h2>
-            <p>
-              Частые задачи вынесены отдельно, чтобы не искать их по разделам.
-            </p>
-          </div>
-
+          <h2 id="admin-actions-title">Быстрые действия</h2>
           <div className="admin-actions">
             {QUICK_ACTIONS.map((action) => {
               const Icon = action.icon;
@@ -135,7 +133,7 @@ export default function AdminDashboardPage() {
                 <Link
                   key={action.href}
                   href={action.href}
-                  className="admin-btn"
+                  className={`admin-btn admin-btn--${action.variant}`}
                 >
                   <Icon aria-hidden="true" size={18} />
                   {action.title}

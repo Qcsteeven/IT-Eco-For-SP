@@ -21,11 +21,21 @@ function rowsFromQuery(result: unknown): UserRow[] {
   if (!Array.isArray(result)) return [];
 
   const first = result[0] as { result?: unknown } | undefined;
-  if (first && typeof first === 'object' && Array.isArray(first.result)) {
-    return first.result.filter((row): row is UserRow => typeof row === 'object' && row !== null);
+  if (Array.isArray(first)) {
+    return first.filter(
+      (row): row is UserRow => typeof row === 'object' && row !== null,
+    );
   }
 
-  return result.filter((row): row is UserRow => typeof row === 'object' && row !== null);
+  if (first && typeof first === 'object' && Array.isArray(first.result)) {
+    return first.result.filter(
+      (row): row is UserRow => typeof row === 'object' && row !== null,
+    );
+  }
+
+  return result.filter(
+    (row): row is UserRow => typeof row === 'object' && row !== null,
+  );
 }
 
 function normalizeUserId(value: unknown): string {
@@ -33,7 +43,9 @@ function normalizeUserId(value: unknown): string {
 
   if (typeof value === 'string') {
     const decoded = decodeURIComponent(value);
-    return decoded.includes(':') ? decoded.split(':').pop() ?? decoded : decoded;
+    return decoded.includes(':')
+      ? (decoded.split(':').pop() ?? decoded)
+      : decoded;
   }
 
   if (typeof value === 'object') {
@@ -60,6 +72,7 @@ function serializeUser(row: UserRow) {
     is_blocked: Boolean(row.is_blocked),
     registration_date: String(row.registration_date ?? ''),
     bscp_rating: Number(row.bscp_rating ?? row.karma ?? 0),
+    karma: Number(row.karma ?? 0),
   };
 }
 
@@ -110,7 +123,8 @@ const patchHandler = withRoleGuard(
         updateData.email = email;
       }
 
-      if (body.full_name !== undefined) updateData.full_name = body.full_name.trim();
+      if (body.full_name !== undefined)
+        updateData.full_name = body.full_name.trim();
       if (body.phone !== undefined) updateData.phone = body.phone.trim();
 
       if (body.role !== undefined) {
@@ -123,8 +137,10 @@ const patchHandler = withRoleGuard(
         updateData.role = body.role as UserRole;
       }
 
-      if (body.is_verified !== undefined) updateData.is_verified = Boolean(body.is_verified);
-      if (body.is_blocked !== undefined) updateData.is_blocked = Boolean(body.is_blocked);
+      if (body.is_verified !== undefined)
+        updateData.is_verified = Boolean(body.is_verified);
+      if (body.is_blocked !== undefined)
+        updateData.is_blocked = Boolean(body.is_blocked);
 
       if (body.bscp_rating !== undefined) {
         const rating = getRating(body.bscp_rating);
@@ -194,7 +210,8 @@ const patchHandler = withRoleGuard(
         message: 'Пользователь обновлен',
       });
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : String(error);
+      const errorMessage =
+        error instanceof Error ? error.message : String(error);
       console.error('[Admin/Users] Failed to update user:', errorMessage);
       return NextResponse.json(
         { ok: false, error: 'Не удалось обновить пользователя' },
@@ -225,7 +242,8 @@ const deleteHandler = withRoleGuard(
         message: 'Пользователь удален',
       });
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : String(error);
+      const errorMessage =
+        error instanceof Error ? error.message : String(error);
       console.error('[Admin/Users] Failed to delete user:', errorMessage);
       return NextResponse.json(
         { ok: false, error: 'Не удалось удалить пользователя' },

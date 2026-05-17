@@ -6,6 +6,55 @@ import axios from 'axios';
 import type { Event } from '@/lib/types/event';
 import { toGroupThingId, toUserThingId } from '@/lib/surreal/ids';
 
+function toEventThingId(id: string): string {
+  const value = (id || '').trim();
+  if (!value) return '';
+  return value.startsWith('events:') ? value : `events:${value}`;
+}
+
+function recordId(value: unknown): string {
+  if (value == null) return '';
+  if (typeof value === 'string') {
+    try {
+      return decodeURIComponent(value);
+    } catch {
+      return value;
+    }
+  }
+
+  if (typeof value === 'object') {
+    const record = value as Record<string, unknown>;
+    if (typeof record.tb === 'string' && record.id != null) {
+      return `${record.tb}:${String(record.id)}`;
+    }
+
+    if (record.id != null) return recordId(record.id);
+  }
+
+  return String(value);
+}
+
+function rowsFromQuery<T extends object>(result: unknown): T[] {
+  if (!Array.isArray(result)) return [];
+
+  const first = result[0] as { result?: unknown } | unknown[] | undefined;
+  if (Array.isArray(first)) {
+    return first.filter(
+      (row): row is T => typeof row === 'object' && row !== null,
+    );
+  }
+
+  if (first && typeof first === 'object' && Array.isArray(first.result)) {
+    return first.result.filter(
+      (row): row is T => typeof row === 'object' && row !== null,
+    );
+  }
+
+  return result.filter(
+    (row): row is T => typeof row === 'object' && row !== null,
+  );
+}
+
 /**
  * POST /api/events/[id]/sync-results
  *
@@ -41,7 +90,8 @@ export async function POST(req: NextRequest) {
     }
 
     const url = new URL(req.url);
-    const eventId = url.pathname.split('/')[3]; // /api/events/[id]/sync-results
+    const rawId = decodeURIComponent(url.pathname.split('/')[3] || '');
+    const eventId = toEventThingId(rawId);
 
     if (!eventId) {
       return NextResponse.json(
@@ -54,11 +104,12 @@ export async function POST(req: NextRequest) {
     if (!db) throw new Error('Не удалось подключиться к базе данных SurrealDB');
 
     // Получаем мероприятие
-    const eventResult = await db.query(
-      `SELECT * FROM type::thing($tableName, $id)`,
-      { tableName: 'events', id: eventId },
-    );
-    const event = (eventResult[0] as unknown as Event[])?.[0];
+    const eventResult = await db.query(`SELECT * FROM type::thing($id)`, {
+      id: eventId,
+    });
+    const event = rowsFromQuery<Event & Record<string, unknown>>(
+      eventResult,
+    )[0];
 
     if (!event) {
       return NextResponse.json(
@@ -69,8 +120,8 @@ export async function POST(req: NextRequest) {
 
     // Проверяем доступы coach
     if (session.user.role === 'coach') {
-      const createdBy = event.created_by as string | undefined;
-      const userId = `users:${session.user.id}`;
+      const createdBy = toUserThingId(recordId(event.created_by));
+      const userId = toUserThingId(session.user.id.toString());
       if (createdBy !== userId) {
         return NextResponse.json(
           {
@@ -96,39 +147,46 @@ export async function POST(req: NextRequest) {
 
     // participant_snapshot: фиксируем состав участников для результатов
     let participantList =
-      ((event as unknown as { participant_snapshot?: string[] }).participant_snapshot as
-        | string[]
-        | undefined) || [];
+      ((event as unknown as { participant_snapshot?: string[] })
+        .participant_snapshot as string[] | undefined) || [];
 
     if (participantList.length === 0) {
-      const direct = ((event.participant_list as string[]) || [])
+      const direct = (
+        Array.isArray(event.participant_list) ? event.participant_list : []
+      )
+        .map(recordId)
         .map(toUserThingId)
         .filter(Boolean);
 
-      const targetGroups =
-        ((event as unknown as { target_groups?: string[] }).target_groups as
-          | string[]
-          | undefined) || [];
-      const normalizedGroups = targetGroups.map(toGroupThingId).filter(Boolean);
+      const targetGroups = Array.isArray(event.target_groups)
+        ? event.target_groups
+        : [];
+      const normalizedGroups = targetGroups
+        .map(recordId)
+        .map(toGroupThingId)
+        .filter(Boolean);
 
       let fromGroups: string[] = [];
       if (normalizedGroups.length > 0) {
         const membersRes = await db.query(
           `
-          LET $g = array::map($groupIds, |$id| type::thing($id));
-          SELECT VALUE user_id FROM group_members WHERE group_id IN $g;
+          SELECT user_id
+          FROM group_members
+          WHERE group_id IN array::map($groupIds, |$id| type::thing($id));
           `,
           { groupIds: normalizedGroups },
         );
-        fromGroups = ((membersRes[0] as unknown as string[]) || []).map(toUserThingId).filter(Boolean);
+        fromGroups = rowsFromQuery<{ user_id?: unknown }>(membersRes)
+          .map((row) => toUserThingId(recordId(row.user_id)))
+          .filter(Boolean);
       }
 
       participantList = Array.from(new Set([...direct, ...fromGroups]));
 
       // Сохраняем снапшот, чтобы состав группы не менял итоги задним числом
       await db.query(
-        `UPDATE type::thing($tableName, $id) SET participant_snapshot = $snapshot, updated_at = time::now();`,
-        { tableName: 'events', id: eventId, snapshot: participantList },
+        `UPDATE type::thing($id) SET participant_snapshot = $snapshot, updated_at = time::now();`,
+        { id: eventId, snapshot: participantList },
       );
     }
     const startTime = event.start_time_utc;

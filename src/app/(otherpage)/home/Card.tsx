@@ -1,7 +1,5 @@
-// Card.tsx
 import './card.scss';
 
-// 1. Интерфейс для пропсов компонента Card
 export interface CardProps {
   event: {
     title: string;
@@ -13,11 +11,17 @@ export interface CardProps {
   };
 }
 
-// Вспомогательная функция для форматирования даты (если нужно)
+const STATUS_LABELS: Record<string, string> = {
+  upcoming: 'Скоро',
+  active: 'Идет сейчас',
+  completed: 'Завершено',
+  cancelled: 'Отменено',
+};
+
 const formatDate = (dateString: string) => {
-  // Простая реализация форматирования для примера:
   const date = new Date(dateString);
-  // Пример: 7 декабря 2025, 02:30 UTC
+  if (Number.isNaN(date.getTime())) return '-';
+
   return date.toLocaleString('ru-RU', {
     day: 'numeric',
     month: 'long',
@@ -28,7 +32,6 @@ const formatDate = (dateString: string) => {
   });
 };
 
-// 2. Деструктурируем пропсы
 export default function Card({ event }: CardProps) {
   return (
     <div className="contest-card">
@@ -36,8 +39,9 @@ export default function Card({ event }: CardProps) {
         <div className="contest-title">{event.title}</div>
         <div className="contest-platform">{event.platform}</div>
       </div>
-      {/* Класс статуса может зависеть от значения event.status для стилизации */}
-      <div className="contest-status">{event.status}</div>
+      <div className="contest-status">
+        {STATUS_LABELS[event.status] || event.status}
+      </div>
       <div className="contest-body">
         <div className="contest-dates">
           <div className="contest-date">
@@ -50,9 +54,10 @@ export default function Card({ event }: CardProps) {
         <a
           href={event.registration_link}
           target="_blank"
+          rel="noreferrer"
           className="btn-register"
         >
-          Регистрация →
+          Регистрация
         </a>
       </div>
     </div>

@@ -3,85 +3,76 @@ import { getServerSession } from 'next-auth';
 import { getDB } from '@/lib/surreal/surreal';
 import { authOptions } from '@/lib/authOptions';
 import { toGroupThingId, toUserThingId } from '@/lib/surreal/ids';
+import { listCalendarEvents } from '@/lib/calendar/events';
 import type {
+  CreateEventData,
   Event,
   EventVisibility,
-  CreateEventData,
 } from '@/lib/types/event';
 
-/**
- * GET /api/events — обратная совместимость.
- * Перенаправляет на основной эндпоинт /api/contests.
- *
- * TODO: После обновления всех клиентов (UpcomingEvents)
- * удалить этот файл и использовать напрямую /api/contests.
- */
-export async function GET() {
-  try {
-    const baseUrl = process.env.NEXTAUTH_URL || 'http://localhost:3000';
-    const response = await fetch(`${baseUrl}/api/contests`, {
-      cache: 'no-store',
-    });
+function rowsFromQuery(result: unknown): Record<string, unknown>[] {
+  if (!Array.isArray(result)) return [];
 
-    if (!response.ok) {
-      return NextResponse.json(
-        { error: 'Failed to fetch events' },
-        { status: response.status },
-      );
-    }
-
-    const result = await response.json();
-    return NextResponse.json(result, { status: 200 });
-  } catch (err: unknown) {
-    const errorMessage = err instanceof Error ? err.message : String(err);
-    console.error('[API /events GET] Error:', errorMessage);
-    return NextResponse.json(
-      { ok: false, error: errorMessage },
-      { status: 500 },
+  const first = result[0] as { result?: unknown } | unknown[] | undefined;
+  if (Array.isArray(first)) {
+    return first.filter(
+      (row): row is Record<string, unknown> =>
+        typeof row === 'object' && row !== null,
     );
   }
+
+  if (first && typeof first === 'object' && Array.isArray(first.result)) {
+    return first.result.filter(
+      (row): row is Record<string, unknown> =>
+        typeof row === 'object' && row !== null,
+    );
+  }
+
+  return result.filter(
+    (row): row is Record<string, unknown> =>
+      typeof row === 'object' && row !== null,
+  );
 }
 
-/**
- * POST /api/events
- *
- * Создание мероприятия. Доступно только coach и admin.
- *
- * Тело запроса:
- * - title: string (обязательно)
- * - platform: 'codeforces' | 'atcoder' | 'custom' | 'other' (обязательно)
- * - status: 'upcoming' | 'active' | 'completed' | 'cancelled' (обязательно)
- * - start_time_utc: string ISO date (обязательно)
- * - end_time_utc: string ISO date (обязательно)
- * - external_link: string URL (обязательно)
- * - visibility_type: 'public' | 'private' (обязательно)
- * - participant_list: string[] (для private)
- * - description?: string
- * - platform_contest_id?: string
- */
+function jsonError(error: string, status: number) {
+  return NextResponse.json({ ok: false, error }, { status });
+}
+
+function toIsoDate(value: string) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return null;
+  return date.toISOString();
+}
+
+export async function GET(req: NextRequest) {
+  const { searchParams } = new URL(req.url);
+  const events = await listCalendarEvents({
+    from: searchParams.get('from'),
+    to: searchParams.get('to'),
+    includeCodeforces: searchParams.get('includeCodeforces') === 'true',
+    includeContests: searchParams.get('includeContests') === 'true',
+    includeEvents: searchParams.get('includeEvents') !== 'false',
+  });
+
+  return NextResponse.json({ ok: true, data: events }, { status: 200 });
+}
+
 export async function POST(req: NextRequest) {
   let rawBodyForLog: unknown = undefined;
+
   try {
     const session = await getServerSession(authOptions);
     if (!session?.user?.id) {
-      return NextResponse.json(
-        { ok: false, error: 'Неавторизован' },
-        { status: 401 },
-      );
+      return jsonError('Не авторизован', 401);
     }
 
-    // Только coach и admin могут создавать мероприятия
     if (session.user.role !== 'coach' && session.user.role !== 'admin') {
-      return NextResponse.json(
-        { ok: false, error: 'Доступно только тренерам и администраторам' },
-        { status: 403 },
-      );
+      return jsonError('Доступно только тренерам и администраторам', 403);
     }
 
     rawBodyForLog = await req.json().catch(() => ({}));
     const body = rawBodyForLog as CreateEventData;
 
-    // Валидация обязательных полей
     const requiredFields: (keyof CreateEventData)[] = [
       'title',
       'platform',
@@ -94,24 +85,27 @@ export async function POST(req: NextRequest) {
 
     for (const field of requiredFields) {
       if (!body[field]) {
-        return NextResponse.json(
-          { ok: false, error: `Отсутствует обязательное поле: ${field}` },
-          { status: 400 },
-        );
+        return jsonError(`Отсутствует обязательное поле: ${field}`, 400);
       }
     }
 
-    // Валидация visibility_type
     const validVisibility: EventVisibility[] = ['public', 'private'];
     if (!validVisibility.includes(body.visibility_type)) {
-      return NextResponse.json(
-        {
-          ok: false,
-          error:
-            'Недопустимый тип видимости. Используйте "public" или "private"',
-        },
-        { status: 400 },
+      return jsonError(
+        'Недопустимый тип видимости. Используйте public или private',
+        400,
       );
+    }
+
+    const startDateTime = toIsoDate(body.start_time_utc);
+    const endDateTime = toIsoDate(body.end_time_utc);
+
+    if (!startDateTime || !endDateTime) {
+      return jsonError('Некорректная дата начала или окончания', 400);
+    }
+
+    if (new Date(endDateTime).getTime() <= new Date(startDateTime).getTime()) {
+      return jsonError('Окончание должно быть позже начала мероприятия', 400);
     }
 
     const normalizedParticipants = (body.participant_list || [])
@@ -121,26 +115,21 @@ export async function POST(req: NextRequest) {
       .map(toGroupThingId)
       .filter(Boolean);
 
-    // Валидация для private: participant_list или target_groups (или оба)
-    if (body.visibility_type === 'private') {
-      if (normalizedParticipants.length === 0 && normalizedGroups.length === 0) {
-        return NextResponse.json(
-          {
-            ok: false,
-            error:
-              'Для private мероприятия необходимо указать participant_list или target_groups',
-          },
-          { status: 400 },
-        );
-      }
+    if (
+      body.visibility_type === 'private' &&
+      normalizedParticipants.length === 0 &&
+      normalizedGroups.length === 0
+    ) {
+      return jsonError(
+        'Для private мероприятия необходимо указать participant_list или target_groups',
+        400,
+      );
     }
 
     const db = await getDB();
-    if (!db) throw new Error('Не удалось подключиться к базе данных SurrealDB');
-
-    // ISO строку приводим к datetime на стороне Surreal (совместимо с разными версиями)
-    const startDateTime = new Date(body.start_time_utc).toISOString();
-    const endDateTime = new Date(body.end_time_utc).toISOString();
+    if (!db) {
+      throw new Error('Не удалось подключиться к базе данных SurrealDB');
+    }
 
     const result = await db.query(
       `CREATE events CONTENT {
@@ -155,28 +144,32 @@ export async function POST(req: NextRequest) {
         participant_list: $participant_list,
         target_groups: $target_groups,
         participant_snapshot: NONE,
-        created_by: type::thing("users", $created_by_id),
+        created_by: type::thing($created_by_id),
         platform_contest_id: $platform_contest_id,
         created_at: time::now(),
         updated_at: time::now()
       };`,
       {
-        title: body.title,
-        description: body.description || '',
+        title: body.title.trim(),
+        description: body.description?.trim() || '',
         platform: body.platform,
         status: body.status,
         start_time_utc: startDateTime,
         end_time_utc: endDateTime,
-        external_link: body.external_link,
+        external_link: body.external_link.trim(),
         visibility_type: body.visibility_type,
-        participant_list: normalizedParticipants,
-        target_groups: normalizedGroups,
-        created_by_id: session.user.id,
+        participant_list:
+          body.visibility_type === 'private' ? normalizedParticipants : [],
+        target_groups:
+          body.visibility_type === 'private' ? normalizedGroups : [],
+        created_by_id: toUserThingId(session.user.id.toString()),
         platform_contest_id: body.platform_contest_id || '',
       },
     );
 
-    const createdEvent = (result[0] as unknown as Event[])?.[0];
+    const createdEvent = rowsFromQuery(result)[0] as unknown as
+      | Event
+      | undefined;
 
     return NextResponse.json(
       { ok: true, data: createdEvent, message: 'Мероприятие создано' },
@@ -185,10 +178,11 @@ export async function POST(req: NextRequest) {
   } catch (err: unknown) {
     const errorMessage = err instanceof Error ? err.message : String(err);
     console.error('API POST /events Error:', errorMessage);
-    console.error('Request body:', JSON.stringify(rawBodyForLog ?? {}, null, 2));
-    return NextResponse.json(
-      { ok: false, error: `Ошибка сервера: ${errorMessage}` },
-      { status: 500 },
+    console.error(
+      'Request body:',
+      JSON.stringify(rawBodyForLog ?? {}, null, 2),
     );
+
+    return jsonError(`Ошибка сервера: ${errorMessage}`, 500);
   }
 }

@@ -1,17 +1,20 @@
 'use client';
 
+import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
 import {
   BookOpen,
-  CheckCircle2,
   ChevronDown,
   ChevronUp,
+  ExternalLink,
   FileText,
-  FolderOpen,
   Loader2,
   Search,
 } from 'lucide-react';
-import type { KnowledgeGroup, KnowledgeMaterial } from '@/lib/knowledge/materials';
+import type {
+  KnowledgeGroup,
+  KnowledgeMaterial,
+} from '@/lib/knowledge/materials';
 import './base.scss';
 
 type ApiResponse<T> = {
@@ -23,8 +26,8 @@ type ApiResponse<T> = {
 export default function BasePage() {
   const [groups, setGroups] = useState<KnowledgeGroup[]>([]);
   const [openedGroups, setOpenedGroups] = useState<string[]>([]);
-  const [activeGroupId, setActiveGroupId] = useState<string | null>(null);
-  const [selectedMaterialId, setSelectedMaterialId] = useState<string | null>(null);
+  const [previewMaterial, setPreviewMaterial] =
+    useState<KnowledgeMaterial | null>(null);
   const [query, setQuery] = useState('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -37,37 +40,27 @@ export default function BasePage() {
     try {
       setLoading(true);
       setError(null);
-      const res = await fetch('/api/knowledge');
+      const res = await fetch('/api/knowledge', { cache: 'no-store' });
       const data = (await res.json()) as ApiResponse<KnowledgeGroup[]>;
-      if (!data.ok) throw new Error(data.error || 'Не удалось загрузить материалы');
+
+      if (!res.ok || !data.ok) {
+        throw new Error(data.error || 'Не удалось загрузить учебные материалы');
+      }
 
       const loadedGroups = data.data || [];
       setGroups(loadedGroups);
-      setOpenedGroups(loadedGroups.map((group) => group.id));
-
-      const firstMaterial = loadedGroups[0]?.materials[0];
-      setActiveGroupId(loadedGroups[0]?.id ?? null);
-      setSelectedMaterialId(firstMaterial?.id ?? null);
+      setOpenedGroups(loadedGroups[0] ? [loadedGroups[0].id] : []);
+      setPreviewMaterial(loadedGroups[0]?.materials[0] ?? null);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Не удалось загрузить материалы');
+      setError(
+        err instanceof Error
+          ? err.message
+          : 'Не удалось загрузить учебные материалы',
+      );
     } finally {
       setLoading(false);
     }
   }
-
-  const allOpened = groups.length > 0 && openedGroups.length === groups.length;
-
-  const materials = useMemo(
-    () => groups.flatMap((group) => group.materials.map((material) => ({ ...material, groupId: group.id }))),
-    [groups],
-  );
-
-  const selectedMaterial = useMemo<KnowledgeMaterial | null>(
-    () => materials.find((material) => material.id === selectedMaterialId) ?? null,
-    [materials, selectedMaterialId],
-  );
-
-  const activeGroup = groups.find((group) => group.id === activeGroupId) ?? groups[0] ?? null;
 
   const visibleGroups = useMemo(() => {
     const normalizedQuery = query.trim().toLowerCase();
@@ -77,7 +70,14 @@ export default function BasePage() {
       .map((group) => ({
         ...group,
         materials: group.materials.filter((material) =>
-          `${material.title} ${material.description} ${material.level} ${material.theory.join(' ')}`
+          [
+            material.title,
+            material.description,
+            material.level,
+            material.goals.join(' '),
+            material.sections.map((section) => section.title).join(' '),
+          ]
+            .join(' ')
             .toLowerCase()
             .includes(normalizedQuery),
         ),
@@ -91,199 +91,157 @@ export default function BasePage() {
         ? current.filter((id) => id !== groupId)
         : [...current, groupId],
     );
-    setActiveGroupId(groupId);
   };
 
-  const toggleAll = () => {
-    setOpenedGroups(allOpened ? [] : groups.map((group) => group.id));
-  };
-
-  const openMaterial = (groupId: string, materialId: string) => {
-    setActiveGroupId(groupId);
-    setSelectedMaterialId(materialId);
-    setOpenedGroups((current) => (current.includes(groupId) ? current : [...current, groupId]));
+  const setMaterialPreview = (groupId: string, material: KnowledgeMaterial) => {
+    setPreviewMaterial(material);
+    setOpenedGroups((current) =>
+      current.includes(groupId) ? current : [...current, groupId],
+    );
   };
 
   return (
     <section className="knowledge-page">
       <div className="knowledge-page__inner">
-        <div className="knowledge-page__header">
+        <header className="knowledge-page__header">
           <div>
-            <p className="knowledge-page__eyebrow">База знаний</p>
             <h1>Учебные материалы</h1>
+            <p>
+              Подборка коротких маршрутов для старта, тренировки алгоритмов и
+              работы с Codeforces.
+            </p>
           </div>
-          <button
-            type="button"
-            className="knowledge-page__toggle"
-            onClick={toggleAll}
-            disabled={loading || groups.length === 0}
-          >
-            {allOpened ? (
-              <>
-                <ChevronUp size={18} />
-                Свернуть
-              </>
-            ) : (
-              <>
-                <ChevronDown size={18} />
-                Развернуть
-              </>
-            )}
-          </button>
-        </div>
 
-        <div className="knowledge-page__search">
-          <Search size={20} aria-hidden="true" />
-          <input
-            value={query}
-            onChange={(event) => setQuery(event.target.value)}
-            placeholder="Поиск по материалам"
-            type="search"
-          />
-        </div>
+          <label className="knowledge-search">
+            <Search size={20} aria-hidden="true" />
+            <input
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder="Поиск по материалам"
+              type="search"
+            />
+          </label>
+        </header>
 
         {loading ? (
-          <div className="knowledge-loading">
+          <div className="knowledge-state knowledge-state--loading">
             <Loader2 size={24} />
             Загрузка материалов...
           </div>
         ) : error ? (
-          <div className="knowledge-empty">
-            <FileText size={28} />
-            <p>{error}</p>
+          <div className="knowledge-state knowledge-state--error">
+            <FileText size={24} />
+            {error}
           </div>
         ) : (
-          <div className="knowledge-page__layout">
-            <aside className="knowledge-groups" aria-label="Группы материалов">
-              {groups.map((group) => {
-                const isActive = group.id === activeGroup?.id;
-                const isOpen = openedGroups.includes(group.id);
-
-                return (
-                  <button
-                    key={group.id}
-                    type="button"
-                    className={`knowledge-groups__item ${isActive ? 'is-active' : ''}`}
-                    onClick={() => toggleGroup(group.id)}
-                  >
-                    <span className="knowledge-groups__icon">
-                      <FolderOpen size={20} />
-                    </span>
-                    <span>
-                      <strong>{group.title}</strong>
-                      <small>{group.materials.length} материала</small>
-                    </span>
-                    {isOpen ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
-                  </button>
-                );
-              })}
-            </aside>
-
-            <div className="knowledge-content">
-              <div className="knowledge-content__intro">
-                <BookOpen size={28} aria-hidden="true" />
-                <div>
-                  <h2>{activeGroup?.title ?? 'Материалы'}</h2>
-                  <p>
-                    {activeGroup?.subtitle ??
-                      'Выберите материал слева, чтобы открыть его содержание.'}
-                  </p>
+          <div className="knowledge-layout">
+            <div className="knowledge-accordion">
+              {visibleGroups.length === 0 ? (
+                <div className="knowledge-state">
+                  <FileText size={24} />
+                  Материалы по этому запросу не найдены.
                 </div>
-              </div>
+              ) : (
+                visibleGroups.map((group) => {
+                  const isOpen = openedGroups.includes(group.id);
 
-              <div className="knowledge-content__list">
-                {visibleGroups.length === 0 ? (
-                  <div className="knowledge-empty">
-                    <FileText size={28} />
-                    <p>Материалы по этому запросу не найдены.</p>
-                  </div>
-                ) : (
-                  visibleGroups.map((group) =>
-                    openedGroups.includes(group.id) ? (
-                      <section key={group.id} className="knowledge-section">
-                        <h3>{group.title}</h3>
-                        <div className="knowledge-materials">
-                          {group.materials.map((material) => (
+                  return (
+                    <section key={group.id} className="knowledge-group">
+                      <button
+                        type="button"
+                        className="knowledge-group__toggle"
+                        onClick={() => toggleGroup(group.id)}
+                        aria-expanded={isOpen}
+                      >
+                        <span>{group.title}</span>
+                        <span>
+                          {isOpen ? 'Свернуть' : 'Развернуть'}
+                          {isOpen ? (
+                            <ChevronUp size={20} />
+                          ) : (
+                            <ChevronDown size={20} />
+                          )}
+                        </span>
+                      </button>
+
+                      {isOpen && (
+                        <div className="knowledge-cards">
+                          {group.materials.map((material, index) => (
                             <article
                               key={material.id}
-                              className={`knowledge-material ${
-                                selectedMaterialId === material.id ? 'is-selected' : ''
-                              }`}
+                              className="knowledge-card"
+                              onMouseEnter={() => setPreviewMaterial(material)}
+                              onFocus={() => setPreviewMaterial(material)}
                             >
-                              <div className="knowledge-material__icon">
-                                <FileText size={24} />
-                              </div>
-                              <div className="knowledge-material__body">
-                                <div className="knowledge-material__meta">
-                                  <span>{material.level}</span>
-                                  <span>{material.duration}</span>
-                                </div>
-                                <h4>{material.title}</h4>
+                              <div>
+                                <p className="knowledge-card__kicker">
+                                  {material.level} · {material.duration}
+                                </p>
+                                <h2>{material.title}</h2>
                                 <p>{material.description}</p>
                               </div>
-                              <button
-                                type="button"
-                                className="knowledge-material__button"
-                                onClick={() => openMaterial(group.id, material.id)}
-                              >
-                                Открыть
-                              </button>
+                              <div className="knowledge-card__actions">
+                                <button
+                                  type="button"
+                                  className="knowledge-card__ghost"
+                                  onClick={() =>
+                                    setMaterialPreview(group.id, material)
+                                  }
+                                >
+                                  Справка
+                                </button>
+                                <Link
+                                  href={`/base/${material.slug}`}
+                                  className={`knowledge-card__button ${
+                                    index === 0
+                                      ? 'knowledge-card__button--primary'
+                                      : ''
+                                  }`}
+                                >
+                                  Открыть
+                                  <ExternalLink size={17} aria-hidden="true" />
+                                </Link>
+                              </div>
                             </article>
                           ))}
                         </div>
-                      </section>
-                    ) : null,
-                  )
-                )}
-              </div>
+                      )}
+                    </section>
+                  );
+                })
+              )}
             </div>
 
-            <article className="knowledge-reader" aria-live="polite">
-              {selectedMaterial ? (
+            <aside className="knowledge-preview" aria-label="Краткая справка">
+              {previewMaterial ? (
                 <>
-                  <div className="knowledge-reader__header">
-                    <div>
-                      <p>{selectedMaterial.level}</p>
-                      <h2>{selectedMaterial.title}</h2>
-                    </div>
-                    <span>{selectedMaterial.duration}</span>
+                  <div className="knowledge-preview__icon">
+                    <BookOpen size={28} />
                   </div>
-
-                  <section>
-                    <h3>Цели</h3>
-                    <ul>
-                      {selectedMaterial.goals.map((goal) => (
-                        <li key={goal}>
-                          <CheckCircle2 size={18} />
-                          {goal}
-                        </li>
-                      ))}
-                    </ul>
-                  </section>
-
-                  <section>
-                    <h3>Теория</h3>
-                    {selectedMaterial.theory.map((paragraph) => (
-                      <p key={paragraph}>{paragraph}</p>
+                  <p className="knowledge-preview__label">Краткая справка</p>
+                  <h2>{previewMaterial.title}</h2>
+                  <p>{previewMaterial.description}</p>
+                  <ul>
+                    {previewMaterial.goals.slice(0, 3).map((goal) => (
+                      <li key={goal}>{goal}</li>
                     ))}
-                  </section>
-
-                  <section>
-                    <h3>Практика</h3>
-                    <ol>
-                      {selectedMaterial.practice.map((task) => (
-                        <li key={task}>{task}</li>
-                      ))}
-                    </ol>
-                  </section>
+                  </ul>
+                  <Link
+                    href={`/base/${previewMaterial.slug}`}
+                    className="knowledge-preview__link"
+                  >
+                    Перейти к руководству
+                  </Link>
                 </>
               ) : (
-                <div className="knowledge-reader__empty">
-                  <BookOpen size={32} />
-                  <p>Выберите материал, чтобы открыть содержание.</p>
-                </div>
+                <>
+                  <div className="knowledge-preview__icon">
+                    <BookOpen size={28} />
+                  </div>
+                  <p>Наведите на карточку, чтобы увидеть краткое введение.</p>
+                </>
               )}
-            </article>
+            </aside>
           </div>
         )}
       </div>

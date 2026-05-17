@@ -1,5 +1,6 @@
 'use client';
 
+import type { FormEvent } from 'react';
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
@@ -17,7 +18,7 @@ import { useRoleGuard } from '@/lib/rbac/client';
 import './users.scss';
 
 type UserRole = 'guest' | 'user' | 'coach' | 'admin';
-type ModalMode = 'create' | 'edit' | null;
+type FormMode = 'create' | 'edit' | null;
 
 interface User {
   id: string;
@@ -89,7 +90,7 @@ export default function AdminUsersPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
-  const [modalMode, setModalMode] = useState<ModalMode>(null);
+  const [formMode, setFormMode] = useState<FormMode>(null);
   const [editingUser, setEditingUser] = useState<User | null>(null);
   const [deleteUser, setDeleteUser] = useState<User | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -136,7 +137,9 @@ export default function AdminUsersPage() {
       const res = await fetch('/api/admin/users');
       const data = (await res.json()) as ApiResponse<User[]>;
 
-      if (!data.ok) throw new Error(data.error || 'Ошибка загрузки пользователей');
+      if (!data.ok) {
+        throw new Error(data.error || 'Ошибка загрузки пользователей');
+      }
 
       setUsers(
         (data.data || []).map((user) => ({
@@ -146,20 +149,25 @@ export default function AdminUsersPage() {
         })),
       );
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Не удалось загрузить пользователей');
+      setError(
+        err instanceof Error
+          ? err.message
+          : 'Не удалось загрузить пользователей',
+      );
     } finally {
       setLoading(false);
     }
   }
 
-  function openCreateModal() {
+  function openCreateForm() {
     setEditingUser(null);
     setForm(EMPTY_FORM);
-    setModalMode('create');
+    setFormMode('create');
     setError(null);
+    setSuccess(null);
   }
 
-  function openEditModal(user: User) {
+  function openEditForm(user: User) {
     setEditingUser(user);
     setForm({
       email: user.email,
@@ -171,12 +179,13 @@ export default function AdminUsersPage() {
       is_blocked: user.is_blocked,
       bscp_rating: String(user.bscp_rating || 0),
     });
-    setModalMode('edit');
+    setFormMode('edit');
     setError(null);
+    setSuccess(null);
   }
 
-  function closeModal() {
-    setModalMode(null);
+  function closeForm() {
+    setFormMode(null);
     setEditingUser(null);
     setForm(EMPTY_FORM);
     setSubmitting(false);
@@ -186,8 +195,10 @@ export default function AdminUsersPage() {
     setForm((current) => ({ ...current, [key]: value }));
   }
 
-  async function handleSaveUser(event: React.FormEvent<HTMLFormElement>) {
+  async function handleSaveUser(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (!formMode) return;
+
     setSubmitting(true);
     setError(null);
     setSuccess(null);
@@ -200,16 +211,16 @@ export default function AdminUsersPage() {
       bscp_rating: form.bscp_rating.trim() || '0',
     };
 
-    if (modalMode === 'edit' && !payload.password?.trim()) {
+    if (formMode === 'edit' && !payload.password?.trim()) {
       delete payload.password;
     }
 
     try {
       const endpoint =
-        modalMode === 'create'
+        formMode === 'create'
           ? '/api/admin/users'
           : `/api/admin/users/${encodeURIComponent(editingUser?.id ?? '')}`;
-      const method = modalMode === 'create' ? 'POST' : 'PATCH';
+      const method = formMode === 'create' ? 'POST' : 'PATCH';
 
       const res = await fetch(endpoint, {
         method,
@@ -218,13 +229,21 @@ export default function AdminUsersPage() {
       });
 
       const data = (await res.json()) as ApiResponse<User>;
-      if (!data.ok) throw new Error(data.error || 'Не удалось сохранить пользователя');
+      if (!data.ok) {
+        throw new Error(data.error || 'Не удалось сохранить пользователя');
+      }
 
-      setSuccess(modalMode === 'create' ? 'Пользователь создан' : 'Пользователь обновлен');
-      closeModal();
+      setSuccess(
+        formMode === 'create' ? 'Пользователь создан' : 'Пользователь обновлен',
+      );
+      closeForm();
       await fetchUsers();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Не удалось сохранить пользователя');
+      setError(
+        err instanceof Error
+          ? err.message
+          : 'Не удалось сохранить пользователя',
+      );
     } finally {
       setSubmitting(false);
     }
@@ -236,17 +255,24 @@ export default function AdminUsersPage() {
     setError(null);
 
     try {
-      const res = await fetch(`/api/admin/users/${encodeURIComponent(deleteUser.id)}`, {
-        method: 'DELETE',
-      });
+      const res = await fetch(
+        `/api/admin/users/${encodeURIComponent(deleteUser.id)}`,
+        {
+          method: 'DELETE',
+        },
+      );
       const data = (await res.json()) as ApiResponse<null>;
-      if (!data.ok) throw new Error(data.error || 'Не удалось удалить пользователя');
+      if (!data.ok) {
+        throw new Error(data.error || 'Не удалось удалить пользователя');
+      }
 
       setSuccess('Пользователь удален');
       setDeleteUser(null);
       await fetchUsers();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Не удалось удалить пользователя');
+      setError(
+        err instanceof Error ? err.message : 'Не удалось удалить пользователя',
+      );
     } finally {
       setSubmitting(false);
     }
@@ -274,10 +300,13 @@ export default function AdminUsersPage() {
             <Link href="/admin" className="users-back-link">
               Назад в панель
             </Link>
-            <p>Панель администратора</p>
             <h1>Управление пользователями</h1>
           </div>
-          <button type="button" className="users-primary-btn" onClick={openCreateModal}>
+          <button
+            type="button"
+            className="users-primary-btn"
+            onClick={openCreateForm}
+          >
             <UserPlus size={20} />
             Создать пользователя
           </button>
@@ -289,7 +318,7 @@ export default function AdminUsersPage() {
             <input
               value={searchQuery}
               onChange={(event) => setSearchQuery(event.target.value)}
-              placeholder="Поиск по email, ФИО, телефону или роли"
+              placeholder="Поиск по email, имени, телефону или роли"
               type="search"
             />
           </label>
@@ -304,7 +333,11 @@ export default function AdminUsersPage() {
         {error && (
           <div className="users-error">
             {error}
-            <button type="button" onClick={() => setError(null)} aria-label="Скрыть ошибку">
+            <button
+              type="button"
+              onClick={() => setError(null)}
+              aria-label="Скрыть ошибку"
+            >
               <X size={18} />
             </button>
           </div>
@@ -313,10 +346,143 @@ export default function AdminUsersPage() {
         {success && (
           <div className="users-success">
             {success}
-            <button type="button" onClick={() => setSuccess(null)} aria-label="Скрыть сообщение">
+            <button
+              type="button"
+              onClick={() => setSuccess(null)}
+              aria-label="Скрыть сообщение"
+            >
               <X size={18} />
             </button>
           </div>
+        )}
+
+        {formMode && (
+          <form className="users-form-card" onSubmit={handleSaveUser}>
+            <h2>
+              {formMode === 'create'
+                ? 'Создание пользователя'
+                : 'Редактирование пользователя'}
+            </h2>
+
+            <div className="users-form-grid">
+              <label className="users-form-group">
+                <span>Email</span>
+                <input
+                  type="email"
+                  value={form.email}
+                  onChange={(event) => updateForm('email', event.target.value)}
+                  required
+                  placeholder="example@mail.com"
+                />
+              </label>
+
+              <label className="users-form-group">
+                <span>Имя</span>
+                <input
+                  type="text"
+                  value={form.full_name}
+                  onChange={(event) =>
+                    updateForm('full_name', event.target.value)
+                  }
+                  required
+                  placeholder="Иванов Иван"
+                />
+              </label>
+
+              <label className="users-form-group">
+                <span>Телефон</span>
+                <input
+                  type="tel"
+                  value={form.phone}
+                  onChange={(event) => updateForm('phone', event.target.value)}
+                  placeholder="+7 (999) 999 99 99"
+                />
+              </label>
+
+              <label className="users-form-group">
+                <span>Пароль</span>
+                <input
+                  type="password"
+                  value={form.password}
+                  onChange={(event) =>
+                    updateForm('password', event.target.value)
+                  }
+                  required={formMode === 'create'}
+                  placeholder={
+                    formMode === 'create'
+                      ? 'Минимум 6 символов'
+                      : 'Оставьте пустым'
+                  }
+                />
+              </label>
+
+              <label className="users-form-group">
+                <span>Роль</span>
+                <select
+                  value={form.role}
+                  onChange={(event) =>
+                    updateForm('role', event.target.value as UserRole)
+                  }
+                >
+                  <option value="user">Участник</option>
+                  <option value="coach">Тренер</option>
+                  <option value="admin">Администратор</option>
+                  <option value="guest">Гость</option>
+                </select>
+              </label>
+
+              <label className="users-form-group">
+                <span>Рейтинг</span>
+                <input
+                  type="number"
+                  value={form.bscp_rating}
+                  onChange={(event) =>
+                    updateForm('bscp_rating', event.target.value)
+                  }
+                  placeholder="0"
+                />
+              </label>
+
+              <label className="users-checkbox">
+                <input
+                  type="checkbox"
+                  checked={form.is_verified}
+                  onChange={(event) =>
+                    updateForm('is_verified', event.target.checked)
+                  }
+                />
+                <span>Email подтвержден</span>
+              </label>
+
+              <label className="users-checkbox">
+                <input
+                  type="checkbox"
+                  checked={form.is_blocked}
+                  onChange={(event) =>
+                    updateForm('is_blocked', event.target.checked)
+                  }
+                />
+                <span>Аккаунт заблокирован</span>
+              </label>
+            </div>
+
+            <div className="users-form-actions">
+              <button
+                type="button"
+                className="users-form-btn users-form-btn--cancel"
+                onClick={closeForm}
+              >
+                Отменить
+              </button>
+              <button
+                type="submit"
+                className="users-form-btn users-form-btn--save"
+                disabled={submitting}
+              >
+                {submitting ? 'Сохранение...' : 'Сохранить'}
+              </button>
+            </div>
+          </form>
         )}
 
         <div className="users-table-wrapper">
@@ -329,10 +495,10 @@ export default function AdminUsersPage() {
                   <th>Email</th>
                   <th>Имя</th>
                   <th>Роль</th>
-                  <th>Статус</th>
                   <th>Верификация</th>
-                  <th>Дата регистрации</th>
+                  <th>Статус</th>
                   <th>Рейтинг</th>
+                  <th>Дата регистрации</th>
                   <th>Действия</th>
                 </tr>
               </thead>
@@ -347,7 +513,26 @@ export default function AdminUsersPage() {
                       </span>
                     </td>
                     <td>
-                      <span className={`user-status ${user.is_blocked ? 'is-blocked' : 'is-active'}`}>
+                      <span
+                        className={`user-verified ${user.is_verified ? 'verified' : 'not-verified'}`}
+                        aria-label={
+                          user.is_verified ? 'Подтвержден' : 'Не подтвержден'
+                        }
+                        title={
+                          user.is_verified ? 'Подтвержден' : 'Не подтвержден'
+                        }
+                      >
+                        {user.is_verified ? (
+                          <CheckCircle2 size={18} />
+                        ) : (
+                          <X size={18} />
+                        )}
+                      </span>
+                    </td>
+                    <td>
+                      <span
+                        className={`user-status ${user.is_blocked ? 'is-blocked' : 'is-active'}`}
+                      >
                         {user.is_blocked ? (
                           <CircleOff size={16} />
                         ) : (
@@ -356,19 +541,14 @@ export default function AdminUsersPage() {
                         {user.is_blocked ? 'Заблокирован' : 'Активен'}
                       </span>
                     </td>
-                    <td>
-                      <span className={`user-verified ${user.is_verified ? 'verified' : 'not-verified'}`}>
-                        {user.is_verified ? 'Подтвержден' : 'Не подтвержден'}
-                      </span>
-                    </td>
-                    <td>{formatDate(user.registration_date)}</td>
                     <td>{user.bscp_rating || 0}</td>
+                    <td>{formatDate(user.registration_date)}</td>
                     <td className="users-actions">
                       <button
                         type="button"
                         className="user-action-btn edit-btn"
                         aria-label={`Редактировать ${user.email}`}
-                        onClick={() => openEditModal(user)}
+                        onClick={() => openEditForm(user)}
                       >
                         <Pencil size={18} />
                       </button>
@@ -395,137 +575,39 @@ export default function AdminUsersPage() {
         </div>
       </div>
 
-      {modalMode && (
-        <div className="users-modal-overlay" onClick={closeModal}>
-          <form className="users-modal" onSubmit={handleSaveUser} onClick={(event) => event.stopPropagation()}>
-            <div className="users-modal-header">
-              <h2>{modalMode === 'create' ? 'Создание пользователя' : 'Редактирование пользователя'}</h2>
-              <button type="button" onClick={closeModal} aria-label="Закрыть форму">
-                <X size={20} />
-              </button>
-            </div>
-
-            <div className="users-modal-form">
-              <label className="users-modal-group">
-                <span>Email</span>
-                <input
-                  type="email"
-                  value={form.email}
-                  onChange={(event) => updateForm('email', event.target.value)}
-                  required
-                  placeholder="example@mail.com"
-                />
-              </label>
-
-              <label className="users-modal-group">
-                <span>ФИО</span>
-                <input
-                  type="text"
-                  value={form.full_name}
-                  onChange={(event) => updateForm('full_name', event.target.value)}
-                  required
-                  placeholder="Иванов Иван Иванович"
-                />
-              </label>
-
-              <label className="users-modal-group">
-                <span>Телефон</span>
-                <input
-                  type="tel"
-                  value={form.phone}
-                  onChange={(event) => updateForm('phone', event.target.value)}
-                  placeholder="+7 (999) 999 99 99"
-                />
-              </label>
-
-              <label className="users-modal-group">
-                <span>Пароль</span>
-                <input
-                  type="password"
-                  value={form.password}
-                  onChange={(event) => updateForm('password', event.target.value)}
-                  required={modalMode === 'create'}
-                  placeholder={modalMode === 'create' ? 'Минимум 6 символов' : 'Оставьте пустым, чтобы не менять'}
-                />
-              </label>
-
-              <label className="users-modal-group">
-                <span>Роль</span>
-                <select
-                  value={form.role}
-                  onChange={(event) => updateForm('role', event.target.value as UserRole)}
-                >
-                  <option value="user">Участник</option>
-                  <option value="coach">Тренер</option>
-                  <option value="admin">Администратор</option>
-                  <option value="guest">Гость</option>
-                </select>
-              </label>
-
-              <label className="users-modal-group">
-                <span>Рейтинг</span>
-                <input
-                  type="number"
-                  value={form.bscp_rating}
-                  onChange={(event) => updateForm('bscp_rating', event.target.value)}
-                  placeholder="0"
-                />
-              </label>
-
-              <label className="users-checkbox">
-                <input
-                  type="checkbox"
-                  checked={form.is_verified}
-                  onChange={(event) => updateForm('is_verified', event.target.checked)}
-                />
-                <span>Email подтвержден</span>
-              </label>
-
-              <label className="users-checkbox">
-                <input
-                  type="checkbox"
-                  checked={form.is_blocked}
-                  onChange={(event) => updateForm('is_blocked', event.target.checked)}
-                />
-                <span>Аккаунт заблокирован</span>
-              </label>
-            </div>
-
-            <div className="users-modal-actions">
-              <button type="button" className="users-modal-btn users-modal-btn-cancel" onClick={closeModal}>
-                Отменить
-              </button>
-              <button type="submit" className="users-modal-btn users-modal-btn-save" disabled={submitting}>
-                {submitting ? 'Сохранение...' : 'Сохранить'}
-              </button>
-            </div>
-          </form>
-        </div>
-      )}
-
       {deleteUser && (
-        <div className="users-modal-overlay" onClick={() => setDeleteUser(null)}>
-          <div className="users-modal users-modal--small" onClick={(event) => event.stopPropagation()}>
+        <div
+          className="users-modal-overlay"
+          onClick={() => setDeleteUser(null)}
+        >
+          <div
+            className="users-modal users-modal--small"
+            onClick={(event) => event.stopPropagation()}
+          >
             <div className="users-modal-header">
               <h2>Удалить пользователя?</h2>
-              <button type="button" onClick={() => setDeleteUser(null)} aria-label="Закрыть форму">
+              <button
+                type="button"
+                onClick={() => setDeleteUser(null)}
+                aria-label="Закрыть форму"
+              >
                 <X size={20} />
               </button>
             </div>
             <p className="users-modal-text">
               Пользователь {deleteUser.email} будет удален из системы.
             </p>
-            <div className="users-modal-actions">
+            <div className="users-form-actions">
               <button
                 type="button"
-                className="users-modal-btn users-modal-btn-cancel"
+                className="users-form-btn users-form-btn--cancel"
                 onClick={() => setDeleteUser(null)}
               >
                 Отменить
               </button>
               <button
                 type="button"
-                className="users-modal-btn users-modal-btn-delete"
+                className="users-form-btn users-form-btn--delete"
                 onClick={handleDeleteUser}
                 disabled={submitting}
               >
