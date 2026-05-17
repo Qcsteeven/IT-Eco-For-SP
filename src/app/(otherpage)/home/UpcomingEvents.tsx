@@ -33,7 +33,7 @@ export default function UpcomingEvents() {
     const fetchEvents = async () => {
       try {
         setLoading(true);
-        const response = await fetch('/api/events');
+        const response = await fetch('/api/contests');
         const result: ApiResponse = await response.json();
 
         if (response.ok && result.ok && result.data) {

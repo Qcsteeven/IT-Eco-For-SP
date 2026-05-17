@@ -5,10 +5,23 @@ import { authOptions } from '@/lib/authOptions';
 import { toGroupThingId, toUserThingId } from '@/lib/surreal/ids';
 import type { Event, UpdateEventData } from '@/lib/types/event';
 
-function toEventThingId(id: string): string {
+function parseEventsRecordKey(id: string): string {
   const s = (id || '').trim();
   if (!s) return '';
-  return s.startsWith('events:') ? s : `events:${s}`;
+  return s.startsWith('events:') ? s.slice('events:'.length) : s;
+}
+
+function toRecordIdString(value: unknown): string {
+  if (value == null) return '';
+  if (typeof value === 'string') return value;
+  if (typeof value === 'object') {
+    const record = value as Record<string, unknown>;
+    if (typeof record.tb === 'string' && record.id != null) {
+      return `${record.tb}:${String(record.id)}`;
+    }
+    if (typeof record.id === 'string') return record.id;
+  }
+  return String(value);
 }
 
 /**
@@ -38,7 +51,7 @@ export async function PUT(req: NextRequest) {
 
     const url = new URL(req.url);
     const rawId = decodeURIComponent(url.pathname.split('/').pop() || '');
-    const eventId = toEventThingId(rawId);
+    const eventId = parseEventsRecordKey(rawId);
 
     if (!eventId) {
       return NextResponse.json(
@@ -54,7 +67,7 @@ export async function PUT(req: NextRequest) {
     // Проверяем доступы: coach может редактировать только свои
     if (session.user.role === 'coach') {
       const checkResult = await db.query(
-        `SELECT * FROM type::thing($id)`,
+        `SELECT * FROM type::thing("events", $id)`,
         { id: eventId },
       );
       const existingEvent = (checkResult[0] as unknown as Event[])?.[0];
@@ -67,9 +80,12 @@ export async function PUT(req: NextRequest) {
       }
 
       // Coach может редактировать только свои мероприятия
-      const createdBy = existingEvent.created_by as string | undefined;
+      const createdBy = toRecordIdString(
+        (existingEvent as unknown as Record<string, unknown>).created_by,
+      );
       const userId = toUserThingId(session.user.id.toString());
-      if (createdBy !== userId) {
+      const legacyUserId = `users:${userId}`;
+      if (createdBy !== userId && createdBy !== legacyUserId) {
         return NextResponse.json(
           {
             ok: false,
@@ -93,7 +109,6 @@ export async function PUT(req: NextRequest) {
       'visibility_type',
       'participant_list',
       'target_groups',
-      'platform_contest_id',
     ];
 
     for (const field of allowedFields) {
@@ -121,7 +136,7 @@ export async function PUT(req: NextRequest) {
       updateData.target_groups !== undefined
     ) {
       const existingCheck = await db.query(
-        `SELECT visibility_type, participant_list, target_groups FROM type::thing($id)`,
+        `SELECT visibility_type, participant_list, target_groups FROM type::thing("events", $id)`,
         { id: eventId },
       );
       const existing = (existingCheck[0] as Record<string, unknown>[])?.[0] || {};
@@ -199,14 +214,10 @@ export async function PUT(req: NextRequest) {
       setClauses.push('target_groups = $target_groups');
       params.target_groups = updateData.target_groups;
     }
-    if (updateData.platform_contest_id !== undefined) {
-      setClauses.push('platform_contest_id = $platform_contest_id');
-      params.platform_contest_id = updateData.platform_contest_id;
-    }
     setClauses.push('updated_at = time::now()');
 
     const result = await db.query(
-      `UPDATE type::thing($id) SET ${setClauses.join(', ')}`,
+      `UPDATE type::thing("events", $id) SET ${setClauses.join(', ')}`,
       params,
     );
 
@@ -253,7 +264,7 @@ export async function DELETE(req: NextRequest) {
 
     const url = new URL(req.url);
     const rawId = decodeURIComponent(url.pathname.split('/').pop() || '');
-    const eventId = toEventThingId(rawId);
+    const eventId = parseEventsRecordKey(rawId);
 
     if (!eventId) {
       return NextResponse.json(
@@ -268,14 +279,15 @@ export async function DELETE(req: NextRequest) {
     // Проверяем доступы: coach может удалять только свои
     if (session.user.role === 'coach') {
       const checkResult = await db.query(
-        `SELECT created_by FROM type::thing($id)`,
+        `SELECT created_by FROM type::thing("events", $id)`,
         { id: eventId },
       );
       const existing = (checkResult[0] as Record<string, unknown>[])?.[0];
-      const createdBy = existing?.created_by as string | undefined;
+      const createdBy = toRecordIdString(existing?.created_by);
       const userId = toUserThingId(session.user.id.toString());
+      const legacyUserId = `users:${userId}`;
 
-      if (createdBy !== userId) {
+      if (createdBy !== userId && createdBy !== legacyUserId) {
         return NextResponse.json(
           { ok: false, error: 'Вы можете удалять только свои мероприятия' },
           { status: 403 },
@@ -283,7 +295,7 @@ export async function DELETE(req: NextRequest) {
       }
     }
 
-    await db.query(`DELETE type::thing($id)`, {
+    await db.query(`DELETE type::thing("events", $id)`, {
       id: eventId,
     });
 

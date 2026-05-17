@@ -6,6 +6,24 @@ import axios from 'axios';
 import type { Event } from '@/lib/types/event';
 import { toGroupThingId, toUserThingId } from '@/lib/surreal/ids';
 
+function parseEventsRecordKey(rawEventId: string): string {
+  const id = rawEventId.trim();
+  return id.startsWith('events:') ? id.slice('events:'.length) : id;
+}
+
+function toRecordIdString(value: unknown): string {
+  if (value == null) return '';
+  if (typeof value === 'string') return value;
+  if (typeof value === 'object') {
+    const record = value as Record<string, unknown>;
+    if (typeof record.tb === 'string' && record.id != null) {
+      return `${record.tb}:${String(record.id)}`;
+    }
+    if (typeof record.id === 'string') return record.id;
+  }
+  return String(value);
+}
+
 /**
  * POST /api/events/[id]/sync-results
  *
@@ -41,7 +59,8 @@ export async function POST(req: NextRequest) {
     }
 
     const url = new URL(req.url);
-    const eventId = url.pathname.split('/')[3]; // /api/events/[id]/sync-results
+    const rawEventId = decodeURIComponent(url.pathname.split('/')[3] || '');
+    const eventId = parseEventsRecordKey(rawEventId);
 
     if (!eventId) {
       return NextResponse.json(
@@ -55,8 +74,8 @@ export async function POST(req: NextRequest) {
 
     // Получаем мероприятие
     const eventResult = await db.query(
-      `SELECT * FROM type::thing($tableName, $id)`,
-      { tableName: 'events', id: eventId },
+      `SELECT * FROM type::thing("events", $id)`,
+      { id: eventId },
     );
     const event = (eventResult[0] as unknown as Event[])?.[0];
 
@@ -69,9 +88,12 @@ export async function POST(req: NextRequest) {
 
     // Проверяем доступы coach
     if (session.user.role === 'coach') {
-      const createdBy = event.created_by as string | undefined;
-      const userId = `users:${session.user.id}`;
-      if (createdBy !== userId) {
+      const createdBy = toRecordIdString(
+        (event as unknown as Record<string, unknown>).created_by,
+      );
+      const userId = toUserThingId(session.user.id.toString());
+      const legacyUserId = `users:${userId}`;
+      if (createdBy !== userId && createdBy !== legacyUserId) {
         return NextResponse.json(
           {
             ok: false,
@@ -127,8 +149,8 @@ export async function POST(req: NextRequest) {
 
       // Сохраняем снапшот, чтобы состав группы не менял итоги задним числом
       await db.query(
-        `UPDATE type::thing($tableName, $id) SET participant_snapshot = $snapshot, updated_at = time::now();`,
-        { tableName: 'events', id: eventId, snapshot: participantList },
+        `UPDATE type::thing("events", $id) SET participant_snapshot = $snapshot, updated_at = time::now();`,
+        { id: eventId, snapshot: participantList },
       );
     }
     const startTime = event.start_time_utc;
