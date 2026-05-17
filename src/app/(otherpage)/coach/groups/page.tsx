@@ -1,18 +1,62 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import type { FormEvent } from 'react';
 import Link from 'next/link';
 import { useSession } from 'next-auth/react';
 import { useRoleGuard } from '@/lib/rbac/client';
 import { useRouter } from 'next/navigation';
+import { Archive, BarChart3, Plus, Search, UsersRound, X } from 'lucide-react';
 import '../coach.scss';
 
 type Group = {
-  id: string;
+  id: unknown;
   name: string;
   description?: string;
   is_archived?: boolean;
+  created_at?: string;
 };
+
+type ApiResponse<T> = {
+  ok: boolean;
+  data?: T;
+  error?: string;
+  message?: string;
+};
+
+const EMPTY_FORM = { name: '', description: '' };
+
+function safeDecode(value: string) {
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    return value;
+  }
+}
+
+function recordId(value: unknown): string {
+  if (value == null) return '';
+  if (typeof value === 'string') return safeDecode(value);
+
+  if (typeof value === 'object') {
+    const record = value as Record<string, unknown>;
+    if (typeof record.tb === 'string' && record.id != null) {
+      return `${record.tb}:${String(record.id)}`;
+    }
+
+    if (record.id != null) return recordId(record.id);
+  }
+
+  return String(value);
+}
+
+function groupPath(id: string) {
+  return encodeURIComponent(id);
+}
+
+function groupTitle(group: Group) {
+  return group.name?.trim() || 'Без названия';
+}
 
 export default function CoachGroupsPage() {
   const { status } = useSession();
@@ -21,15 +65,44 @@ export default function CoachGroupsPage() {
 
   const [groups, setGroups] = useState<Group[]>([]);
   const [loading, setLoading] = useState(true);
+  const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState<string | null>(null);
   const [showCreate, setShowCreate] = useState(false);
-  const [createForm, setCreateForm] = useState({ name: '', description: '' });
+  const [createForm, setCreateForm] = useState(EMPTY_FORM);
   const [search, setSearch] = useState('');
 
-  const filtered = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    if (!q) return groups;
-    return groups.filter((g) => (g.name || '').toLowerCase().includes(q));
+  const fetchGroups = useCallback(async () => {
+    try {
+      setLoading(true);
+      setError(null);
+
+      const response = await fetch('/api/groups', { cache: 'no-store' });
+      const payload = (await response.json()) as ApiResponse<Group[]>;
+
+      if (!response.ok || !payload.ok) {
+        throw new Error(payload.error || 'Не удалось загрузить группы');
+      }
+
+      setGroups(payload.data || []);
+    } catch (err) {
+      setError(
+        err instanceof Error ? err.message : 'Не удалось загрузить группы',
+      );
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  const filteredGroups = useMemo(() => {
+    const query = search.trim().toLowerCase();
+    if (!query) return groups;
+
+    return groups.filter((group) => {
+      const title = groupTitle(group).toLowerCase();
+      const description = (group.description || '').toLowerCase();
+      return title.includes(query) || description.includes(query);
+    });
   }, [groups, search]);
 
   useEffect(() => {
@@ -40,61 +113,76 @@ export default function CoachGroupsPage() {
 
   useEffect(() => {
     if (authorized) fetchGroups();
-  }, [authorized]);
+  }, [authorized, fetchGroups]);
 
-  async function fetchGroups() {
-    try {
-      setLoading(true);
-      setError(null);
-      const res = await fetch('/api/groups');
-      const data = await res.json();
-      if (!data.ok) throw new Error(data.error || 'Ошибка загрузки групп');
-      setGroups(data.data || []);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Ошибка загрузки групп');
-    } finally {
-      setLoading(false);
-    }
-  }
+  async function createGroup(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
 
-  async function createGroup(e: React.FormEvent) {
-    e.preventDefault();
     try {
+      setSubmitting(true);
       setError(null);
-      const res = await fetch('/api/groups', {
+      setSuccess(null);
+
+      const response = await fetch('/api/groups', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(createForm),
+        body: JSON.stringify({
+          name: createForm.name.trim(),
+          description: createForm.description.trim(),
+        }),
       });
-      const data = await res.json();
-      if (!data.ok) throw new Error(data.error || 'Ошибка создания группы');
+      const payload = (await response.json()) as ApiResponse<Group>;
+
+      if (!response.ok || !payload.ok) {
+        throw new Error(payload.error || 'Не удалось создать группу');
+      }
+
       setShowCreate(false);
-      setCreateForm({ name: '', description: '' });
+      setCreateForm(EMPTY_FORM);
+      setSuccess('Группа создана');
       await fetchGroups();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Ошибка создания группы');
+    } catch (err) {
+      setError(
+        err instanceof Error ? err.message : 'Не удалось создать группу',
+      );
+    } finally {
+      setSubmitting(false);
     }
   }
 
   async function archiveGroup(groupId: string) {
-    if (!confirm('Архивировать группу?')) return;
+    if (!window.confirm('Архивировать группу?')) return;
+
     try {
       setError(null);
-      const rawId = groupId.includes(':') ? groupId.split(':')[1] : groupId;
-      const res = await fetch(`/api/groups/${rawId}`, { method: 'DELETE' });
-      const data = await res.json();
-      if (!data.ok) throw new Error(data.error || 'Ошибка архивирования');
+      setSuccess(null);
+
+      const response = await fetch(`/api/groups/${groupPath(groupId)}`, {
+        method: 'DELETE',
+      });
+      const payload = (await response.json()) as ApiResponse<Group>;
+
+      if (!response.ok || !payload.ok) {
+        throw new Error(payload.error || 'Не удалось архивировать группу');
+      }
+
+      setSuccess('Группа архивирована');
       await fetchGroups();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Ошибка архивирования');
+    } catch (err) {
+      setError(
+        err instanceof Error ? err.message : 'Не удалось архивировать группу',
+      );
     }
   }
 
-  if (status === 'loading' || isLoading) return <div className="coach-loading">Загрузка...</div>;
+  if (status === 'loading' || isLoading) {
+    return <div className="coach-loading">Загрузка...</div>;
+  }
+
   if (!authorized) {
     return (
       <div className="coach-access-denied">
-        <h1>Доступ запрещён</h1>
+        <h1>Доступ запрещен</h1>
         <p>У вас недостаточно прав для просмотра этой страницы.</p>
         <Link href="/coach">Вернуться</Link>
       </div>
@@ -102,122 +190,185 @@ export default function CoachGroupsPage() {
   }
 
   return (
-    <div className="coach-page">
+    <main className="coach-page">
       <div className="coach-container">
-        <div className="coach-header">
+        <header className="coach-header">
           <Link href="/coach" className="coach-back-link">
-            ← Назад
+            Назад
           </Link>
           <div className="coach-header-content">
-            <h1>Группы</h1>
+            <div>
+              <p className="coach-eyebrow">Тренерская панель</p>
+              <h1>Группы</h1>
+            </div>
             <button
-              className="coach-btn coach-btn-primary"
-              onClick={() => setShowCreate((s) => !s)}
+              type="button"
+              className="coach-btn coach-btn--primary"
+              onClick={() => {
+                setShowCreate((current) => !current);
+                setError(null);
+                setSuccess(null);
+              }}
             >
-              {showCreate ? 'Отменить' : '+ Создать группу'}
+              <Plus aria-hidden="true" size={18} />
+              {showCreate ? 'Скрыть форму' : 'Создать группу'}
             </button>
           </div>
-        </div>
+        </header>
 
         {error && (
-          <div className="coach-error-banner">
+          <div className="coach-banner coach-banner--error">
             {error}
-            <button onClick={() => setError(null)}>✕</button>
+            <button
+              type="button"
+              onClick={() => setError(null)}
+              aria-label="Скрыть ошибку"
+            >
+              <X aria-hidden="true" size={18} />
+            </button>
+          </div>
+        )}
+
+        {success && (
+          <div className="coach-banner coach-banner--success">
+            {success}
+            <button
+              type="button"
+              onClick={() => setSuccess(null)}
+              aria-label="Скрыть сообщение"
+            >
+              <X aria-hidden="true" size={18} />
+            </button>
           </div>
         )}
 
         {showCreate && (
-          <div className="coach-form-card">
-            <h2>Новая группа</h2>
+          <section className="coach-form-card" aria-labelledby="create-group">
+            <h2 id="create-group">Новая группа</h2>
             <form onSubmit={createGroup} className="coach-form">
-              <div className="coach-form-group">
-                <label htmlFor="name">Название</label>
+              <label className="coach-form-group">
+                <span>Название</span>
                 <input
-                  id="name"
                   value={createForm.name}
-                  onChange={(e) => setCreateForm({ ...createForm, name: e.target.value })}
+                  onChange={(event) =>
+                    setCreateForm((current) => ({
+                      ...current,
+                      name: event.target.value,
+                    }))
+                  }
                   required
+                  placeholder="Например: Алгоритмы 2026"
                 />
-              </div>
-              <div className="coach-form-group">
-                <label htmlFor="desc">Описание</label>
-                <input
-                  id="desc"
+              </label>
+
+              <label className="coach-form-group">
+                <span>Описание</span>
+                <textarea
                   value={createForm.description}
-                  onChange={(e) => setCreateForm({ ...createForm, description: e.target.value })}
+                  onChange={(event) =>
+                    setCreateForm((current) => ({
+                      ...current,
+                      description: event.target.value,
+                    }))
+                  }
+                  placeholder="Короткое описание группы"
                 />
+              </label>
+
+              <div className="coach-form-actions">
+                <button
+                  type="button"
+                  className="coach-btn coach-btn--secondary"
+                  onClick={() => {
+                    setShowCreate(false);
+                    setCreateForm(EMPTY_FORM);
+                  }}
+                >
+                  Отменить
+                </button>
+                <button
+                  type="submit"
+                  className="coach-btn coach-btn--primary"
+                  disabled={submitting}
+                >
+                  {submitting ? 'Создание...' : 'Создать'}
+                </button>
               </div>
-              <button type="submit" className="coach-btn coach-btn-primary">
-                Создать
-              </button>
             </form>
-          </div>
+          </section>
         )}
 
-        <div className="coach-section">
-          <h2>Список</h2>
-          <div style={{ marginBottom: '1rem' }}>
-            <input
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Поиск по названию..."
-              style={{
-                width: '100%',
-                maxWidth: 420,
-                padding: '0.75rem',
-                borderRadius: 8,
-                border: '1px solid #ddd',
-              }}
-            />
+        <section className="coach-panel">
+          <div className="coach-toolbar">
+            <label className="coach-search">
+              <Search aria-hidden="true" size={18} />
+              <input
+                value={search}
+                onChange={(event) => setSearch(event.target.value)}
+                placeholder="Поиск по названию или описанию"
+              />
+            </label>
+
+            <div className="coach-stats-pills">
+              <span>Всего: {groups.length}</span>
+              <span>Показано: {filteredGroups.length}</span>
+            </div>
           </div>
 
           {loading ? (
             <div className="coach-loading-inner">Загрузка групп...</div>
-          ) : filtered.length === 0 ? (
+          ) : filteredGroups.length === 0 ? (
             <div className="coach-empty">
               <p>Группы не найдены</p>
             </div>
           ) : (
-            <div className="coach-contests-grid">
-              {filtered.map((g) => {
-                const rawId = g.id.includes(':') ? g.id.split(':')[1] : g.id;
+            <div className="coach-group-grid">
+              {filteredGroups.map((group) => {
+                const id = recordId(group.id);
+
                 return (
-                  <div key={g.id} className="coach-contest-card">
-                    <div className="coach-contest-header">
-                      <h3>{g.name}</h3>
+                  <article key={id} className="coach-group-card">
+                    <div className="coach-group-card__icon">
+                      <UsersRound aria-hidden="true" size={28} />
                     </div>
-                    {g.description && (
-                      <div className="coach-contest-info">
-                        <p>{g.description}</p>
-                      </div>
-                    )}
-                    <div className="coach-contest-actions">
-                      <Link className="coach-action-btn coach-btn-edit" href={`/coach/groups/${rawId}`}>
-                        👥
+                    <div className="coach-group-card__body">
+                      <h2>{groupTitle(group)}</h2>
+                      <p>{group.description || 'Описание пока не добавлено'}</p>
+                    </div>
+                    <div className="coach-card-actions">
+                      <Link
+                        className="coach-icon-btn coach-icon-btn--primary"
+                        href={`/coach/groups/${groupPath(id)}`}
+                        title="Открыть группу"
+                        aria-label={`Открыть группу ${groupTitle(group)}`}
+                      >
+                        <UsersRound aria-hidden="true" size={20} />
                       </Link>
                       <Link
-                        className="coach-action-btn coach-btn-edit"
-                        href={`/coach/groups/${rawId}/analytics`}
-                        title="Аналитика группы"
+                        className="coach-icon-btn coach-icon-btn--secondary"
+                        href={`/coach/groups/${groupPath(id)}/analytics`}
+                        title="Аналитика"
+                        aria-label={`Аналитика группы ${groupTitle(group)}`}
                       >
-                        📊
+                        <BarChart3 aria-hidden="true" size={20} />
                       </Link>
                       <button
-                        className="coach-action-btn coach-btn-delete"
-                        onClick={() => archiveGroup(g.id)}
+                        type="button"
+                        className="coach-icon-btn coach-icon-btn--danger"
+                        onClick={() => archiveGroup(id)}
                         title="Архивировать"
+                        aria-label={`Архивировать группу ${groupTitle(group)}`}
                       >
-                        🗄️
+                        <Archive aria-hidden="true" size={20} />
                       </button>
                     </div>
-                  </div>
+                  </article>
                 );
               })}
             </div>
           )}
-        </div>
+        </section>
       </div>
-    </div>
+    </main>
   );
 }
-

@@ -4,9 +4,9 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useSession } from 'next-auth/react';
 import {
-  ArrowLeft,
+  ArrowRight,
   CalendarCheck,
-  ChevronRight,
+  ShieldCheck,
   UsersRound,
 } from 'lucide-react';
 import { useEffect } from 'react';
@@ -17,18 +17,18 @@ import './coach.scss';
 
 const COACH_SECTIONS = [
   {
-    href: '/coach/events',
-    title: 'Мероприятия',
-    description:
-      'Создавайте события, назначайте группы и управляйте расписанием тренировок.',
-    icon: CalendarCheck,
-  },
-  {
     href: '/coach/groups',
     title: 'Группы',
-    description:
-      'Собирайте участников в группы, следите за составом и переходите к аналитике.',
+    text: 'Создание учебных групп, управление составом и быстрый переход к аналитике.',
     icon: UsersRound,
+    tone: 'violet',
+  },
+  {
+    href: '/coach/events',
+    title: 'Мероприятия',
+    text: 'Планирование событий, назначение групп и синхронизация результатов участников.',
+    icon: CalendarCheck,
+    tone: 'green',
   },
 ] as const;
 
@@ -52,29 +52,23 @@ export default function CoachHomePage() {
       <div className="coach-access-denied">
         <h1>Доступ запрещен</h1>
         <p>У вас недостаточно прав для просмотра этой страницы.</p>
-        <Link href="/dashboard">Вернуться</Link>
+        <Link href="/dashboard">Вернуться на дашборд</Link>
       </div>
     );
   }
 
   return (
-    <main className="coach-page coach-home-page">
+    <main className="coach-dashboard">
       <div className="coach-container">
-        <Link href="/home" className="coach-home-back">
-          <ArrowLeft aria-hidden="true" size={18} />
-          Назад
-        </Link>
-
-        <section className="coach-home-hero" aria-labelledby="coach-title">
-          <p className="coach-home-eyebrow">Рабочее пространство тренера</p>
-          <h1 id="coach-title">Тренерская</h1>
+        <header className="coach-title-row" aria-labelledby="coach-title">
           <p>
-            Управляйте учебными группами и мероприятиями в одном месте. Экран
-            повторяет структуру макета, но ведет в реальные разделы системы.
+            <ShieldCheck aria-hidden="true" size={18} />
+            Рабочее пространство тренера
           </p>
-        </section>
+          <h1 id="coach-title">Тренерская панель</h1>
+        </header>
 
-        <section className="coach-home-grid" aria-label="Разделы тренерской">
+        <section className="coach-grid" aria-label="Разделы тренерской панели">
           {COACH_SECTIONS.map((section) => {
             const Icon = section.icon;
 
@@ -82,23 +76,40 @@ export default function CoachHomePage() {
               <Link
                 key={section.href}
                 href={section.href}
-                className="coach-home-card"
+                className={`coach-card coach-card--${section.tone}`}
               >
-                <span className="coach-home-card__icon">
-                  <Icon aria-hidden="true" size={28} />
+                <span className="coach-card__icon">
+                  <Icon aria-hidden="true" size={30} />
                 </span>
-                <span className="coach-home-card__content">
+                <span>
                   <h2>{section.title}</h2>
-                  <p>{section.description}</p>
+                  <p>{section.text}</p>
                 </span>
-                <ChevronRight
-                  className="coach-home-card__arrow"
+                <ArrowRight
+                  className="coach-card__arrow"
                   aria-hidden="true"
-                  size={22}
+                  size={24}
                 />
               </Link>
             );
           })}
+        </section>
+
+        <section className="coach-actions-section">
+          <h2>Быстрые действия</h2>
+          <div className="coach-actions">
+            <Link href="/coach/groups" className="coach-btn coach-btn--primary">
+              <UsersRound aria-hidden="true" size={18} />
+              Открыть группы
+            </Link>
+            <Link
+              href="/coach/events"
+              className="coach-btn coach-btn--secondary"
+            >
+              <CalendarCheck aria-hidden="true" size={18} />
+              Открыть мероприятия
+            </Link>
+          </div>
         </section>
       </div>
     </main>
