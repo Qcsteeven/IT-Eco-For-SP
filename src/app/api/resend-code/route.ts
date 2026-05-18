@@ -3,6 +3,7 @@ import { getDB } from '@/lib/surreal/surreal';
 import { sendEmail } from '@/lib/email/sendEmail';
 import crypto from 'crypto';
 import type { Surreal } from 'surrealdb';
+import { escapeHtml } from '@/lib/security/html';
 
 interface RequestBody {
   email: string;
@@ -74,7 +75,7 @@ export async function POST(request: NextRequest) {
     const userName: string = user.full_name || 'пользователь';
 
     const htmlContent: string = `
-            <p>Здравствуйте, ${userName}!</p>
+            <p>Здравствуйте, ${escapeHtml(userName)}!</p>
             <p>Вы запросили новый **код подтверждения**:</p>
             <h3 style="color: #FF5722; font-size: 24px; text-align: center; background-color: #fff0e8; padding: 10px; border-radius: 5px;">${newVerificationCode}</h3>
             <p>Код действует в течение одного часа. Пожалуйста, введите его на странице подтверждения.</p>
@@ -104,7 +105,6 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(
       {
         message: 'Внутренняя ошибка сервера при повторной отправке кода.',
-        detail: errorMessage,
       },
       { status: 500 },
     );

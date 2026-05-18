@@ -2,6 +2,7 @@ import crypto from 'crypto';
 import { NextResponse } from 'next/server';
 import { getDB } from '@/lib/surreal/surreal';
 import { sendEmail } from '@/lib/email/sendEmail';
+import { escapeHtml } from '@/lib/security/html';
 
 type UserRow = {
   id: unknown;
@@ -15,7 +16,11 @@ function rowsFromQuery<T>(result: unknown): T[] {
   const first = result[0] as unknown;
   if (Array.isArray(first)) return first as T[];
 
-  if (first && typeof first === 'object' && Array.isArray((first as { result?: unknown }).result)) {
+  if (
+    first &&
+    typeof first === 'object' &&
+    Array.isArray((first as { result?: unknown }).result)
+  ) {
     return (first as { result: T[] }).result;
   }
 
@@ -49,7 +54,20 @@ function hashToken(token: string) {
 
 function getOrigin(req: Request) {
   const configuredUrl = process.env.NEXTAUTH_URL;
-  if (configuredUrl) return configuredUrl.replace(/\/$/, '');
+  if (configuredUrl) {
+    const url = new URL(configuredUrl);
+    if (url.protocol !== 'http:' && url.protocol !== 'https:') {
+      throw new Error('NEXTAUTH_URL must use http or https');
+    }
+    return url.origin;
+  }
+
+  if (process.env.NODE_ENV === 'production') {
+    throw new Error(
+      'NEXTAUTH_URL is required for password reset in production',
+    );
+  }
+
   return new URL(req.url).origin;
 }
 
@@ -100,14 +118,16 @@ export async function POST(req: Request) {
       resetUrl.searchParams.set('token', token);
 
       const userName = user.full_name || 'пользователь';
+      const safeUserName = escapeHtml(userName);
+      const safeResetUrl = escapeHtml(resetUrl.toString());
       await sendEmail(
         normalizedEmail,
         'Восстановление пароля IT-Eco-For-SP',
         `Здравствуйте, ${userName}! Для смены пароля перейдите по ссылке: ${resetUrl.toString()}`,
         `
-          <p>Здравствуйте, ${userName}!</p>
+          <p>Здравствуйте, ${safeUserName}!</p>
           <p>Вы запросили восстановление пароля в IT-Eco-For-SP.</p>
-          <p><a href="${resetUrl.toString()}">Сменить пароль</a></p>
+          <p><a href="${safeResetUrl}">Сменить пароль</a></p>
           <p>Ссылка действует 1 час. Если вы не запрашивали восстановление, просто проигнорируйте письмо.</p>
         `,
       );
@@ -115,11 +135,15 @@ export async function POST(req: Request) {
 
     return NextResponse.json({
       ok: true,
-      message: 'Если такой email зарегистрирован, мы отправили ссылку для восстановления пароля.',
+      message:
+        'Если такой email зарегистрирован, мы отправили ссылку для восстановления пароля.',
     });
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
-    console.error('[Password/Forgot] Failed to request password reset:', errorMessage);
+    console.error(
+      '[Password/Forgot] Failed to request password reset:',
+      errorMessage,
+    );
     return NextResponse.json(
       { ok: false, message: 'Не удалось отправить письмо для восстановления.' },
       { status: 500 },

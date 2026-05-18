@@ -6,6 +6,58 @@ import {
 import CredentialsProvider from 'next-auth/providers/credentials';
 import { JWT } from 'next-auth/jwt';
 import { getUserByEmail, verifyPassword } from '@/lib/surreal/auth';
+import { getDB } from '@/lib/surreal/surreal';
+import { parseUsersRecordKey } from '@/lib/surreal/ids';
+import { isValidUserRole } from '@/lib/rbac';
+
+type CurrentAuthState = {
+  role: string;
+  is_verified: boolean;
+  is_blocked: boolean;
+};
+
+async function getCurrentAuthState(
+  userId: unknown,
+): Promise<CurrentAuthState | null> {
+  const key = parseUsersRecordKey(String(userId || ''));
+  if (!key) return null;
+
+  const db = await getDB();
+  if (!db) return null;
+
+  const res = await db.query(
+    `SELECT role, is_verified, is_blocked
+     FROM type::thing("users", $id)
+     LIMIT 1;`,
+    { id: key },
+  );
+  const rows = (Array.isArray(res) ? (res[0] as unknown[]) : []) || [];
+  const row = (rows[0] as Record<string, unknown> | undefined) || undefined;
+  const role = String(row?.role || '');
+
+  if (!row || !isValidUserRole(role)) return null;
+
+  return {
+    role,
+    is_verified: row.is_verified !== false,
+    is_blocked: row.is_blocked === true,
+  };
+}
+
+function invalidateSession(session: DefaultSession) {
+  if (!session.user) return session;
+
+  return {
+    ...session,
+    user: {
+      ...session.user,
+      id: '',
+      role: 'guest',
+      is_verified: false,
+      is_blocked: true,
+    },
+  };
+}
 
 declare module 'next-auth' {
   interface Session {
@@ -112,10 +164,25 @@ export const authOptions: NextAuthOptions = {
     },
     async session({ session, token }) {
       if (token && session.user) {
+        let currentState: CurrentAuthState | null = null;
+        try {
+          currentState = await getCurrentAuthState(token.id);
+        } catch (error) {
+          console.error('[AUTH] Не удалось обновить состояние сессии:', error);
+        }
+
+        if (
+          !currentState ||
+          currentState.is_blocked ||
+          !currentState.is_verified
+        ) {
+          return invalidateSession(session);
+        }
+
         session.user.id = token.id;
-        session.user.role = token.role;
-        session.user.is_verified = token.is_verified;
-        session.user.is_blocked = token.is_blocked;
+        session.user.role = currentState.role;
+        session.user.is_verified = currentState.is_verified;
+        session.user.is_blocked = currentState.is_blocked;
       }
       return session;
     },
