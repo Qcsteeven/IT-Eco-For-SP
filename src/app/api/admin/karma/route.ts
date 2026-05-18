@@ -1,6 +1,7 @@
 import { NextResponse, NextRequest } from 'next/server';
 import { getDB } from '@/lib/surreal/surreal';
 import { withRoleGuard } from '@/lib/rbac/guard';
+import { parseUsersRecordKey } from '@/lib/surreal/ids';
 
 type DbRow = Record<string, unknown>;
 
@@ -143,11 +144,19 @@ const postHandler = withRoleGuard(
       }
 
       const db = await getDB();
+      const recordKey = parseUsersRecordKey(userId);
+      if (!recordKey) {
+        return NextResponse.json(
+          { ok: false, error: 'Некорректный ID пользователя' },
+          { status: 400 },
+        );
+      }
+
       const user = rowsFromQuery(
         await db.query(
-          `SELECT id, email, full_name, karma, bscp_rating
+          `SELECT id, email, full_name, codeforces_karma, karma, bscp_rating
            FROM type::thing("users", $id)`,
-          { id: userId },
+          { id: recordKey },
         ),
       )[0];
 
@@ -158,15 +167,20 @@ const postHandler = withRoleGuard(
         );
       }
 
-      const currentKarma = number(user.karma ?? user.bscp_rating);
+      const currentKarma = number(
+        user.codeforces_karma ?? user.karma ?? user.bscp_rating,
+      );
       const newKarma = currentKarma + amount;
       const userEmail = text(user.email);
       const userName = text(user.full_name);
 
-      await db.query('UPDATE type::thing("users", $id) SET karma = $karma', {
-        id: userId,
-        karma: newKarma,
-      });
+      await db.query(
+        'UPDATE type::thing("users", $id) SET codeforces_karma = $karma',
+        {
+          id: recordKey,
+          karma: newKarma,
+        },
+      );
 
       await db.query(
         `CREATE karma_logs CONTENT {
@@ -179,12 +193,12 @@ const postHandler = withRoleGuard(
           created_at: time::now()
         }`,
         {
-          userId,
+          userId: recordKey,
           userEmail,
           userName,
           amount,
           reason,
-          adminId: session.user.id,
+          adminId: parseUsersRecordKey(session.user.id),
         },
       );
 

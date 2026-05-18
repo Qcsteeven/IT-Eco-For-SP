@@ -3,6 +3,7 @@ import { getDB } from '@/lib/surreal/surreal';
 import { hashPassword } from '@/lib/surreal/auth';
 import { withRoleGuard } from '@/lib/rbac/guard';
 import { isValidUserRole, UserRole } from '@/lib/rbac';
+import { parseUsersRecordKey } from '@/lib/surreal/ids';
 
 type UserRow = Record<string, unknown>;
 
@@ -73,6 +74,7 @@ function serializeUser(row: UserRow) {
     registration_date: String(row.registration_date ?? ''),
     bscp_rating: Number(row.bscp_rating ?? row.karma ?? 0),
     karma: Number(row.karma ?? 0),
+    codeforces_karma: Number(row.codeforces_karma ?? 0),
   };
 }
 
@@ -93,12 +95,51 @@ const selectUserFields = `
     is_blocked,
     registration_date,
     bscp_rating,
-    karma
+    karma,
+    codeforces_karma
   FROM type::thing("users", $id)
 `;
 
+async function countActiveAdmins(db: Awaited<ReturnType<typeof getDB>>) {
+  const result = await db.query(
+    `SELECT count() AS count
+     FROM users
+     WHERE role = 'admin' AND is_blocked != true
+     GROUP ALL;`,
+  );
+  const row = rowsFromQuery(result)[0];
+  return Number(row?.count ?? 0);
+}
+
+async function writeAdminAudit(
+  db: Awaited<ReturnType<typeof getDB>>,
+  adminId: string,
+  action: string,
+  targetUserId: string,
+  details: Record<string, unknown>,
+) {
+  try {
+    const adminKey = parseUsersRecordKey(adminId);
+    const targetKey = parseUsersRecordKey(targetUserId);
+    if (!adminKey || !targetKey) return;
+
+    await db.query(
+      `CREATE admin_audit_logs CONTENT {
+        admin_id: type::thing("users", $adminId),
+        action: $action,
+        target_user_id: type::thing("users", $targetUserId),
+        details: $details,
+        created_at: time::now()
+      };`,
+      { adminId: adminKey, action, targetUserId: targetKey, details },
+    );
+  } catch (error) {
+    console.warn('[Admin/Users] Не удалось записать audit log:', error);
+  }
+}
+
 const patchHandler = withRoleGuard(
-  async (req: NextRequest) => {
+  async (req: NextRequest, session) => {
     try {
       const userId = getUserId(req);
 
@@ -111,6 +152,22 @@ const patchHandler = withRoleGuard(
 
       const body = (await req.json()) as UpdateUserBody;
       const updateData: Record<string, unknown> = {};
+      const db = await getDB();
+      const existingUser = rowsFromQuery(
+        await db.query(
+          `SELECT id, email, role, is_blocked
+           FROM type::thing("users", $id)
+           LIMIT 1`,
+          { id: userId },
+        ),
+      )[0];
+
+      if (!existingUser) {
+        return NextResponse.json(
+          { ok: false, error: 'Пользователь не найден' },
+          { status: 404 },
+        );
+      }
 
       if (body.email !== undefined) {
         const email = body.email.trim().toLowerCase();
@@ -170,8 +227,6 @@ const patchHandler = withRoleGuard(
         );
       }
 
-      const db = await getDB();
-
       if (typeof updateData.email === 'string') {
         const duplicate = rowsFromQuery(
           await db.query(
@@ -183,6 +238,27 @@ const patchHandler = withRoleGuard(
         if (duplicate.length > 0) {
           return NextResponse.json(
             { ok: false, error: 'Пользователь с таким email уже существует' },
+            { status: 409 },
+          );
+        }
+      }
+
+      const currentRole = String(existingUser.role ?? 'user');
+      const nextRole = String(updateData.role ?? currentRole);
+      const currentlyActiveAdmin =
+        currentRole === 'admin' && existingUser.is_blocked !== true;
+      const willStopBeingActiveAdmin =
+        nextRole !== 'admin' || updateData.is_blocked === true;
+
+      if (currentlyActiveAdmin && willStopBeingActiveAdmin) {
+        const activeAdmins = await countActiveAdmins(db);
+        if (activeAdmins <= 1) {
+          return NextResponse.json(
+            {
+              ok: false,
+              error:
+                'Нельзя убрать или заблокировать последнего активного администратора',
+            },
             { status: 409 },
           );
         }
@@ -204,6 +280,15 @@ const patchHandler = withRoleGuard(
         );
       }
 
+      await writeAdminAudit(db, session.user.id, 'user.update', userId, {
+        before: {
+          email: existingUser.email,
+          role: existingUser.role,
+          is_blocked: existingUser.is_blocked,
+        },
+        update: updateData,
+      });
+
       return NextResponse.json({
         ok: true,
         data: serializeUser(updatedUser),
@@ -223,7 +308,7 @@ const patchHandler = withRoleGuard(
 );
 
 const deleteHandler = withRoleGuard(
-  async (req: NextRequest) => {
+  async (req: NextRequest, session) => {
     try {
       const userId = getUserId(req);
 
@@ -235,7 +320,40 @@ const deleteHandler = withRoleGuard(
       }
 
       const db = await getDB();
+      const existingUser = rowsFromQuery(
+        await db.query(
+          `SELECT id, email, role, is_blocked
+           FROM type::thing("users", $id)
+           LIMIT 1`,
+          { id: userId },
+        ),
+      )[0];
+
+      if (!existingUser) {
+        return NextResponse.json(
+          { ok: false, error: 'Пользователь не найден' },
+          { status: 404 },
+        );
+      }
+
+      if (existingUser.role === 'admin' && existingUser.is_blocked !== true) {
+        const activeAdmins = await countActiveAdmins(db);
+        if (activeAdmins <= 1) {
+          return NextResponse.json(
+            {
+              ok: false,
+              error: 'Нельзя удалить последнего активного администратора',
+            },
+            { status: 409 },
+          );
+        }
+      }
+
       await db.query('DELETE type::thing("users", $id)', { id: userId });
+      await writeAdminAudit(db, session.user.id, 'user.delete', userId, {
+        email: existingUser.email,
+        role: existingUser.role,
+      });
 
       return NextResponse.json({
         ok: true,

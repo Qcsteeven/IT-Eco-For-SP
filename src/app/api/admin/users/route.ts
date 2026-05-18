@@ -4,6 +4,7 @@ import { getDB } from '@/lib/surreal/surreal';
 import { hashPassword } from '@/lib/surreal/auth';
 import { withRoleGuard } from '@/lib/rbac/guard';
 import { getDefaultUserRole, isValidUserRole, UserRole } from '@/lib/rbac';
+import { parseUsersRecordKey } from '@/lib/surreal/ids';
 
 type UserRow = Record<string, unknown>;
 
@@ -69,6 +70,7 @@ function serializeUser(row: UserRow) {
     registration_date: String(row.registration_date ?? ''),
     bscp_rating: Number(row.bscp_rating ?? row.karma ?? 0),
     karma: Number(row.karma ?? 0),
+    codeforces_karma: Number(row.codeforces_karma ?? 0),
   };
 }
 
@@ -89,9 +91,37 @@ const selectUserFields = `
     is_blocked,
     registration_date,
     bscp_rating,
-    karma
+    karma,
+    codeforces_karma
   FROM users
 `;
+
+async function writeAdminAudit(
+  db: Awaited<ReturnType<typeof getDB>>,
+  adminId: string,
+  action: string,
+  targetUserId: string,
+  details: Record<string, unknown>,
+) {
+  try {
+    const adminKey = parseUsersRecordKey(adminId);
+    const targetKey = parseUsersRecordKey(targetUserId);
+    if (!adminKey || !targetKey) return;
+
+    await db.query(
+      `CREATE admin_audit_logs CONTENT {
+        admin_id: type::thing("users", $adminId),
+        action: $action,
+        target_user_id: type::thing("users", $targetUserId),
+        details: $details,
+        created_at: time::now()
+      };`,
+      { adminId: adminKey, action, targetUserId: targetKey, details },
+    );
+  } catch (error) {
+    console.warn('[Admin/Users] Не удалось записать audit log:', error);
+  }
+}
 
 const getHandler = withRoleGuard(
   async () => {
@@ -120,7 +150,7 @@ const getHandler = withRoleGuard(
 );
 
 const postHandler = withRoleGuard(
-  async (req: NextRequest) => {
+  async (req: NextRequest, session) => {
     try {
       const body = (await req.json()) as CreateUserBody;
       const email = body.email?.trim().toLowerCase() ?? '';
@@ -173,8 +203,8 @@ const postHandler = withRoleGuard(
         full_name: fullName,
         phone: body.phone?.trim() ?? '',
         role,
-        is_verified: Boolean(body.is_verified),
-        is_blocked: Boolean(body.is_blocked),
+        is_verified: body.is_verified ?? true,
+        is_blocked: body.is_blocked ?? false,
         verification_code: crypto.randomInt(100000, 999999).toString(),
         code_expiry: new Date(Date.now() + 60 * 60 * 1000),
         registration_date: new Date(),
@@ -188,6 +218,16 @@ const postHandler = withRoleGuard(
           email,
         }),
       )[0];
+
+      if (created) {
+        await writeAdminAudit(
+          db,
+          session.user.id,
+          'user.create',
+          normalizeUserId(created.id),
+          { email, role },
+        );
+      }
 
       return NextResponse.json(
         {

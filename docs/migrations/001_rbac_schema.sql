@@ -30,7 +30,12 @@ DEFINE FIELD role ON users TYPE string
 DEFINE FIELD is_verified ON users TYPE bool
     DEFAULT false;
 
+DEFINE FIELD is_blocked ON users TYPE bool
+    DEFAULT false;
+
 DEFINE FIELD full_name ON users TYPE option<string>;
+
+DEFINE FIELD phone ON users TYPE option<string>;
 
 DEFINE FIELD registration_date ON users TYPE datetime
     DEFAULT time::now();
@@ -41,6 +46,28 @@ DEFINE FIELD karma ON users TYPE number
 DEFINE FIELD codeforces_handle ON users TYPE option<string>;
 
 DEFINE FIELD atcoder_handle ON users TYPE option<string>;
+
+-- ==========================================
+-- Журнал административных действий
+-- ==========================================
+
+DEFINE TABLE admin_audit_logs SCHEMAFULL
+    PERMISSIONS
+        SELECT WHERE $auth.role = 'admin'
+        CREATE WHERE $auth.role = 'admin'
+        UPDATE WHERE false
+        DELETE WHERE false;
+
+DEFINE FIELD admin_id ON admin_audit_logs TYPE record<users>;
+
+DEFINE FIELD action ON admin_audit_logs TYPE string;
+
+DEFINE FIELD target_user_id ON admin_audit_logs TYPE option<record<users>>;
+
+DEFINE FIELD details ON admin_audit_logs TYPE object;
+
+DEFINE FIELD created_at ON admin_audit_logs TYPE datetime
+    DEFAULT time::now();
 
 -- ==========================================
 -- Таблица контестов с RBAC

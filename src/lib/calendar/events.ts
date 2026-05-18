@@ -16,6 +16,7 @@ export type CalendarEvent = {
   visibility_type: 'public' | 'private';
   participant_list: string[];
   target_groups?: string[];
+  created_by?: string;
   platform_contest_id?: string;
   source: CalendarEventSource;
 };
@@ -42,6 +43,7 @@ type RawDbEvent = {
   visibility_type?: unknown;
   participant_list?: unknown;
   target_groups?: unknown;
+  created_by?: unknown;
   platform_contest_id?: unknown;
 };
 
@@ -225,6 +227,7 @@ function normalizeDbEvent(
       text(record.visibility_type) === 'private' ? 'private' : 'public',
     participant_list: toStringArray(record.participant_list),
     target_groups: toStringArray(record.target_groups),
+    created_by: recordId(record.created_by),
     platform_contest_id: platformContestId || undefined,
     source,
   };

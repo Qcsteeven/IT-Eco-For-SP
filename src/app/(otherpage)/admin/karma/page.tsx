@@ -14,6 +14,7 @@ interface User {
   email: string;
   full_name: string;
   karma?: number;
+  codeforces_karma?: number;
   bscp_rating?: number;
 }
 
@@ -41,7 +42,7 @@ function formatDate(value: string) {
 }
 
 function displayKarma(user: User) {
-  return Number(user.karma ?? user.bscp_rating ?? 0);
+  return Number(user.codeforces_karma ?? user.karma ?? user.bscp_rating ?? 0);
 }
 
 export default function AdminKarmaPage() {
