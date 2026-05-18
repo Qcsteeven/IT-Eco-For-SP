@@ -6,34 +6,113 @@ import { toGroupThingId, toUserThingId } from '@/lib/surreal/ids';
 import type { Event, UpdateEventData } from '@/lib/types/event';
 
 function toEventThingId(id: string): string {
-  const s = (id || '').trim();
-  if (!s) return '';
-  return s.startsWith('events:') ? s : `events:${s}`;
+  const value = (id || '').trim();
+  if (!value) return '';
+  return value.startsWith('events:') ? value : `events:${value}`;
 }
 
-/**
- * PUT /api/events/[id]
- *
- * Обновление мероприятия. Доступно только coach и admin.
- * Coach может редактировать только свои созданные мероприятия.
- * Admin может редактировать все.
- */
+function rowsFromQuery(result: unknown): Record<string, unknown>[] {
+  if (!Array.isArray(result)) return [];
+
+  const first = result[0] as { result?: unknown } | unknown[] | undefined;
+  if (Array.isArray(first)) {
+    return first.filter(
+      (row): row is Record<string, unknown> =>
+        typeof row === 'object' && row !== null,
+    );
+  }
+
+  if (first && typeof first === 'object' && Array.isArray(first.result)) {
+    return first.result.filter(
+      (row): row is Record<string, unknown> =>
+        typeof row === 'object' && row !== null,
+    );
+  }
+
+  return result.filter(
+    (row): row is Record<string, unknown> =>
+      typeof row === 'object' && row !== null,
+  );
+}
+
+function recordId(value: unknown): string {
+  if (value == null) return '';
+  if (typeof value === 'string') return decodeURIComponent(value);
+
+  if (typeof value === 'object') {
+    const record = value as Record<string, unknown>;
+    if (typeof record.tb === 'string' && record.id != null) {
+      return `${record.tb}:${String(record.id)}`;
+    }
+
+    if (record.id != null) return recordId(record.id);
+  }
+
+  return String(value);
+}
+
+function normalizeIds(values: unknown, normalizer: (value: string) => string) {
+  return Array.isArray(values)
+    ? values.map((value) => normalizer(recordId(value))).filter(Boolean)
+    : [];
+}
+
+function jsonError(error: string, status: number) {
+  return NextResponse.json({ ok: false, error }, { status });
+}
+
+async function ensureCanManageEvent(
+  eventId: string,
+  userId: string,
+  role: string | undefined,
+) {
+  if (role !== 'coach' && role !== 'admin') {
+    return {
+      ok: false as const,
+      response: jsonError('Доступно только тренерам и администраторам', 403),
+    };
+  }
+
+  if (role === 'admin') {
+    return { ok: true as const };
+  }
+
+  const db = await getDB();
+  if (!db) {
+    throw new Error('Не удалось подключиться к базе данных SurrealDB');
+  }
+
+  const checkResult = await db.query(
+    `SELECT created_by FROM type::thing($id)`,
+    {
+      id: eventId,
+    },
+  );
+  const existingEvent = rowsFromQuery(checkResult)[0];
+
+  if (!existingEvent) {
+    return {
+      ok: false as const,
+      response: jsonError('Мероприятие не найдено', 404),
+    };
+  }
+
+  const createdBy = toUserThingId(recordId(existingEvent.created_by));
+  if (createdBy !== toUserThingId(userId)) {
+    return {
+      ok: false as const,
+      response: jsonError('Вы можете менять только свои мероприятия', 403),
+    };
+  }
+
+  return { ok: true as const };
+}
+
 export async function PUT(req: NextRequest) {
   try {
     const session = await getServerSession(authOptions);
     if (!session?.user?.id) {
-      return NextResponse.json(
-        { ok: false, error: 'Неавторизован' },
-        { status: 401 },
-      );
-    }
-
-    // Только coach и admin могут обновлять
-    if (session.user.role !== 'coach' && session.user.role !== 'admin') {
-      return NextResponse.json(
-        { ok: false, error: 'Доступно только тренерам и администраторам' },
-        { status: 403 },
-      );
+      return jsonError('Не авторизован', 401);
     }
 
     const url = new URL(req.url);
@@ -41,46 +120,22 @@ export async function PUT(req: NextRequest) {
     const eventId = toEventThingId(rawId);
 
     if (!eventId) {
-      return NextResponse.json(
-        { ok: false, error: 'Не указан ID мероприятия' },
-        { status: 400 },
-      );
+      return jsonError('Не указан ID мероприятия', 400);
     }
+
+    const access = await ensureCanManageEvent(
+      eventId,
+      session.user.id.toString(),
+      session.user.role,
+    );
+    if (!access.ok) return access.response;
 
     const body = (await req.json()) as UpdateEventData;
     const db = await getDB();
-    if (!db) throw new Error('Не удалось подключиться к базе данных SurrealDB');
-
-    // Проверяем доступы: coach может редактировать только свои
-    if (session.user.role === 'coach') {
-      const checkResult = await db.query(
-        `SELECT * FROM type::thing($id)`,
-        { id: eventId },
-      );
-      const existingEvent = (checkResult[0] as unknown as Event[])?.[0];
-
-      if (!existingEvent) {
-        return NextResponse.json(
-          { ok: false, error: 'Мероприятие не найдено' },
-          { status: 404 },
-        );
-      }
-
-      // Coach может редактировать только свои мероприятия
-      const createdBy = existingEvent.created_by as string | undefined;
-      const userId = toUserThingId(session.user.id.toString());
-      if (createdBy !== userId) {
-        return NextResponse.json(
-          {
-            ok: false,
-            error: 'Вы можете редактировать только свои мероприятия',
-          },
-          { status: 403 },
-        );
-      }
+    if (!db) {
+      throw new Error('Не удалось подключиться к базе данных SurrealDB');
     }
 
-    // Формируем данные для обновления
     const updateData: Record<string, unknown> = {};
     const allowedFields: (keyof UpdateEventData)[] = [
       'title',
@@ -102,19 +157,20 @@ export async function PUT(req: NextRequest) {
       }
     }
 
-    // Нормализация ID для participant_list/target_groups
     if (updateData.participant_list !== undefined) {
-      updateData.participant_list = (updateData.participant_list as string[])
-        .map(toUserThingId)
-        .filter(Boolean);
-    }
-    if (updateData.target_groups !== undefined) {
-      updateData.target_groups = (updateData.target_groups as string[])
-        .map(toGroupThingId)
-        .filter(Boolean);
+      updateData.participant_list = normalizeIds(
+        updateData.participant_list,
+        toUserThingId,
+      );
     }
 
-    // Валидация: если visibility_type=private, нужно participant_list или target_groups
+    if (updateData.target_groups !== undefined) {
+      updateData.target_groups = normalizeIds(
+        updateData.target_groups,
+        toGroupThingId,
+      );
+    }
+
     if (
       updateData.visibility_type === 'private' ||
       updateData.participant_list !== undefined ||
@@ -124,7 +180,7 @@ export async function PUT(req: NextRequest) {
         `SELECT visibility_type, participant_list, target_groups FROM type::thing($id)`,
         { id: eventId },
       );
-      const existing = (existingCheck[0] as Record<string, unknown>[])?.[0] || {};
+      const existing = rowsFromQuery(existingCheck)[0] || {};
       const nextVisibility =
         (updateData.visibility_type as string | undefined) ??
         (existing.visibility_type as string | undefined);
@@ -142,24 +198,15 @@ export async function PUT(req: NextRequest) {
         nextParticipants.length === 0 &&
         nextGroups.length === 0
       ) {
-        return NextResponse.json(
-          {
-            ok: false,
-            error:
-              'Для private мероприятия необходимо указать participant_list или target_groups',
-          },
-          { status: 400 },
+        return jsonError(
+          'Для private мероприятия необходимо указать participant_list или target_groups',
+          400,
         );
       }
     }
 
-    updateData.updated_at = 'time::now()';
-
-    // Формируем SQL с правильными типами
     const setClauses: string[] = [];
-    const params: Record<string, unknown> = {
-      id: eventId,
-    };
+    const params: Record<string, unknown> = { id: eventId };
 
     if (updateData.title) {
       setClauses.push('title = $title');
@@ -178,10 +225,12 @@ export async function PUT(req: NextRequest) {
       params.status = updateData.status;
     }
     if (updateData.start_time_utc) {
-      setClauses.push(`start_time_utc = d'${updateData.start_time_utc}'`);
+      setClauses.push('start_time_utc = type::datetime($start_time_utc)');
+      params.start_time_utc = updateData.start_time_utc;
     }
     if (updateData.end_time_utc) {
-      setClauses.push(`end_time_utc = d'${updateData.end_time_utc}'`);
+      setClauses.push('end_time_utc = type::datetime($end_time_utc)');
+      params.end_time_utc = updateData.end_time_utc;
     }
     if (updateData.external_link) {
       setClauses.push('external_link = $external_link');
@@ -203,14 +252,20 @@ export async function PUT(req: NextRequest) {
       setClauses.push('platform_contest_id = $platform_contest_id');
       params.platform_contest_id = updateData.platform_contest_id;
     }
+
+    if (setClauses.length === 0) {
+      return jsonError('Нет данных для обновления', 400);
+    }
+
     setClauses.push('updated_at = time::now()');
 
     const result = await db.query(
       `UPDATE type::thing($id) SET ${setClauses.join(', ')}`,
       params,
     );
-
-    const updatedEvent = (result[0] as unknown as Event[])?.[0];
+    const updatedEvent = rowsFromQuery(result)[0] as unknown as
+      | Event
+      | undefined;
 
     return NextResponse.json(
       { ok: true, data: updatedEvent, message: 'Мероприятие обновлено' },
@@ -218,37 +273,16 @@ export async function PUT(req: NextRequest) {
     );
   } catch (err: unknown) {
     const errorMessage = err instanceof Error ? err.message : String(err);
-    console.error('API PUT Error:', errorMessage);
-    return NextResponse.json(
-      { ok: false, error: 'Ошибка сервера' },
-      { status: 500 },
-    );
+    console.error('API PUT /events/[id] Error:', errorMessage);
+    return jsonError('Ошибка сервера', 500);
   }
 }
 
-/**
- * DELETE /api/events/[id]
- *
- * Удаление мероприятия. Доступно только coach и admin.
- * Coach может удалять только свои созданные мероприятия.
- * Admin может удалять все.
- */
 export async function DELETE(req: NextRequest) {
   try {
     const session = await getServerSession(authOptions);
     if (!session?.user?.id) {
-      return NextResponse.json(
-        { ok: false, error: 'Неавторизован' },
-        { status: 401 },
-      );
-    }
-
-    // Только coach и admin могут удалять
-    if (session.user.role !== 'coach' && session.user.role !== 'admin') {
-      return NextResponse.json(
-        { ok: false, error: 'Доступно только тренерам и администраторам' },
-        { status: 403 },
-      );
+      return jsonError('Не авторизован', 401);
     }
 
     const url = new URL(req.url);
@@ -256,36 +290,22 @@ export async function DELETE(req: NextRequest) {
     const eventId = toEventThingId(rawId);
 
     if (!eventId) {
-      return NextResponse.json(
-        { ok: false, error: 'Не указан ID мероприятия' },
-        { status: 400 },
-      );
+      return jsonError('Не указан ID мероприятия', 400);
     }
+
+    const access = await ensureCanManageEvent(
+      eventId,
+      session.user.id.toString(),
+      session.user.role,
+    );
+    if (!access.ok) return access.response;
 
     const db = await getDB();
-    if (!db) throw new Error('Не удалось подключиться к базе данных SurrealDB');
-
-    // Проверяем доступы: coach может удалять только свои
-    if (session.user.role === 'coach') {
-      const checkResult = await db.query(
-        `SELECT created_by FROM type::thing($id)`,
-        { id: eventId },
-      );
-      const existing = (checkResult[0] as Record<string, unknown>[])?.[0];
-      const createdBy = existing?.created_by as string | undefined;
-      const userId = toUserThingId(session.user.id.toString());
-
-      if (createdBy !== userId) {
-        return NextResponse.json(
-          { ok: false, error: 'Вы можете удалять только свои мероприятия' },
-          { status: 403 },
-        );
-      }
+    if (!db) {
+      throw new Error('Не удалось подключиться к базе данных SurrealDB');
     }
 
-    await db.query(`DELETE type::thing($id)`, {
-      id: eventId,
-    });
+    await db.query(`DELETE type::thing($id)`, { id: eventId });
 
     return NextResponse.json(
       { ok: true, message: 'Мероприятие удалено' },
@@ -293,10 +313,7 @@ export async function DELETE(req: NextRequest) {
     );
   } catch (err: unknown) {
     const errorMessage = err instanceof Error ? err.message : String(err);
-    console.error('API DELETE Error:', errorMessage);
-    return NextResponse.json(
-      { ok: false, error: 'Ошибка сервера' },
-      { status: 500 },
-    );
+    console.error('API DELETE /events/[id] Error:', errorMessage);
+    return jsonError('Ошибка сервера', 500);
   }
 }

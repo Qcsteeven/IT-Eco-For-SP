@@ -1,10 +1,22 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import type { FormEvent } from 'react';
 import { useSession } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
-import axios from 'axios';
+import {
+  Bell,
+  ExternalLink,
+  Pencil,
+  Plus,
+  RefreshCw,
+  Trash2,
+  X,
+} from 'lucide-react';
 import { toGroupThingId, toUserThingId } from '@/lib/surreal/ids';
+import './events.scss';
+
+type EventVisibility = 'public' | 'private';
 
 interface User {
   id: string;
@@ -13,7 +25,7 @@ interface User {
   role: string;
 }
 
-interface Event {
+interface ManagedEvent {
   id: string;
   title: string;
   description?: string;
@@ -22,7 +34,8 @@ interface Event {
   start_time_utc: string;
   end_time_utc: string;
   external_link: string;
-  visibility_type: 'public' | 'private';
+  registration_link?: string;
+  visibility_type: EventVisibility;
   participant_list: string[];
   target_groups?: string[];
   created_by?: string;
@@ -34,6 +47,39 @@ interface Group {
   description?: string;
 }
 
+interface ApiResponse<T> {
+  ok: boolean;
+  data?: T;
+  error?: string;
+  message?: string;
+}
+
+type EventFormData = {
+  title: string;
+  description: string;
+  platform: string;
+  status: string;
+  start_time_utc: string;
+  end_time_utc: string;
+  external_link: string;
+  visibility_type: EventVisibility;
+  participant_list: string[];
+  target_groups: string[];
+};
+
+const EMPTY_FORM: EventFormData = {
+  title: '',
+  description: '',
+  platform: 'codeforces',
+  status: 'upcoming',
+  start_time_utc: '',
+  end_time_utc: '',
+  external_link: '',
+  visibility_type: 'public',
+  participant_list: [],
+  target_groups: [],
+};
+
 const PLATFORMS = [
   { value: 'codeforces', label: 'Codeforces' },
   { value: 'atcoder', label: 'AtCoder' },
@@ -44,185 +90,377 @@ const PLATFORMS = [
 const STATUSES = [
   { value: 'upcoming', label: 'Предстоящий' },
   { value: 'active', label: 'Активный' },
-  { value: 'completed', label: 'Завершён' },
-  { value: 'cancelled', label: 'Отменён' },
+  { value: 'completed', label: 'Завершен' },
+  { value: 'cancelled', label: 'Отменен' },
 ];
 
-function toISODate(local: string): string {
-  if (!local) return '';
-  if (local.endsWith('Z')) return local;
-  return local + ':00.000Z';
+const VISIBILITY_OPTIONS = [
+  { value: 'public', label: 'Публичное' },
+  { value: 'private', label: 'Приватное' },
+] satisfies { value: EventVisibility; label: string }[];
+
+function safeDecode(value: string) {
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    return value;
+  }
+}
+
+function recordId(value: unknown): string {
+  if (value == null) return '';
+
+  if (typeof value === 'string') {
+    return safeDecode(value);
+  }
+
+  if (typeof value === 'object') {
+    const record = value as Record<string, unknown>;
+    if (typeof record.tb === 'string' && record.id != null) {
+      return `${record.tb}:${String(record.id)}`;
+    }
+
+    if (record.id != null) return recordId(record.id);
+  }
+
+  return String(value);
+}
+
+function toIsoFromLocal(value: string): string {
+  if (!value) return '';
+  if (value.endsWith('Z')) return value;
+
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? value : date.toISOString();
+}
+
+function toLocalInputValue(value: string): string {
+  if (!value) return '';
+
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value.slice(0, 16);
+
+  const localDate = new Date(
+    date.getTime() - date.getTimezoneOffset() * 60_000,
+  );
+  return localDate.toISOString().slice(0, 16);
+}
+
+function formatDateTime(value: string) {
+  if (!value) return '-';
+
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '-';
+
+  return new Intl.DateTimeFormat('ru-RU', {
+    day: 'numeric',
+    month: 'long',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  }).format(date);
+}
+
+function formatDate(value: string) {
+  if (!value) return '-';
+
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '-';
+
+  return new Intl.DateTimeFormat('ru-RU', {
+    day: 'numeric',
+    month: 'long',
+    year: 'numeric',
+  }).format(date);
+}
+
+function platformLabel(platform: string) {
+  return PLATFORMS.find((item) => item.value === platform)?.label ?? platform;
+}
+
+function statusLabel(status: string) {
+  return STATUSES.find((item) => item.value === status)?.label ?? status;
+}
+
+function normalizeEvent(event: ManagedEvent): ManagedEvent {
+  return {
+    ...event,
+    id: recordId(event.id),
+    external_link: event.external_link || event.registration_link || '',
+    visibility_type: event.visibility_type === 'private' ? 'private' : 'public',
+    participant_list: (event.participant_list || [])
+      .map(recordId)
+      .filter(Boolean),
+    target_groups: (event.target_groups || []).map(recordId).filter(Boolean),
+  };
+}
+
+async function readApi<T>(url: string, fallback: T): Promise<T> {
+  const response = await fetch(url, { cache: 'no-store' });
+  const payload = (await response.json()) as ApiResponse<T>;
+
+  if (!response.ok || !payload.ok) {
+    throw new Error(payload.error || 'Не удалось загрузить данные');
+  }
+
+  return payload.data ?? fallback;
 }
 
 export default function EventsManagementPage() {
   const { data: session, status: sessionStatus } = useSession();
   const router = useRouter();
 
-  const [events, setEvents] = useState<Event[]>([]);
+  const [events, setEvents] = useState<ManagedEvent[]>([]);
   const [users, setUsers] = useState<User[]>([]);
   const [groups, setGroups] = useState<Group[]>([]);
   const [loading, setLoading] = useState(true);
+  const [submitting, setSubmitting] = useState(false);
   const [showForm, setShowForm] = useState(false);
-  const [editingEvent, setEditingEvent] = useState<Event | null>(null);
-  const [hasAccess, setHasAccess] = useState(false);
+  const [editingEvent, setEditingEvent] = useState<ManagedEvent | null>(null);
+  const [formData, setFormData] = useState<EventFormData>(EMPTY_FORM);
   const [groupSearch, setGroupSearch] = useState('');
   const [groupMemberUserIds, setGroupMemberUserIds] = useState<string[]>([]);
+  const [visibleCount, setVisibleCount] = useState(4);
+  const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState<string | null>(null);
 
-  const [formData, setFormData] = useState({
-    title: '',
-    description: '',
-    platform: 'codeforces',
-    status: 'upcoming',
-    start_time_utc: '',
-    end_time_utc: '',
-    external_link: '',
-    visibility_type: 'public' as 'public' | 'private',
-    participant_list: [] as string[],
-    target_groups: [] as string[],
-  });
+  const userRole = (session?.user as { role?: string } | undefined)?.role;
+  const hasAccess = userRole === 'coach' || userRole === 'admin';
 
-  // Проверка доступа
   useEffect(() => {
-    if (sessionStatus === 'authenticated') {
-      const role = (session?.user as { role?: string })?.role;
-      if (role === 'coach' || role === 'admin') {
-        setHasAccess(true);
-      } else {
-        router.push('/dashboard');
-      }
+    if (sessionStatus === 'authenticated' && !hasAccess) {
+      router.push('/dashboard');
     } else if (sessionStatus === 'unauthenticated') {
       router.push('/auth/signin');
     }
-  }, [sessionStatus, session, router]);
+  }, [hasAccess, router, sessionStatus]);
 
-  // Загрузка данных
+  const fetchData = useCallback(async () => {
+    try {
+      setLoading(true);
+      setError(null);
+
+      const [eventsData, usersData, groupsData] = await Promise.all([
+        readApi<ManagedEvent[]>(
+          '/api/events?includeContests=false&includeCodeforces=false',
+          [],
+        ),
+        readApi<User[]>('/api/users?limit=200', []),
+        readApi<Group[]>('/api/groups', []),
+      ]);
+
+      setEvents(eventsData.map(normalizeEvent));
+      setUsers(
+        usersData.map((user) => ({
+          ...user,
+          id: toUserThingId(recordId(user.id)),
+        })),
+      );
+      setGroups(
+        groupsData.map((group) => ({
+          ...group,
+          id: toGroupThingId(recordId(group.id)),
+        })),
+      );
+    } catch (err) {
+      setError(
+        err instanceof Error ? err.message : 'Не удалось загрузить данные',
+      );
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
   useEffect(() => {
     if (sessionStatus === 'authenticated' && hasAccess) {
       fetchData();
     }
-  }, [sessionStatus, hasAccess]);
+  }, [fetchData, hasAccess, sessionStatus]);
 
-  const fetchData = async () => {
-    try {
-      setLoading(true);
-      const [eventsRes, usersRes] = await Promise.all([
-        axios.get('/api/events'),
-        axios.get('/api/users?limit=200'),
-      ]);
-      setEvents(eventsRes.data.data || []);
-      setUsers(usersRes.data.data || []);
-      const groupsRes = await axios.get('/api/groups');
-      const groupsRaw = groupsRes.data.data || [];
-      // Нормализуем id группы, чтобы везде был формат groups:...
-      setGroups(
-        (groupsRaw as Group[]).map((g) => ({
-          ...g,
-          id: toGroupThingId(String(g.id)),
-        })),
-      );
-    } catch (err) {
-      console.error('Error fetching data:', err);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const resetForm = () => {
-    setFormData({
-      title: '',
-      description: '',
-      platform: 'codeforces',
-      status: 'upcoming',
-      start_time_utc: '',
-      end_time_utc: '',
-      external_link: '',
-      visibility_type: 'public',
-      participant_list: [],
-      target_groups: [],
-    });
+  function resetForm() {
+    setFormData(EMPTY_FORM);
     setEditingEvent(null);
     setShowForm(false);
-  };
+    setSubmitting(false);
+    setGroupSearch('');
+    setGroupMemberUserIds([]);
+  }
 
-  const openEditForm = (event: Event) => {
+  function openCreateForm() {
+    setEditingEvent(null);
+    setFormData(EMPTY_FORM);
+    setShowForm(true);
+    setError(null);
+    setSuccess(null);
+  }
+
+  function openEditForm(event: ManagedEvent) {
     setEditingEvent(event);
     setFormData({
       title: event.title,
       description: event.description || '',
       platform: event.platform,
       status: event.status,
-      start_time_utc: event.start_time_utc
-        ? event.start_time_utc.slice(0, 16)
-        : '',
-      end_time_utc: event.end_time_utc ? event.end_time_utc.slice(0, 16) : '',
-      external_link: event.external_link,
+      start_time_utc: toLocalInputValue(event.start_time_utc),
+      end_time_utc: toLocalInputValue(event.end_time_utc),
+      external_link: event.external_link || event.registration_link || '',
       visibility_type: event.visibility_type,
       participant_list: (event.participant_list || [])
-        .map((id) => toUserThingId(String(id)))
+        .map((id) => toUserThingId(recordId(id)))
         .filter(Boolean),
       target_groups: (event.target_groups || [])
-        .map((id) => toGroupThingId(String(id)))
+        .map((id) => toGroupThingId(recordId(id)))
         .filter(Boolean),
     });
     setShowForm(true);
-  };
+    setError(null);
+    setSuccess(null);
+  }
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  function updateForm<K extends keyof EventFormData>(
+    key: K,
+    value: EventFormData[K],
+  ) {
+    setFormData((current) => ({ ...current, [key]: value }));
+  }
+
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setError(null);
+    setSuccess(null);
+
+    const startIso = toIsoFromLocal(formData.start_time_utc);
+    const endIso = toIsoFromLocal(formData.end_time_utc);
+    const startMs = new Date(startIso).getTime();
+    const endMs = new Date(endIso).getTime();
+
+    if (
+      !Number.isFinite(startMs) ||
+      !Number.isFinite(endMs) ||
+      endMs <= startMs
+    ) {
+      setError('Окончание должно быть позже начала мероприятия');
+      return;
+    }
+
+    if (
+      formData.visibility_type === 'private' &&
+      formData.participant_list.length === 0 &&
+      formData.target_groups.length === 0
+    ) {
+      setError('Для приватного мероприятия выберите группу или участников');
+      return;
+    }
+
+    const payload = {
+      ...formData,
+      title: formData.title.trim(),
+      description: formData.description.trim(),
+      external_link: formData.external_link.trim(),
+      start_time_utc: startIso,
+      end_time_utc: endIso,
+      participant_list:
+        formData.visibility_type === 'private' ? formData.participant_list : [],
+      target_groups:
+        formData.visibility_type === 'private' ? formData.target_groups : [],
+    };
+
     try {
-      const payload = {
-        ...formData,
-        start_time_utc: toISODate(formData.start_time_utc),
-        end_time_utc: toISODate(formData.end_time_utc),
-      };
-      if (editingEvent) {
-        await axios.put(`/api/events/${editingEvent.id}`, payload);
-      } else {
-        await axios.post('/api/events', payload);
+      setSubmitting(true);
+      const response = await fetch(
+        editingEvent
+          ? `/api/events/${encodeURIComponent(editingEvent.id)}`
+          : '/api/events',
+        {
+          method: editingEvent ? 'PUT' : 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        },
+      );
+      const result = (await response.json()) as ApiResponse<ManagedEvent>;
+
+      if (!response.ok || !result.ok) {
+        throw new Error(result.error || 'Ошибка сохранения мероприятия');
       }
+
+      setSuccess(
+        editingEvent ? 'Мероприятие обновлено' : 'Мероприятие создано',
+      );
       resetForm();
-      fetchData();
-    } catch (err: unknown) {
-      const msg =
-        (err as { response?: { data?: { error?: string } } })?.response?.data
-          ?.error || 'Ошибка сохранения';
-      alert(msg);
+      await fetchData();
+    } catch (err) {
+      setError(
+        err instanceof Error ? err.message : 'Ошибка сохранения мероприятия',
+      );
+    } finally {
+      setSubmitting(false);
     }
-  };
+  }
 
-  const handleDelete = async (id: string) => {
-    if (!confirm('Удалить мероприятие?')) return;
+  async function handleDelete(eventId: string) {
+    if (!window.confirm('Удалить мероприятие?')) return;
+
     try {
-      await axios.delete(`/api/events/${id}`);
-      fetchData();
-    } catch (err: unknown) {
-      const msg =
-        (err as { response?: { data?: { error?: string } } })?.response?.data
-          ?.error || 'Ошибка удаления';
-      alert(msg);
+      setError(null);
+      const response = await fetch(
+        `/api/events/${encodeURIComponent(eventId)}`,
+        {
+          method: 'DELETE',
+        },
+      );
+      const result = (await response.json()) as ApiResponse<null>;
+
+      if (!response.ok || !result.ok) {
+        throw new Error(result.error || 'Ошибка удаления мероприятия');
+      }
+
+      setSuccess('Мероприятие удалено');
+      await fetchData();
+    } catch (err) {
+      setError(
+        err instanceof Error ? err.message : 'Ошибка удаления мероприятия',
+      );
     }
-  };
+  }
 
-  const toggleParticipant = (userId: string) => {
-    setFormData((prev) => ({
-      ...prev,
-      participant_list: prev.participant_list.includes(userId)
-        ? prev.participant_list.filter((id) => id !== userId)
-        : [...prev.participant_list, userId],
+  async function handleSync(eventId: string) {
+    try {
+      setError(null);
+      const response = await fetch(
+        `/api/events/${encodeURIComponent(eventId)}/sync-results`,
+        { method: 'POST' },
+      );
+      const result = (await response.json()) as ApiResponse<unknown>;
+
+      if (!response.ok || !result.ok) {
+        throw new Error(result.error || 'Ошибка синхронизации');
+      }
+
+      setSuccess(result.message || 'Синхронизация завершена');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Ошибка синхронизации');
+    }
+  }
+
+  function toggleParticipant(userId: string) {
+    setFormData((current) => ({
+      ...current,
+      participant_list: current.participant_list.includes(userId)
+        ? current.participant_list.filter((id) => id !== userId)
+        : [...current.participant_list, userId],
     }));
-  };
+  }
 
-  const toggleGroup = (groupId: string) => {
-    const gid = toGroupThingId(String(groupId));
-    setFormData((prev) => ({
-      ...prev,
-      target_groups: prev.target_groups.includes(gid)
-        ? prev.target_groups.filter((id) => id !== gid)
-        : [...prev.target_groups, gid],
+  function toggleGroup(groupId: string) {
+    const normalized = toGroupThingId(recordId(groupId));
+    setFormData((current) => ({
+      ...current,
+      target_groups: current.target_groups.includes(normalized)
+        ? current.target_groups.filter((id) => id !== normalized)
+        : [...current.target_groups, normalized],
     }));
-  };
+  }
 
-  // Когда выбраны группы — исключаем их участников из ручного выбора пользователей
   useEffect(() => {
     let cancelled = false;
 
@@ -234,19 +472,25 @@ export default function EventsManagementPage() {
 
       try {
         const results = await Promise.all(
-          groupIds.map(async (gid) => {
-            const res = await fetch(`/api/groups/${encodeURIComponent(gid)}/members`);
-            const json = await res.json();
-            if (!json?.ok) return [];
-            const arr = Array.isArray(json.data) ? json.data : [];
-            return arr
-              .map((m: { user_id?: unknown }) => String(m?.user_id || ''))
+          groupIds.map(async (groupId) => {
+            const response = await fetch(
+              `/api/groups/${encodeURIComponent(groupId)}/members`,
+              { cache: 'no-store' },
+            );
+            const json = (await response.json()) as ApiResponse<
+              { user_id?: unknown }[]
+            >;
+            if (!json.ok || !Array.isArray(json.data)) return [];
+
+            return json.data
+              .map((member) => toUserThingId(recordId(member.user_id)))
               .filter(Boolean);
           }),
         );
 
-        const unique = Array.from(new Set(results.flat())).sort();
-        if (!cancelled) setGroupMemberUserIds(unique);
+        if (!cancelled) {
+          setGroupMemberUserIds(Array.from(new Set(results.flat())));
+        }
       } catch {
         if (!cancelled) setGroupMemberUserIds([]);
       }
@@ -259,662 +503,431 @@ export default function EventsManagementPage() {
     };
   }, [formData.target_groups, formData.visibility_type]);
 
-  // Если пользователь уже входит в выбранные группы — убираем его из participant_list (защита от дублей)
   useEffect(() => {
-    if (formData.visibility_type !== 'private') return;
-    if (groupMemberUserIds.length === 0) return;
+    if (
+      formData.visibility_type !== 'private' ||
+      groupMemberUserIds.length === 0
+    ) {
+      return;
+    }
 
     const excluded = new Set(groupMemberUserIds);
-    setFormData((prev) => {
-      const filtered = prev.participant_list.filter((id) => !excluded.has(id));
-      if (filtered.length === prev.participant_list.length) return prev;
-      return { ...prev, participant_list: filtered };
+    setFormData((current) => {
+      const filtered = current.participant_list.filter(
+        (id) => !excluded.has(id),
+      );
+      return filtered.length === current.participant_list.length
+        ? current
+        : { ...current, participant_list: filtered };
     });
-  }, [groupMemberUserIds, formData.visibility_type]);
+  }, [formData.visibility_type, groupMemberUserIds]);
 
-  const effectiveParticipantsCount = React.useMemo(() => {
-    const direct = new Set(formData.participant_list);
-    // без запроса состава группы считаем только уникальные выборы (группы считаем как 0+)
-    // реальный union будет на бэке при sync-results через participant_snapshot
-    return direct.size;
-  }, [formData.participant_list]);
+  const filteredGroups = useMemo(() => {
+    const query = groupSearch.trim().toLowerCase();
+    if (!query) return groups;
 
-  const handleSync = async (eventId: string) => {
-    try {
-      const res = await axios.post(`/api/events/${eventId}/sync-results`);
-      alert(res.data.message || 'Синхронизация завершена');
-    } catch (err: unknown) {
-      const msg =
-        (err as { response?: { data?: { error?: string } } })?.response?.data
-          ?.error || 'Ошибка синхронизации';
-      alert(msg);
-    }
-  };
+    return groups.filter((group) => group.name.toLowerCase().includes(query));
+  }, [groupSearch, groups]);
 
-  if (sessionStatus === 'loading' || loading || !hasAccess) {
+  const directParticipantsCount = useMemo(
+    () => new Set(formData.participant_list).size,
+    [formData.participant_list],
+  );
+
+  const directUsers = useMemo(
+    () => users.filter((user) => !groupMemberUserIds.includes(user.id)),
+    [groupMemberUserIds, users],
+  );
+
+  const visibleEvents = events.slice(0, visibleCount);
+
+  if (sessionStatus === 'loading' || (loading && events.length === 0)) {
     return <div className="events-loading">Загрузка...</div>;
   }
 
+  if (!hasAccess) {
+    return <div className="events-loading">Проверка доступа...</div>;
+  }
+
   return (
-    <div className="events-management">
-      <div className="events-header">
-        <h1>Управление мероприятиями</h1>
-        <a
-          href="/coach"
-          style={{
-            marginLeft: 'auto',
-            marginRight: '1rem',
-            color: '#667eea',
-            fontWeight: 600,
-            textDecoration: 'none',
-          }}
-        >
-          ← В тренерскую
-        </a>
-        <button className="btn-primary" onClick={() => setShowForm(!showForm)}>
-          {showForm ? 'Отмена' : '+ Создать мероприятие'}
-        </button>
-      </div>
+    <main
+      className={`events-management ${
+        showForm ? 'events-management--form-open' : ''
+      }`}
+    >
+      <div className="events-container">
+        <header className="events-header">
+          <h1>Управление мероприятиями</h1>
+          {!showForm && (
+            <button
+              type="button"
+              className="events-create-btn"
+              onClick={openCreateForm}
+            >
+              <Plus size={18} aria-hidden="true" />
+              Создать мероприятие
+            </button>
+          )}
+        </header>
 
-      {showForm && (
-        <form className="event-form" onSubmit={handleSubmit}>
-          <h2>{editingEvent ? 'Редактирование' : 'Новое мероприятие'}</h2>
-
-          <div className="form-group">
-            <label>Название *</label>
-            <input
-              type="text"
-              value={formData.title}
-              onChange={(e) =>
-                setFormData({ ...formData, title: e.target.value })
-              }
-              required
-              placeholder="Codeforces Round #900"
-            />
+        {error && (
+          <div className="events-banner events-banner--error">
+            {error}
+            <button
+              type="button"
+              onClick={() => setError(null)}
+              aria-label="Скрыть ошибку"
+            >
+              <X size={18} />
+            </button>
           </div>
+        )}
 
-          <div className="form-group">
-            <label>Описание</label>
-            <textarea
-              value={formData.description}
-              onChange={(e) =>
-                setFormData({ ...formData, description: e.target.value })
-              }
-              placeholder="Описание мероприятия..."
-              rows={3}
-            />
+        {success && (
+          <div className="events-banner events-banner--success">
+            {success}
+            <button
+              type="button"
+              onClick={() => setSuccess(null)}
+              aria-label="Скрыть сообщение"
+            >
+              <X size={18} />
+            </button>
           </div>
+        )}
 
-          <div className="form-row">
-            <div className="form-group">
-              <label>Платформа *</label>
-              <select
-                value={formData.platform}
-                onChange={(e) =>
-                  setFormData({ ...formData, platform: e.target.value })
-                }
-              >
-                {PLATFORMS.map((p) => (
-                  <option key={p.value} value={p.value}>
-                    {p.label}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div className="form-group">
-              <label>Статус *</label>
-              <select
-                value={formData.status}
-                onChange={(e) =>
-                  setFormData({ ...formData, status: e.target.value })
-                }
-              >
-                {STATUSES.map((s) => (
-                  <option key={s.value} value={s.value}>
-                    {s.label}
-                  </option>
-                ))}
-              </select>
-            </div>
-          </div>
+        {showForm && (
+          <form className="event-form" onSubmit={handleSubmit}>
+            <h2>
+              {editingEvent
+                ? 'Редактировать мероприятие'
+                : 'Создать мероприятие'}
+            </h2>
 
-          <div className="form-row">
-            <div className="form-group">
-              <label>Начало *</label>
-              <input
-                type="datetime-local"
-                value={formData.start_time_utc}
-                onChange={(e) =>
-                  setFormData({ ...formData, start_time_utc: e.target.value })
-                }
-                required
-              />
-            </div>
-            <div className="form-group">
-              <label>Окончание *</label>
-              <input
-                type="datetime-local"
-                value={formData.end_time_utc}
-                onChange={(e) =>
-                  setFormData({ ...formData, end_time_utc: e.target.value })
-                }
-                required
-              />
-            </div>
-          </div>
-
-          <div className="form-group">
-            <label>Внешняя ссылка *</label>
-            <input
-              type="url"
-              value={formData.external_link}
-              onChange={(e) =>
-                setFormData({ ...formData, external_link: e.target.value })
-              }
-              required
-              placeholder="https://codeforces.com/contest/1900"
-            />
-          </div>
-
-          <div className="form-group">
-            <label>Видимость *</label>
-            <div className="visibility-options">
-              <label
-                className={`radio-option ${formData.visibility_type === 'public' ? 'active' : ''}`}
-              >
-                <input
-                  type="radio"
-                  name="visibility"
-                  value="public"
-                  checked={formData.visibility_type === 'public'}
-                  onChange={() =>
-                    setFormData({
-                      ...formData,
-                      visibility_type: 'public',
-                      participant_list: [],
-                      target_groups: [],
-                    })
-                  }
-                />
-                <span>🌍 Публичное (для всех)</span>
-              </label>
-              <label
-                className={`radio-option ${formData.visibility_type === 'private' ? 'active' : ''}`}
-              >
-                <input
-                  type="radio"
-                  name="visibility"
-                  value="private"
-                  checked={formData.visibility_type === 'private'}
-                  onChange={() =>
-                    setFormData({ ...formData, visibility_type: 'private' })
-                  }
-                />
-                <span>🔒 Приватное (только для назначенных)</span>
-              </label>
-            </div>
-          </div>
-
-          {formData.visibility_type === 'private' && (
-            <div className="form-group participants-selector">
-              <label>Назначение на группы и/или пользователей *</label>
-              <p className="hint">
-                Private мероприятие видно, если пользователь выбран напрямую или состоит в одной из выбранных групп
-              </p>
-
-              <div style={{ marginBottom: '1rem' }}>
-                <div style={{ fontWeight: 600, marginBottom: '0.5rem', color: '#4a5568' }}>
-                  Группы
-                </div>
+            <div className="event-form__grid">
+              <label className="event-field">
+                <span>Название</span>
                 <input
                   type="text"
-                  value={groupSearch}
-                  onChange={(e) => setGroupSearch(e.target.value)}
-                  placeholder="Поиск группы..."
-                  style={{
-                    width: '100%',
-                    padding: '0.75rem',
-                    border: '2px solid #e2e8f0',
-                    borderRadius: 8,
-                    marginBottom: '0.75rem',
-                  }}
+                  value={formData.title}
+                  onChange={(event) => updateForm('title', event.target.value)}
+                  required
+                  placeholder="Codeforces Round #945"
                 />
-                <div
-                  style={{
-                    maxHeight: 180,
-                    overflowY: 'auto',
-                    border: '2px solid #e2e8f0',
-                    borderRadius: 8,
-                    padding: '0.5rem',
-                    background: '#fff',
-                  }}
+              </label>
+
+              <label className="event-field">
+                <span>Начало</span>
+                <input
+                  type="datetime-local"
+                  value={formData.start_time_utc}
+                  onChange={(event) =>
+                    updateForm('start_time_utc', event.target.value)
+                  }
+                  required
+                />
+              </label>
+
+              <label className="event-field">
+                <span>Описание</span>
+                <input
+                  type="text"
+                  value={formData.description}
+                  onChange={(event) =>
+                    updateForm('description', event.target.value)
+                  }
+                  placeholder="Описание мероприятия"
+                />
+              </label>
+
+              <label className="event-field">
+                <span>Окончание</span>
+                <input
+                  type="datetime-local"
+                  value={formData.end_time_utc}
+                  onChange={(event) =>
+                    updateForm('end_time_utc', event.target.value)
+                  }
+                  required
+                />
+              </label>
+
+              <label className="event-field">
+                <span>Платформа</span>
+                <select
+                  value={formData.platform}
+                  onChange={(event) =>
+                    updateForm('platform', event.target.value)
+                  }
+                  required
                 >
-                  {groups
-                    .filter((g) =>
-                      (g.name || '')
-                        .toLowerCase()
-                        .includes(groupSearch.trim().toLowerCase()),
-                    )
-                    .map((g) => (
-                      <label
-                        key={g.id}
-                        className={`participant-item ${formData.target_groups.includes(g.id) ? 'selected' : ''}`}
-                        onClick={() => toggleGroup(g.id)}
-                      >
-                        <input
-                          type="checkbox"
-                          checked={formData.target_groups.includes(g.id)}
-                          onChange={() => {}}
-                        />
-                        <span className="participant-name">{g.name}</span>
-                        <span className="participant-email">{g.id}</span>
-                      </label>
-                    ))}
-                  {groups.length === 0 && (
-                    <div style={{ padding: '0.75rem', color: '#718096' }}>
-                      Нет доступных групп
-                    </div>
-                  )}
-                </div>
-              </div>
+                  {PLATFORMS.map((platform) => (
+                    <option key={platform.value} value={platform.value}>
+                      {platform.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
 
-              <div style={{ fontSize: '0.9rem', color: '#718096', marginBottom: '0.75rem' }}>
-                Выбрано пользователей: {effectiveParticipantsCount}. Выбрано групп: {formData.target_groups.length}.
-              </div>
+              <label className="event-field">
+                <span>Внешняя ссылка</span>
+                <input
+                  type="url"
+                  value={formData.external_link}
+                  onChange={(event) =>
+                    updateForm('external_link', event.target.value)
+                  }
+                  required
+                  placeholder="https://example.com"
+                />
+              </label>
 
-              <div className="participants-list">
-                {users
-                  .filter((user) => !groupMemberUserIds.includes(user.id))
-                  .map((user) => (
-                  <label
-                    key={user.id}
-                    className={`participant-item ${formData.participant_list.includes(user.id) ? 'selected' : ''}`}
-                    onClick={() => toggleParticipant(user.id)}
-                  >
-                    <input
-                      type="checkbox"
-                      checked={formData.participant_list.includes(user.id)}
-                      onChange={() => {}}
-                    />
-                    <span className="participant-name">
-                      {user.full_name || user.email}
-                    </span>
-                    <span className="participant-email">{user.email}</span>
-                  </label>
-                ))}
-              </div>
+              <label className="event-field">
+                <span>Статус</span>
+                <select
+                  value={formData.status}
+                  onChange={(event) => updateForm('status', event.target.value)}
+                  required
+                >
+                  {STATUSES.map((status) => (
+                    <option key={status.value} value={status.value}>
+                      {status.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
+              <label className="event-field">
+                <span>Видимость</span>
+                <select
+                  value={formData.visibility_type}
+                  onChange={(event) =>
+                    setFormData((current) => ({
+                      ...current,
+                      visibility_type: event.target.value as EventVisibility,
+                      participant_list:
+                        event.target.value === 'public'
+                          ? []
+                          : current.participant_list,
+                      target_groups:
+                        event.target.value === 'public'
+                          ? []
+                          : current.target_groups,
+                    }))
+                  }
+                  required
+                >
+                  {VISIBILITY_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
             </div>
-          )}
 
-          <div className="form-actions">
-            <button type="submit" className="btn-primary">
-              {editingEvent ? 'Сохранить' : 'Создать'}
-            </button>
-            {editingEvent && (
+            {formData.visibility_type === 'private' && (
+              <section className="event-private-panel">
+                <div>
+                  <h3>Назначение приватного мероприятия</h3>
+                  <p>
+                    Выберите группы или отдельных пользователей. Участники
+                    выбранных групп исключаются из ручного списка, чтобы не было
+                    дублей.
+                  </p>
+                </div>
+
+                <div className="event-private-grid">
+                  <div className="event-picker">
+                    <label>
+                      <span>Группы</span>
+                      <input
+                        type="search"
+                        value={groupSearch}
+                        onChange={(event) => setGroupSearch(event.target.value)}
+                        placeholder="Поиск группы"
+                      />
+                    </label>
+                    <div className="event-picker__list">
+                      {filteredGroups.map((group) => (
+                        <button
+                          type="button"
+                          key={group.id}
+                          className={
+                            formData.target_groups.includes(group.id)
+                              ? 'is-selected'
+                              : ''
+                          }
+                          onClick={() => toggleGroup(group.id)}
+                        >
+                          <span>{group.name}</span>
+                          <small>{group.id}</small>
+                        </button>
+                      ))}
+                      {filteredGroups.length === 0 && <p>Группы не найдены</p>}
+                    </div>
+                  </div>
+
+                  <div className="event-picker">
+                    <span className="event-picker__title">Пользователи</span>
+                    <div className="event-picker__list">
+                      {directUsers.map((user) => (
+                        <button
+                          type="button"
+                          key={user.id}
+                          className={
+                            formData.participant_list.includes(user.id)
+                              ? 'is-selected'
+                              : ''
+                          }
+                          onClick={() => toggleParticipant(user.id)}
+                        >
+                          <span>{user.full_name || user.email}</span>
+                          <small>{user.email}</small>
+                        </button>
+                      ))}
+                      {directUsers.length === 0 && (
+                        <p>Пользователи не найдены</p>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                <p className="event-private-panel__summary">
+                  Выбрано пользователей: {directParticipantsCount}. Выбрано
+                  групп: {formData.target_groups.length}.
+                </p>
+              </section>
+            )}
+
+            <div className="event-form__actions">
               <button
                 type="button"
-                className="btn-secondary"
+                className="event-form-btn event-form-btn--cancel"
                 onClick={resetForm}
               >
-                Отмена
+                Отменить
               </button>
-            )}
-          </div>
-        </form>
-      )}
+              <button
+                type="submit"
+                className="event-form-btn event-form-btn--save"
+                disabled={submitting}
+              >
+                {submitting ? 'Сохранение...' : 'Сохранить'}
+              </button>
+            </div>
+          </form>
+        )}
 
-      <div className="events-list">
-        <h2>Мероприятия ({events.length})</h2>
-        {events.length === 0 ? (
-          <p className="empty-state">Нет мероприятий. Создайте первое!</p>
-        ) : (
-          events.map((event) => (
-            <div
-              key={event.id}
-              className={`event-card ${event.visibility_type}`}
-            >
-              <div className="event-card-header">
-                <div className="event-info">
-                  <h3>{event.title}</h3>
-                  <div className="event-meta">
-                    <span className={`badge platform ${event.platform}`}>
-                      {event.platform}
-                    </span>
-                    <span className={`badge status ${event.status}`}>
-                      {event.status}
-                    </span>
-                    <span
-                      className={`badge visibility ${event.visibility_type}`}
-                    >
-                      {event.visibility_type === 'public'
-                        ? '🌍 Public'
-                        : '🔒 Private'}
-                    </span>
-                  </div>
-                  {event.visibility_type === 'private' && (
-                    <span className="participants-count">
-                      Пользователей: {event.participant_list?.length || 0} · Групп:{' '}
-                      {event.target_groups?.length || 0}
-                    </span>
-                  )}
-                </div>
-                <div className="event-actions">
-                  {event.status === 'completed' &&
-                    event.visibility_type === 'private' && (
-                      <button
-                        className="btn-sync"
-                        onClick={() => handleSync(event.id)}
-                        title="Синхронизировать результаты"
-                      >
-                        🔄 Синхронизировать
-                      </button>
-                    )}
-                  <button
-                    className="btn-edit"
-                    onClick={() => openEditForm(event)}
+        <section className="events-grid" aria-label="Список мероприятий">
+          {visibleEvents.map((event) => (
+            <article key={event.id} className="event-card">
+              <div className="event-card__top">
+                <h2>{event.title}</h2>
+                <div className="event-card__tags">
+                  <span
+                    className={`event-tag event-tag--${event.visibility_type}`}
                   >
-                    ✏️
-                  </button>
-                  <button
-                    className="btn-delete"
-                    onClick={() => handleDelete(event.id)}
+                    {event.visibility_type}
+                  </span>
+                  <span
+                    className={`event-tag event-tag--status-${event.status}`}
                   >
-                    🗑️
-                  </button>
+                    {statusLabel(event.status).toLowerCase()}
+                  </span>
                 </div>
               </div>
-              <div className="event-card-body">
-                <div className="event-dates">
-                  <span>
-                    Начало:{' '}
-                    {new Date(event.start_time_utc).toLocaleString('ru-RU')}
-                  </span>
-                  <span>
-                    Окончание:{' '}
-                    {new Date(event.end_time_utc).toLocaleString('ru-RU')}
-                  </span>
-                </div>
+
+              <div className="event-card__platform">
+                <span className="event-card__bell">
+                  <Bell size={30} aria-hidden="true" />
+                </span>
+                <strong>[{platformLabel(event.platform)}]</strong>
+              </div>
+
+              <div className="event-card__dates">
+                <p>
+                  <span>Начало:</span>
+                  {formatDateTime(event.start_time_utc)}
+                </p>
+                <p>
+                  <span>Окончание:</span>
+                  {formatDate(event.end_time_utc)}
+                </p>
+              </div>
+
+              {event.visibility_type === 'private' && (
+                <p className="event-card__participants">
+                  Пользователей: {event.participant_list.length}. Групп:{' '}
+                  {event.target_groups?.length || 0}.
+                </p>
+              )}
+
+              <div className="event-card__actions">
                 {event.external_link && (
                   <a
                     href={event.external_link}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="external-link"
+                    className="event-icon-btn event-icon-btn--link"
+                    aria-label="Открыть внешнюю ссылку"
+                    title="Открыть внешнюю ссылку"
                   >
-                    🔗 Перейти к контесту
+                    <ExternalLink size={22} aria-hidden="true" />
                   </a>
                 )}
+                {event.status === 'completed' &&
+                  event.visibility_type === 'private' && (
+                    <button
+                      type="button"
+                      className="event-icon-btn event-icon-btn--sync"
+                      onClick={() => handleSync(event.id)}
+                      aria-label="Синхронизировать результаты"
+                      title="Синхронизировать результаты"
+                    >
+                      <RefreshCw size={22} aria-hidden="true" />
+                    </button>
+                  )}
+                <button
+                  type="button"
+                  className="event-icon-btn event-icon-btn--edit"
+                  onClick={() => openEditForm(event)}
+                  aria-label={`Редактировать ${event.title}`}
+                  title="Редактировать"
+                >
+                  <Pencil size={28} aria-hidden="true" />
+                </button>
+                <button
+                  type="button"
+                  className="event-icon-btn event-icon-btn--delete"
+                  onClick={() => handleDelete(event.id)}
+                  aria-label={`Удалить ${event.title}`}
+                  title="Удалить"
+                >
+                  <Trash2 size={28} aria-hidden="true" />
+                </button>
               </div>
+            </article>
+          ))}
+
+          {!loading && events.length === 0 && (
+            <div className="events-empty">
+              <p>Мероприятия не найдены. Создайте первое мероприятие.</p>
             </div>
-          ))
+          )}
+        </section>
+
+        {events.length > visibleCount && (
+          <div className="events-more">
+            <button
+              type="button"
+              onClick={() => setVisibleCount((count) => count + 4)}
+            >
+              Показать еще
+            </button>
+          </div>
         )}
       </div>
-
-      <style jsx>{`
-        .events-management {
-          max-width: 1200px;
-          margin: 0 auto;
-          padding: 2rem;
-        }
-        .events-header {
-          display: flex;
-          justify-content: space-between;
-          align-items: center;
-          margin-bottom: 2rem;
-        }
-        .events-header h1 {
-          font-size: 1.8rem;
-          color: #1a1a2e;
-        }
-        .btn-primary {
-          background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-          color: white;
-          border: none;
-          padding: 0.75rem 1.5rem;
-          border-radius: 8px;
-          cursor: pointer;
-          font-size: 1rem;
-          font-weight: 600;
-        }
-        .btn-primary:hover {
-          transform: translateY(-2px);
-        }
-        .event-form {
-          background: white;
-          border-radius: 12px;
-          padding: 2rem;
-          margin-bottom: 2rem;
-          box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
-        }
-        .event-form h2 {
-          margin-bottom: 1.5rem;
-          color: #1a1a2e;
-        }
-        .form-group {
-          margin-bottom: 1.25rem;
-        }
-        .form-group label {
-          display: block;
-          margin-bottom: 0.5rem;
-          font-weight: 600;
-          color: #4a5568;
-        }
-        .form-group input,
-        .form-group select,
-        .form-group textarea {
-          width: 100%;
-          padding: 0.75rem;
-          border: 2px solid #e2e8f0;
-          border-radius: 8px;
-          font-size: 1rem;
-        }
-        .form-group input:focus,
-        .form-group select:focus,
-        .form-group textarea:focus {
-          outline: none;
-          border-color: #667eea;
-        }
-        .form-row {
-          display: grid;
-          grid-template-columns: 1fr 1fr;
-          gap: 1rem;
-        }
-        .visibility-options {
-          display: flex;
-          gap: 1rem;
-        }
-        .radio-option {
-          display: flex;
-          align-items: center;
-          gap: 0.5rem;
-          padding: 0.75rem 1rem;
-          border: 2px solid #e2e8f0;
-          border-radius: 8px;
-          cursor: pointer;
-        }
-        .radio-option.active {
-          border-color: #667eea;
-          background: #f0f4ff;
-        }
-        .participants-selector .hint {
-          font-size: 0.875rem;
-          color: #718096;
-          margin-bottom: 0.75rem;
-        }
-        .participants-list {
-          max-height: 300px;
-          overflow-y: auto;
-          border: 2px solid #e2e8f0;
-          border-radius: 8px;
-          padding: 0.5rem;
-        }
-        .participant-item {
-          display: flex;
-          align-items: center;
-          gap: 0.75rem;
-          padding: 0.75rem;
-          border-radius: 6px;
-          cursor: pointer;
-        }
-        .participant-item:hover {
-          background: #f7fafc;
-        }
-        .participant-item.selected {
-          background: #e6f0ff;
-          border-left: 3px solid #667eea;
-        }
-        .participant-name {
-          font-weight: 600;
-          color: #1a1a2e;
-        }
-        .participant-email {
-          font-size: 0.875rem;
-          color: #718096;
-          margin-left: auto;
-        }
-        .form-actions {
-          display: flex;
-          gap: 1rem;
-          margin-top: 1.5rem;
-        }
-        .btn-secondary {
-          background: #e2e8f0;
-          color: #4a5568;
-          border: none;
-          padding: 0.75rem 1.5rem;
-          border-radius: 8px;
-          cursor: pointer;
-        }
-        .events-list h2 {
-          margin-bottom: 1rem;
-          color: #1a1a2e;
-        }
-        .event-card {
-          background: white;
-          border-radius: 12px;
-          padding: 1.5rem;
-          margin-bottom: 1rem;
-          box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
-          border-left: 4px solid #667eea;
-        }
-        .event-card.private {
-          border-left-color: #f59e0b;
-        }
-        .event-card-header {
-          display: flex;
-          justify-content: space-between;
-          align-items: flex-start;
-          margin-bottom: 1rem;
-        }
-        .event-info h3 {
-          margin: 0 0 0.5rem 0;
-          color: #1a1a2e;
-        }
-        .event-meta {
-          display: flex;
-          gap: 0.5rem;
-          flex-wrap: wrap;
-        }
-        .badge {
-          padding: 0.25rem 0.75rem;
-          border-radius: 20px;
-          font-size: 0.75rem;
-          font-weight: 600;
-        }
-        .badge.platform {
-          background: #e0e7ff;
-          color: #4338ca;
-        }
-        .badge.status {
-          background: #d1fae5;
-          color: #065f46;
-        }
-        .badge.visibility {
-          background: #fef3c7;
-          color: #92400e;
-        }
-        .participants-count {
-          font-size: 0.875rem;
-          color: #718096;
-          margin-top: 0.5rem;
-        }
-        .event-actions {
-          display: flex;
-          gap: 0.5rem;
-          align-items: center;
-        }
-        .btn-sync {
-          background: #10b981;
-          color: white;
-          border: none;
-          padding: 0.5rem 1rem;
-          border-radius: 6px;
-          cursor: pointer;
-          font-size: 0.875rem;
-          margin-right: 0.5rem;
-        }
-        .btn-edit,
-        .btn-delete {
-          background: none;
-          border: none;
-          font-size: 1.25rem;
-          cursor: pointer;
-          padding: 0.25rem;
-        }
-        .btn-edit:hover,
-        .btn-delete:hover {
-          transform: scale(1.2);
-        }
-        .event-card-body {
-          display: flex;
-          justify-content: space-between;
-          align-items: center;
-          flex-wrap: wrap;
-          gap: 1rem;
-        }
-        .event-dates {
-          display: flex;
-          flex-direction: column;
-          gap: 0.25rem;
-          font-size: 0.875rem;
-          color: #4a5568;
-        }
-        .external-link {
-          color: #667eea;
-          text-decoration: none;
-          font-weight: 600;
-          display: flex;
-          align-items: center;
-          gap: 0.5rem;
-        }
-        .external-link:hover {
-          text-decoration: underline;
-        }
-        .empty-state {
-          text-align: center;
-          color: #718096;
-          padding: 3rem;
-          font-size: 1.1rem;
-        }
-        .events-loading {
-          text-align: center;
-          padding: 4rem;
-          color: #718096;
-          font-size: 1.2rem;
-        }
-        @media (max-width: 768px) {
-          .form-row {
-            grid-template-columns: 1fr;
-          }
-          .visibility-options {
-            flex-direction: column;
-          }
-          .event-card-header {
-            flex-direction: column;
-            gap: 1rem;
-          }
-        }
-      `}</style>
-    </div>
+    </main>
   );
 }

@@ -1,45 +1,103 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import type { FormEvent } from 'react';
 import Link from 'next/link';
 import { useSession } from 'next-auth/react';
 import { useRoleGuard } from '@/lib/rbac/client';
 import { useParams, useRouter } from 'next/navigation';
+import {
+  BarChart3,
+  Save,
+  Search,
+  Trash2,
+  UserPlus,
+  UsersRound,
+  X,
+} from 'lucide-react';
 import '../../coach.scss';
 
 type Group = {
-  id: string;
+  id: unknown;
   name: string;
   description?: string;
 };
 
 type Member = {
-  user_id: string;
+  user_id: unknown;
   full_name?: string;
   email?: string;
   joined_at?: string;
 };
 
 type User = {
-  id: string;
+  id: unknown;
   full_name?: string;
   email: string;
 };
+
+type ApiResponse<T> = {
+  ok: boolean;
+  data?: T;
+  error?: string;
+  message?: string;
+};
+
+function safeDecode(value: string) {
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    return value;
+  }
+}
+
+function recordId(value: unknown): string {
+  if (value == null) return '';
+  if (typeof value === 'string') return safeDecode(value);
+
+  if (typeof value === 'object') {
+    const record = value as Record<string, unknown>;
+    if (typeof record.tb === 'string' && record.id != null) {
+      return `${record.tb}:${String(record.id)}`;
+    }
+
+    if (record.id != null) return recordId(record.id);
+  }
+
+  return String(value);
+}
+
+function normalizeUserId(value: unknown) {
+  const raw = recordId(value);
+  return raw.startsWith('users:') ? raw : `users:${raw}`;
+}
+
+function groupPath(id: string) {
+  return encodeURIComponent(id);
+}
+
+function displayName(user: { full_name?: string; email?: string }) {
+  return user.full_name?.trim() || user.email || 'Без имени';
+}
 
 export default function CoachGroupDetailsPage() {
   const { status } = useSession();
   const { authorized, isLoading } = useRoleGuard('coach');
   const router = useRouter();
   const params = useParams<{ id: string }>();
-  const groupId = typeof params?.id === 'string' ? params.id : '';
+  const groupId = typeof params?.id === 'string' ? safeDecode(params.id) : '';
 
   const [group, setGroup] = useState<Group | null>(null);
   const [members, setMembers] = useState<Member[]>([]);
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [adding, setAdding] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState<string | null>(null);
   const [search, setSearch] = useState('');
   const [selected, setSelected] = useState<Record<string, boolean>>({});
+  const [editForm, setEditForm] = useState({ name: '', description: '' });
 
   useEffect(() => {
     if (!isLoading && !authorized && status === 'authenticated') {
@@ -52,26 +110,49 @@ export default function CoachGroupDetailsPage() {
       setLoading(true);
       setError(null);
 
-      const [gRes, mRes, uRes] = await Promise.all([
-        fetch(`/api/groups/${groupId}`),
-        fetch(`/api/groups/${groupId}/members`),
-        fetch('/api/users?limit=200'),
-      ]);
+      const [groupResponse, membersResponse, usersResponse] = await Promise.all(
+        [
+          fetch(`/api/groups/${groupPath(groupId)}`, { cache: 'no-store' }),
+          fetch(`/api/groups/${groupPath(groupId)}/members`, {
+            cache: 'no-store',
+          }),
+          fetch('/api/users?limit=200', { cache: 'no-store' }),
+        ],
+      );
 
-      const g = await gRes.json();
-      const m = await mRes.json();
-      const u = await uRes.json();
+      const groupPayload = (await groupResponse.json()) as ApiResponse<Group>;
+      const membersPayload = (await membersResponse.json()) as ApiResponse<
+        Member[]
+      >;
+      const usersPayload = (await usersResponse.json()) as ApiResponse<User[]>;
 
-      if (!g.ok) throw new Error(g.error || 'Ошибка загрузки группы');
-      if (!m.ok) throw new Error(m.error || 'Ошибка загрузки участников');
-      if (!u.ok) throw new Error(u.error || 'Ошибка загрузки пользователей');
+      if (!groupResponse.ok || !groupPayload.ok) {
+        throw new Error(groupPayload.error || 'Не удалось загрузить группу');
+      }
+      if (!membersResponse.ok || !membersPayload.ok) {
+        throw new Error(
+          membersPayload.error || 'Не удалось загрузить участников',
+        );
+      }
+      if (!usersResponse.ok || !usersPayload.ok) {
+        throw new Error(
+          usersPayload.error || 'Не удалось загрузить пользователей',
+        );
+      }
 
-      setGroup(g.data);
-      setMembers(m.data || []);
-      setUsers(u.data || []);
+      const loadedGroup = groupPayload.data || null;
+      setGroup(loadedGroup);
+      setMembers(membersPayload.data || []);
+      setUsers(usersPayload.data || []);
       setSelected({});
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Ошибка загрузки');
+      setEditForm({
+        name: loadedGroup?.name || '',
+        description: loadedGroup?.description || '',
+      });
+    } catch (err) {
+      setError(
+        err instanceof Error ? err.message : 'Не удалось загрузить группу',
+      );
     } finally {
       setLoading(false);
     }
@@ -81,58 +162,152 @@ export default function CoachGroupDetailsPage() {
     if (authorized && groupId) fetchAll();
   }, [authorized, fetchAll, groupId]);
 
+  const normalizedMembers = useMemo(
+    () =>
+      members.map((member) => ({
+        ...member,
+        user_id: normalizeUserId(member.user_id),
+      })),
+    [members],
+  );
+
+  const normalizedUsers = useMemo(
+    () =>
+      users.map((user) => ({
+        ...user,
+        id: normalizeUserId(user.id),
+      })),
+    [users],
+  );
+
   const filteredUsers = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    const memberIdSet = new Set(members.map((m) => String(m.user_id)));
-    const pool = users.filter((u) => !memberIdSet.has(String(u.id)));
-    if (!q) return pool;
-    return pool.filter((u) => {
-      const name = (u.full_name || '').toLowerCase();
-      const email = (u.email || '').toLowerCase();
-      return name.includes(q) || email.includes(q);
+    const query = search.trim().toLowerCase();
+    const memberIds = new Set(
+      normalizedMembers.map((member) => member.user_id),
+    );
+    const availableUsers = normalizedUsers.filter(
+      (user) => !memberIds.has(user.id),
+    );
+
+    if (!query) return availableUsers;
+
+    return availableUsers.filter((user) => {
+      const name = (user.full_name || '').toLowerCase();
+      const email = (user.email || '').toLowerCase();
+      return name.includes(query) || email.includes(query);
     });
-  }, [users, members, search]);
+  }, [normalizedMembers, normalizedUsers, search]);
+
+  const selectedIds = useMemo(
+    () => Object.keys(selected).filter((id) => selected[id]),
+    [selected],
+  );
+
+  async function saveGroup(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+
+    try {
+      setSaving(true);
+      setError(null);
+      setSuccess(null);
+
+      const response = await fetch(`/api/groups/${groupPath(groupId)}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: editForm.name.trim(),
+          description: editForm.description.trim(),
+        }),
+      });
+      const payload = (await response.json()) as ApiResponse<Group>;
+
+      if (!response.ok || !payload.ok) {
+        throw new Error(payload.error || 'Не удалось обновить группу');
+      }
+
+      setGroup(payload.data || group);
+      setSuccess('Группа обновлена');
+      await fetchAll();
+    } catch (err) {
+      setError(
+        err instanceof Error ? err.message : 'Не удалось обновить группу',
+      );
+    } finally {
+      setSaving(false);
+    }
+  }
 
   async function addSelected() {
-    const ids = Object.keys(selected).filter((id) => selected[id]);
-    if (ids.length === 0) return;
+    if (selectedIds.length === 0) return;
+
     try {
+      setAdding(true);
       setError(null);
-      const res = await fetch(`/api/groups/${groupId}/members`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ user_ids: ids }),
-      });
-      const data = await res.json();
-      if (!data.ok) throw new Error(data.error || 'Ошибка добавления');
+      setSuccess(null);
+
+      const response = await fetch(
+        `/api/groups/${groupPath(groupId)}/members`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ user_ids: selectedIds }),
+        },
+      );
+      const payload = (await response.json()) as ApiResponse<unknown>;
+
+      if (!response.ok || !payload.ok) {
+        throw new Error(payload.error || 'Не удалось добавить участников');
+      }
+
+      setSuccess('Участники добавлены');
       await fetchAll();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Ошибка добавления');
+    } catch (err) {
+      setError(
+        err instanceof Error ? err.message : 'Не удалось добавить участников',
+      );
+    } finally {
+      setAdding(false);
     }
   }
 
   async function removeMember(userId: string) {
-    if (!confirm('Удалить участника из группы?')) return;
+    if (!window.confirm('Удалить участника из группы?')) return;
+
     try {
       setError(null);
-      const res = await fetch(`/api/groups/${groupId}/members`, {
-        method: 'DELETE',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ user_id: userId }),
-      });
-      const data = await res.json();
-      if (!data.ok) throw new Error(data.error || 'Ошибка удаления');
+      setSuccess(null);
+
+      const response = await fetch(
+        `/api/groups/${groupPath(groupId)}/members`,
+        {
+          method: 'DELETE',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ user_id: userId }),
+        },
+      );
+      const payload = (await response.json()) as ApiResponse<unknown>;
+
+      if (!response.ok || !payload.ok) {
+        throw new Error(payload.error || 'Не удалось удалить участника');
+      }
+
+      setSuccess('Участник удален');
       await fetchAll();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Ошибка удаления');
+    } catch (err) {
+      setError(
+        err instanceof Error ? err.message : 'Не удалось удалить участника',
+      );
     }
   }
 
-  if (status === 'loading' || isLoading) return <div className="coach-loading">Загрузка...</div>;
+  if (status === 'loading' || isLoading) {
+    return <div className="coach-loading">Загрузка...</div>;
+  }
+
   if (!authorized) {
     return (
       <div className="coach-access-denied">
-        <h1>Доступ запрещён</h1>
+        <h1>Доступ запрещен</h1>
         <p>У вас недостаточно прав для просмотра этой страницы.</p>
         <Link href="/coach">Вернуться</Link>
       </div>
@@ -140,61 +315,143 @@ export default function CoachGroupDetailsPage() {
   }
 
   return (
-    <div className="coach-page">
+    <main className="coach-page">
       <div className="coach-container">
-        <div className="coach-header">
+        <header className="coach-header">
           <Link href="/coach/groups" className="coach-back-link">
-            ← Назад
+            Назад к группам
           </Link>
           <div className="coach-header-content">
-            <h1>{group?.name || 'Группа'}</h1>
+            <div>
+              <p className="coach-eyebrow">Редактирование группы</p>
+              <h1>{group?.name || 'Группа'}</h1>
+            </div>
             {groupId && (
-              <Link className="coach-btn coach-btn-primary" href={`/coach/groups/${groupId}/analytics`}>
+              <Link
+                className="coach-btn coach-btn--secondary"
+                href={`/coach/groups/${groupPath(groupId)}/analytics`}
+              >
+                <BarChart3 aria-hidden="true" size={18} />
                 Аналитика
               </Link>
             )}
           </div>
-        </div>
+        </header>
 
         {error && (
-          <div className="coach-error-banner">
+          <div className="coach-banner coach-banner--error">
             {error}
-            <button onClick={() => setError(null)}>✕</button>
+            <button
+              type="button"
+              onClick={() => setError(null)}
+              aria-label="Скрыть ошибку"
+            >
+              <X aria-hidden="true" size={18} />
+            </button>
+          </div>
+        )}
+
+        {success && (
+          <div className="coach-banner coach-banner--success">
+            {success}
+            <button
+              type="button"
+              onClick={() => setSuccess(null)}
+              aria-label="Скрыть сообщение"
+            >
+              <X aria-hidden="true" size={18} />
+            </button>
           </div>
         )}
 
         {loading ? (
-          <div className="coach-loading-inner">Загрузка...</div>
+          <div className="coach-loading-inner">Загрузка группы...</div>
         ) : (
           <>
-            <div className="coach-section">
-              <h2>Состав группы ({members.length})</h2>
-              {members.length === 0 ? (
+            <section className="coach-form-card" aria-labelledby="group-edit">
+              <h2 id="group-edit">Основная информация</h2>
+              <form onSubmit={saveGroup} className="coach-form">
+                <label className="coach-form-group">
+                  <span>Название</span>
+                  <input
+                    value={editForm.name}
+                    onChange={(event) =>
+                      setEditForm((current) => ({
+                        ...current,
+                        name: event.target.value,
+                      }))
+                    }
+                    required
+                    placeholder="Название группы"
+                  />
+                </label>
+
+                <label className="coach-form-group">
+                  <span>Описание</span>
+                  <textarea
+                    value={editForm.description}
+                    onChange={(event) =>
+                      setEditForm((current) => ({
+                        ...current,
+                        description: event.target.value,
+                      }))
+                    }
+                    placeholder="Описание группы"
+                  />
+                </label>
+
+                <div className="coach-form-actions">
+                  <button
+                    type="submit"
+                    className="coach-btn coach-btn--primary"
+                    disabled={saving}
+                  >
+                    <Save aria-hidden="true" size={18} />
+                    {saving ? 'Сохранение...' : 'Сохранить'}
+                  </button>
+                </div>
+              </form>
+            </section>
+
+            <section className="coach-panel">
+              <div className="coach-panel-heading">
+                <span className="coach-panel-icon">
+                  <UsersRound aria-hidden="true" size={24} />
+                </span>
+                <div>
+                  <h2>Состав группы</h2>
+                  <p>{normalizedMembers.length} участников</p>
+                </div>
+              </div>
+
+              {normalizedMembers.length === 0 ? (
                 <div className="coach-empty">
-                  <p>Пока нет участников</p>
+                  <p>В группе пока нет участников</p>
                 </div>
               ) : (
-                <div style={{ background: '#f8f9fa', borderRadius: 8 }}>
+                <div className="coach-table-wrap">
                   <table className="coach-table">
                     <thead>
                       <tr>
                         <th>Имя</th>
                         <th>Email</th>
-                        <th></th>
+                        <th>Действие</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {members.map((m) => (
-                        <tr key={String(m.user_id)}>
-                          <td>{m.full_name || '—'}</td>
-                          <td>{m.email || '—'}</td>
-                          <td style={{ width: 80 }}>
+                      {normalizedMembers.map((member) => (
+                        <tr key={member.user_id}>
+                          <td>{displayName(member)}</td>
+                          <td>{member.email || '-'}</td>
+                          <td>
                             <button
-                              className="coach-action-btn coach-btn-delete"
-                              onClick={() => removeMember(String(m.user_id))}
+                              type="button"
+                              className="coach-icon-btn coach-icon-btn--danger"
+                              onClick={() => removeMember(member.user_id)}
                               title="Удалить"
+                              aria-label={`Удалить ${displayName(member)}`}
                             >
-                              🗑️
+                              <Trash2 aria-hidden="true" size={18} />
                             </button>
                           </td>
                         </tr>
@@ -203,58 +460,73 @@ export default function CoachGroupDetailsPage() {
                   </table>
                 </div>
               )}
-            </div>
+            </section>
 
-            <div className="coach-section">
-              <h2>Добавить участников</h2>
-              <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
-                <input
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                  placeholder="Поиск по имени/email..."
-                  style={{
-                    flex: '1 1 280px',
-                    padding: '0.75rem',
-                    borderRadius: 8,
-                    border: '1px solid #ddd',
-                  }}
-                />
-                <button className="coach-btn coach-btn-primary" onClick={addSelected}>
-                  Добавить выбранных
+            <section className="coach-panel">
+              <div className="coach-toolbar">
+                <label className="coach-search">
+                  <Search aria-hidden="true" size={18} />
+                  <input
+                    value={search}
+                    onChange={(event) => setSearch(event.target.value)}
+                    placeholder="Поиск по имени или email"
+                  />
+                </label>
+
+                <button
+                  type="button"
+                  className="coach-btn coach-btn--primary"
+                  onClick={addSelected}
+                  disabled={adding || selectedIds.length === 0}
+                >
+                  <UserPlus aria-hidden="true" size={18} />
+                  {adding
+                    ? 'Добавление...'
+                    : `Добавить выбранных: ${selectedIds.length}`}
                 </button>
               </div>
 
-              <div style={{ marginTop: '1rem', maxHeight: 360, overflow: 'auto' }}>
-                <table className="coach-table" style={{ background: 'white', borderRadius: 8 }}>
+              <div className="coach-table-wrap coach-table-wrap--compact">
+                <table className="coach-table">
                   <thead>
                     <tr>
-                      <th style={{ width: 40 }}></th>
+                      <th>Выбор</th>
                       <th>Имя</th>
                       <th>Email</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {filteredUsers.map((u) => (
-                      <tr key={u.id}>
+                    {filteredUsers.map((user) => (
+                      <tr key={user.id}>
                         <td>
                           <input
+                            className="coach-checkbox"
                             type="checkbox"
-                            checked={!!selected[u.id]}
-                            onChange={(e) => setSelected((p) => ({ ...p, [u.id]: e.target.checked }))}
+                            checked={!!selected[user.id]}
+                            onChange={(event) =>
+                              setSelected((current) => ({
+                                ...current,
+                                [user.id]: event.target.checked,
+                              }))
+                            }
                           />
                         </td>
-                        <td>{u.full_name || '—'}</td>
-                        <td>{u.email}</td>
+                        <td>{displayName(user)}</td>
+                        <td>{user.email}</td>
                       </tr>
                     ))}
+                    {filteredUsers.length === 0 && (
+                      <tr>
+                        <td colSpan={3}>Нет пользователей для добавления</td>
+                      </tr>
+                    )}
                   </tbody>
                 </table>
               </div>
-            </div>
+            </section>
           </>
         )}
       </div>
-    </div>
+    </main>
   );
 }
-

@@ -1,18 +1,28 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import axios from 'axios';
+import { useEffect, useMemo, useState } from 'react';
 import './calendar.scss';
 import CalendarTable from './CalendarTable';
 
-// Типизация для мероприятия (согласно полям в твоей базе SurrealDB)
 interface Contest {
   id: string;
   name: string;
+  title?: string;
   platform: string;
   start_time_utc: string;
   end_time_utc: string;
   registration_link?: string;
+  external_link?: string;
+}
+
+function getMonthRange(date: Date) {
+  const year = date.getFullYear();
+  const month = date.getMonth();
+
+  return {
+    from: new Date(Date.UTC(year, month - 1, 1, 0, 0, 0)).toISOString(),
+    to: new Date(Date.UTC(year, month + 2, 0, 23, 59, 59)).toISOString(),
+  };
 }
 
 export default function Calendar() {
@@ -35,30 +45,51 @@ export default function Calendar() {
   const [currentDate, setCurrentDate] = useState(new Date());
   const [events, setEvents] = useState<Contest[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  // Загружаем мероприятия при монтировании компонента
+  const range = useMemo(() => getMonthRange(currentDate), [currentDate]);
+
   useEffect(() => {
-    const fetchEvents = async () => {
+    const controller = new AbortController();
+
+    async function fetchEvents() {
       try {
         setLoading(true);
-        // Вызываем созданный нами ранее эндпоинт
-        const response = await axios.get('/api/contests/all');
-        setEvents(response.data);
-      } catch (error) {
-        console.error('Ошибка при загрузке мероприятий:', error);
+        setError(null);
+
+        const params = new URLSearchParams(range);
+        const response = await fetch(`/api/contests/all?${params.toString()}`, {
+          cache: 'no-store',
+          signal: controller.signal,
+        });
+
+        if (!response.ok) {
+          throw new Error(`Сервер вернул ${response.status}`);
+        }
+
+        const data = (await response.json()) as Contest[];
+        setEvents(Array.isArray(data) ? data : []);
+      } catch (err) {
+        if (err instanceof DOMException && err.name === 'AbortError') return;
+        const message =
+          err instanceof Error ? err.message : 'Не удалось загрузить события';
+        setError(message);
+        setEvents([]);
       } finally {
         setLoading(false);
       }
-    };
+    }
 
     fetchEvents();
-  }, []);
+
+    return () => controller.abort();
+  }, [range]);
 
   const changeMonth = (direction: number) => {
     setCurrentDate((prev) => {
-      const newDate = new Date(prev);
-      newDate.setMonth(prev.getMonth() + direction);
-      return newDate;
+      const nextDate = new Date(prev);
+      nextDate.setMonth(prev.getMonth() + direction);
+      return nextDate;
     });
   };
 
@@ -83,7 +114,7 @@ export default function Calendar() {
 
         <div className="calendar-page__month">
           <span className="calendar-page__month-text">{formatted}</span>
-          {loading && <span className="calendar-page__loading">...</span>}
+          {loading && <span className="calendar-page__loading">загрузка</span>}
         </div>
 
         <button
@@ -95,6 +126,12 @@ export default function Calendar() {
           {arrowSvg}
         </button>
       </div>
+
+      {error && (
+        <div className="calendar-page__error">
+          Не удалось загрузить события: {error}
+        </div>
+      )}
 
       <div className="calendar-page__table">
         <CalendarTable

@@ -7,9 +7,16 @@ import { getServerSession } from 'next-auth';
 import type { Session } from 'next-auth';
 import { authOptions } from '@/lib/authOptions';
 import { UserRole, hasRoleLevel, isValidUserRole } from '@/lib/rbac';
+import { getDB } from '@/lib/surreal/surreal';
+import { parseUsersRecordKey } from '@/lib/surreal/ids';
 
 type SessionWithUserAndRole = Session & {
   user: NonNullable<Session['user']> & { role?: string };
+};
+
+type ActiveSession = {
+  session: SessionWithUserAndRole;
+  role: UserRole;
 };
 
 export interface RoleGuardOptions {
@@ -17,6 +24,48 @@ export interface RoleGuardOptions {
   requiredRole: UserRole;
   /** Сообщение об ошибке при недостатке прав */
   forbiddenMessage?: string;
+}
+
+async function getActiveSession(
+  session: Session,
+): Promise<ActiveSession | null> {
+  if (!session.user) return null;
+
+  const db = await getDB();
+  const key = parseUsersRecordKey(
+    String((session.user as { id?: string }).id || ''),
+  );
+
+  if (!db || !key) return null;
+
+  const res = await db.query(
+    `SELECT role, is_verified, is_blocked
+     FROM type::thing("users", $id)
+     LIMIT 1;`,
+    { id: key },
+  );
+  const rows = (Array.isArray(res) ? (res[0] as unknown[]) : []) || [];
+  const row = (rows[0] as Record<string, unknown> | undefined) || undefined;
+
+  if (!row || row.is_blocked === true || row.is_verified === false) {
+    return null;
+  }
+
+  const role = String(row.role || '');
+  if (!isValidUserRole(role)) return null;
+
+  return {
+    role: role as UserRole,
+    session: {
+      ...session,
+      user: {
+        ...session.user,
+        role,
+        is_verified: row.is_verified !== false,
+        is_blocked: row.is_blocked === true,
+      },
+    } as SessionWithUserAndRole,
+  };
 }
 
 /**
@@ -31,37 +80,42 @@ export interface RoleGuardOptions {
 export function withRoleGuard(
   handler: (
     req: NextRequest,
-    session: SessionWithUserAndRole
+    session: SessionWithUserAndRole,
   ) => Promise<NextResponse>,
-  options: RoleGuardOptions
+  options: RoleGuardOptions,
 ) {
-  return async function protectedHandler(req: NextRequest): Promise<NextResponse> {
+  return async function protectedHandler(
+    req: NextRequest,
+  ): Promise<NextResponse> {
     const session = await getServerSession(authOptions);
 
     if (!session?.user) {
+      return NextResponse.json({ error: 'Не авторизован' }, { status: 401 });
+    }
+
+    let activeSession: ActiveSession | null = null;
+    try {
+      activeSession = await getActiveSession(session);
+    } catch {
+      // Если БД недоступна — не даём выполнять защищённые действия
+      return NextResponse.json({ error: 'Не авторизован' }, { status: 401 });
+    }
+
+    if (!activeSession) {
+      return NextResponse.json({ error: 'Не авторизован' }, { status: 401 });
+    }
+
+    if (!hasRoleLevel(activeSession.role, options.requiredRole)) {
       return NextResponse.json(
-        { error: 'Не авторизован' },
-        { status: 401 }
+        {
+          error:
+            options.forbiddenMessage || 'Доступ запрещён: недостаточно прав',
+        },
+        { status: 403 },
       );
     }
 
-    const userRole = (session.user as { role?: string }).role;
-
-    if (!userRole || !isValidUserRole(userRole)) {
-      return NextResponse.json(
-        { error: 'Некорректная роль пользователя' },
-        { status: 403 }
-      );
-    }
-
-    if (!hasRoleLevel(userRole as UserRole, options.requiredRole)) {
-      return NextResponse.json(
-        { error: options.forbiddenMessage || 'Доступ запрещён: недостаточно прав' },
-        { status: 403 }
-      );
-    }
-
-    return handler(req, session as SessionWithUserAndRole);
+    return handler(req, activeSession.session);
   };
 }
 
@@ -76,13 +130,12 @@ export async function getSessionWithRole() {
     return null;
   }
 
-  const role = session.user.role as string;
-  if (!isValidUserRole(role)) {
+  try {
+    const activeSession = await getActiveSession(session);
+    if (!activeSession) return null;
+
+    return activeSession;
+  } catch {
     return null;
   }
-
-  return {
-    session,
-    role: role as UserRole,
-  };
 }

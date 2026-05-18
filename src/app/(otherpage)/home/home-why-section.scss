@@ -1,6 +1,6 @@
 .home-why {
-  background: #f3f3f3;
-  padding: 32px 16px 56px;
+  background: #f4f7f7;
+  padding: clamp(28px, 4vw, 48px) 16px clamp(44px, 6vw, 64px);
 }
 
 .home-why__inner {
@@ -9,25 +9,21 @@
 }
 
 .home-why__title {
-  margin: 0 auto 40px;
-  max-width: 1184px;
-  font-size: clamp(26px, 4vw, 50px);
-  font-weight: 600;
-  line-height: 1.1;
+  max-width: 980px;
+  margin: 0 auto clamp(24px, 4vw, 40px);
+  font-size: clamp(28px, 3.7vw, 48px);
+  font-weight: 700;
+  line-height: 1.12;
+  letter-spacing: 0;
   text-align: center;
-  color: #7e50e5;
+  color: #7250c7;
+  overflow-wrap: anywhere;
 }
 
 .home-why__grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: clamp(20px, 3vw, 40px);
-}
-
-@media (max-width: 768px) {
-  .home-why__grid {
-    grid-template-columns: 1fr;
-  }
+  gap: clamp(16px, 2.6vw, 32px);
 }
 
 .home-why-card {
@@ -35,32 +31,60 @@
   display: flex;
   align-items: center;
   justify-content: center;
+  min-height: 300px;
+  padding: clamp(24px, 3vw, 36px);
   text-align: center;
   background-repeat: no-repeat;
   background-position: center;
-  background-size: contain;
-  aspect-ratio: 569 / 373;
-  min-height: 240px;
+  background-size: 100% 100%;
 }
 
 .home-why-card__content {
-  width: min(527px, calc(100% - 64px));
-  padding: 24px 16px;
+  width: min(100%, 500px);
+  padding: clamp(18px, 2.2vw, 26px);
 }
 
 .home-why-card__heading {
   margin: 0 0 12px;
-  font-size: clamp(22px, 2.4vw, 36px);
-  font-weight: 500;
-  line-height: 1.15;
-  letter-spacing: 0.05em;
+  font-size: clamp(22px, 2.2vw, 30px);
+  font-weight: 700;
+  line-height: 1.18;
+  letter-spacing: 0;
   color: #493b90;
+  overflow-wrap: anywhere;
 }
 
 .home-why-card__text {
   margin: 0;
-  font-size: clamp(15px, 1.6vw, 26px);
-  line-height: 1.35;
-  letter-spacing: 0.05em;
+  font-size: clamp(15px, 1.45vw, 19px);
+  line-height: 1.45;
+  letter-spacing: 0;
   color: #493b90;
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 860px) {
+  .home-why__grid {
+    grid-template-columns: 1fr;
+  }
+
+  .home-why-card {
+    min-height: 260px;
+  }
+}
+
+@media (max-width: 520px) {
+  .home-why {
+    padding-inline: 12px;
+  }
+
+  .home-why-card {
+    min-height: 0;
+    padding: 18px 12px;
+    background-size: cover;
+  }
+
+  .home-why-card__content {
+    padding: 18px 14px;
+  }
 }

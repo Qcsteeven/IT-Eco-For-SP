@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useSession, signOut } from 'next-auth/react';
@@ -6,108 +6,27 @@ import { useRouter } from 'next/navigation';
 import './profile.scss';
 import CodeforcesStats from '@/components/CodeforcesStats';
 import CodeforcesProblems from '@/components/CodeforcesProblems';
-
-interface UserData {
-  full_name: string;
-  email: string;
-  bscp_rating: number;
-  codeforces_karma?: number;
-  phone?: string;
-  cf_username?: string | null;
-  atcoder_username?: string | null;
-}
-
-interface HistoryItem {
-  date_recorded: string; // ISO string
-  placement: string; // e.g. "5376"
-  mmr_change: number; // e.g. 72
-  is_manual: boolean;
-  source_rating_change: string;
-  contest: {
-    title: string;
-    platform: string;
-    id?: string; // ID соревнования для кликабельности
-  };
-}
-
-interface AtCoderSubmission {
-  contest_id: string;
-  contest_name: string;
-  user_rank: number;
-  user_old_rating: number;
-  user_new_rating: number;
-  user_rating_change: number;
-  user_performance: number;
-  contest_end_time: string;
-  is_rated: boolean;
-}
-
-interface CFSubmission {
-  contest_id: string;
-  contest_name: string;
-  user_rank: number;
-  user_old_rating: number;
-  user_new_rating: number;
-  user_rating_change: number;
-  contest_end_time: string;
-  is_rated: boolean;
-}
-
-interface AtCoderUserInfo {
-  rating: number;
-  rank: string;
-  attended_contests_count: number;
-  rated_point_sum: number;
-}
-
-interface CFUserInfo {
-  rating: number;
-  rank: string;
-  max_rating: number;
-  attended_contests_count: number;
-}
-
-interface ContestProblem {
-  contestId: number;
-  problemIndex: string;
-  problemName: string;
-  problemUrl: string;
-}
-
-interface AtCoderData {
-  connected: boolean;
-  atcoder_username: string | null;
-  user_info?: AtCoderUserInfo;
-  submissions: AtCoderSubmission[];
-  pending_verification?: boolean;
-  pending_atcoder_username?: string | null;
-  verification_code?: string;
-}
-
-interface CFData {
-  connected: boolean;
-  cf_username: string | null;
-  user_info?: CFUserInfo;
-  submissions: CFSubmission[];
-  pending_verification?: boolean;
-  pending_cf_username?: string | null;
-  verification_code?: string;
-}
-
-interface ProfileApiResponse {
-  ok: boolean;
-  data?: {
-    user: UserData;
-    history: HistoryItem[];
-  };
-  error?: string;
-}
-
-interface AtCoderApiResponse {
-  ok: boolean;
-  data?: AtCoderData;
-  error?: string;
-}
+import AtCoderConnectModal from './components/AtCoderConnectModal';
+import CodeforcesConnectModal from './components/CodeforcesConnectModal';
+import ExternalSystemsCard from './components/ExternalSystemsCard';
+import ProfileEditForm from './components/ProfileEditForm';
+import ProfileHistoryCard from './components/ProfileHistoryCard';
+import ProfileSummaryCard from './components/ProfileSummaryCard';
+import {
+  AtCoderStatsSection,
+  CodeforcesStatsSection,
+} from './components/PlatformStatsSection';
+import type {
+  AtCoderApiResponse,
+  AtCoderData,
+  CFData,
+  CfKarmaData,
+  ContestProblem,
+  HistoryItem,
+  ProfileApiResponse,
+  RatingSort,
+  UserData,
+} from './types';
 
 const ProfilePage: React.FC = () => {
   const { status } = useSession();
@@ -128,9 +47,8 @@ const ProfilePage: React.FC = () => {
   const [showAtCoderSubmissions, setShowAtCoderSubmissions] = useState(false);
   const [generatedVerificationCode, setGeneratedVerificationCode] =
     useState('');
-  const [verificationStep, setVerificationStep] = useState<
-    'input_username' | 'show_code' | 'verifying'
-  >('input_username');
+  const [verificationStep, setVerificationStep] =
+    useState<'input_username' | 'show_code' | 'verifying'>('input_username');
 
   // Codeforces состояния
   const [cfData, setCfData] = useState<CFData | null>(null);
@@ -140,9 +58,8 @@ const ProfilePage: React.FC = () => {
   const [cfError, setCfError] = useState<string | null>(null);
   const [showCFSubmissions, setShowCFSubmissions] = useState(false);
   const [cfGeneratedCode, setCfGeneratedCode] = useState('');
-  const [cfVerificationStep, setCfVerificationStep] = useState<
-    'input_username' | 'show_code' | 'verifying'
-  >('input_username');
+  const [cfVerificationStep, setCfVerificationStep] =
+    useState<'input_username' | 'show_code' | 'verifying'>('input_username');
   const [cfAutoVerifyCountdown, setCfAutoVerifyCountdown] = useState<number>(5);
 
   // Состояния для задач соревнования
@@ -162,49 +79,12 @@ const ProfilePage: React.FC = () => {
   const [platformFilter, setPlatformFilter] = useState<string>('all');
   const [placeFrom, setPlaceFrom] = useState<string>('');
   const [placeTo, setPlaceTo] = useState<string>('');
-  const [ratingSort, setRatingSort] = useState<'none' | 'asc' | 'desc'>('none');
+  const [ratingSort, setRatingSort] = useState<RatingSort>('none');
+  const [historyLimit, setHistoryLimit] = useState(6);
+  const [isEditing, setIsEditing] = useState(false);
 
   // Codeforces Karma состояния
-  const [cfKarmaData, setCfKarmaData] = useState<{
-    karma: number;
-    karmaLevel: string;
-    karmaColor: string;
-    breakdown: {
-      easyKarma: number;
-      mediumKarma: number;
-      hardKarma: number;
-      tagBonusKarma: number;
-      diversityBonus: number;
-    };
-    details: {
-      totalSolved: number;
-      easyCount: number;
-      mediumCount: number;
-      hardCount: number;
-      averageRating: number;
-      uniqueTags: number;
-    };
-    difficultyDistribution: {
-      easy: number;
-      medium: number;
-      hard: number;
-    };
-    tagStats: Array<{
-      tag: string;
-      solvedCount: number;
-      averageRating: number;
-    }>;
-    problems?: Array<{
-      contestId: number;
-      problemIndex: string;
-      problemName?: string;
-      solvedAt: number;
-      difficulty: 'easy' | 'medium' | 'hard' | 'unknown';
-      karma: number;
-      tags?: string[];
-      rating?: number;
-    }>;
-  } | null>(null);
+  const [cfKarmaData, setCfKarmaData] = useState<CfKarmaData | null>(null);
   const [cfKarmaLoading, setCfKarmaLoading] = useState(false);
   const [showCFStats, setShowCFStats] = useState(false);
   const [showCFProblems, setShowCFProblems] = useState(false);
@@ -467,6 +347,11 @@ const ProfilePage: React.FC = () => {
     placeTo,
     ratingSort,
   ]);
+
+  const visibleHistory = useMemo(
+    () => filteredAndSortedHistory.slice(0, historyLimit),
+    [filteredAndSortedHistory, historyLimit],
+  );
 
   // Обработка открытия модального окна AtCoder
   const handleAtCoderClick = (e: React.MouseEvent) => {
@@ -1054,962 +939,109 @@ const ProfilePage: React.FC = () => {
 
   return (
     <main>
-      <section id="profile" style={{ display: 'block' }}>
-        <div className="profile-header">
-          <h2>{userData.full_name || 'Неизвестный пользователь'}</h2>
-          <div className="ratings-container">
-            <div className="rating-block">
-              <div className="rating">{userData.bscp_rating}</div>
-              <div className="rating-label">Рейтинг БЦСП</div>
-            </div>
-            {cfData?.connected && (
-              <div className="rating-block">
-                {cfKarmaLoading ? (
-                  <div className="rating karma-loading">...</div>
-                ) : cfKarmaData ? (
-                  <div
-                    className="rating karma-rating"
-                    style={{ color: cfKarmaData.karmaColor }}
-                  >
-                    {cfKarmaData.karma}
-                  </div>
-                ) : (
-                  <div className="rating karma-rating">
-                    {userData.codeforces_karma || 0}
-                  </div>
-                )}
-                <div className="rating-label">
-                  Карма Codeforces
-                  {cfKarmaData && (
-                    <span
-                      className="karma-level"
-                      style={{ color: cfKarmaData.karmaColor }}
-                    >
-                      {' '}
-                      ({cfKarmaData.karmaLevel})
-                    </span>
-                  )}
-                  {cfKarmaData && (
-                    <button
-                      className="cf-stats-btn"
-                      onClick={() => setShowCFProblems(true)}
-                      title="Показать все решённые задачи"
-                    >
-                      📊
-                    </button>
-                  )}
-                </div>
-              </div>
-            )}
-          </div>
-          <button onClick={() => signOut()} className="btn-logout">
-            Выйти
-          </button>
-        </div>
+      <section
+        id="profile"
+        className="profile-page"
+        style={{ display: 'block' }}
+        data-cf-karma-loading={cfKarmaLoading}
+      >
+        <ProfileSummaryCard
+          userData={userData}
+          onToggleEdit={() => setIsEditing((v) => !v)}
+          onSignOut={() => signOut()}
+        />
 
-        <h1>Вход во внешние системы</h1>
-        <div className="systems-links">
-          {/* Codeforces кнопка */}
-          {cfData?.connected ? (
-            <button
-              onClick={handleCFClick}
-              className="system-link connected-cf"
-              title="Нажмите, чтобы посмотреть историю или отвязать"
-            >
-              <span className="status-indicator"></span>
-              <div className="cf-info">
-                <span className="cf-label">Подключено Codeforces</span>
-                <span className="cf-nickname">{cfData.cf_username}</span>
-              </div>
-            </button>
-          ) : cfData?.pending_verification ? (
-            <button
-              onClick={handleCFClick}
-              className="system-link connected-cf"
-              style={{
-                backgroundColor: '#ffc107',
-                color: '#333',
-                border: '1px solid #e0a800',
-              }}
-              title="Нажмите, чтобы завершить верификацию"
-            >
-              <span
-                className="status-indicator"
-                style={{ backgroundColor: '#ffc107' }}
-              ></span>
-              <div className="cf-info">
-                <span className="cf-label">Ожидает подтверждения</span>
-                <span className="cf-nickname">
-                  {cfData.pending_cf_username}
-                </span>
-              </div>
-            </button>
-          ) : (
-            <button
-              onClick={handleCFClick}
-              className="system-link"
-              title="Нажмите, чтобы привязать"
-            >
-              Подключить Codeforces
-            </button>
-          )}
+        <ExternalSystemsCard
+          cfData={cfData}
+          atCoderData={atCoderData}
+          onCFClick={handleCFClick}
+          onAtCoderClick={handleAtCoderClick}
+        />
 
-          {/* AtCoder кнопка */}
-          {atCoderData?.connected ? (
-            <button
-              onClick={handleAtCoderClick}
-              className="system-link connected-cf"
-              title="Нажмите, чтобы отвязать или посмотреть submissions"
-            >
-              <span className="status-indicator"></span>
-              <div className="cf-info">
-                <span className="cf-label">Подключено AtCoder</span>
-                <span className="cf-nickname">
-                  {atCoderData.atcoder_username}
-                </span>
-              </div>
-            </button>
-          ) : atCoderData?.pending_verification ? (
-            <button
-              onClick={handleAtCoderClick}
-              className="system-link connected-cf"
-              style={{
-                backgroundColor: '#ffc107',
-                color: '#333',
-                border: '1px solid #e0a800',
-              }}
-              title="Нажмите, чтобы завершить верификацию"
-            >
-              <span
-                className="status-indicator"
-                style={{ backgroundColor: '#ffc107' }}
-              ></span>
-              <div className="cf-info">
-                <span className="cf-label">Ожидает подтверждения</span>
-                <span className="cf-nickname">
-                  {atCoderData.pending_atcoder_username}
-                </span>
-              </div>
-            </button>
-          ) : (
-            <button
-              onClick={handleAtCoderClick}
-              className="system-link"
-              title="Нажмите, чтобы привязать"
-            >
-              Подключить AtCoder
-            </button>
-          )}
-
-          <a
-            href="https://contest.yandex.ru/enter"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="system-link"
-          >
-            Вход в Yandex.Contest
-          </a>
-          <a
-            href="https://leetcode.com/accounts/login/"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="system-link"
-          >
-            Вход в LeetCode
-          </a>
-          <a
-            href="https://icpc.global/login"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="system-link"
-          >
-            Вход в ICPC
-          </a>
-        </div>
-
-        {/* Модальное окно для привязки Codeforces */}
         {showCFModal && (
-          <div className="modal-overlay" onClick={handleCFCloseModal}>
-            <div className="modal-content" onClick={(e) => e.stopPropagation()}>
-              {cfVerificationStep === 'input_username' ? (
-                <>
-                  <h2>Привязка аккаунта Codeforces</h2>
-                  <p>Введите ваш хендл на Codeforces:</p>
-                  <form onSubmit={handleConnectCF}>
-                    <input
-                      type="text"
-                      value={cfInput}
-                      onChange={(e) => setCfInput(e.target.value)}
-                      placeholder="Например: tourist"
-                      disabled={cfLoading}
-                      autoFocus
-                    />
-                    {cfError && <p className="error-message">{cfError}</p>}
-                    <div className="modal-buttons">
-                      <button
-                        type="button"
-                        onClick={handleCFCloseModal}
-                        disabled={cfLoading}
-                        className="btn-cancel"
-                      >
-                        Отмена
-                      </button>
-                      <button
-                        type="submit"
-                        disabled={cfLoading}
-                        className="btn-submit"
-                      >
-                        {cfLoading ? 'Проверка...' : 'Далее'}
-                      </button>
-                    </div>
-                  </form>
-                </>
-              ) : cfVerificationStep === 'show_code' ? (
-                <>
-                  <h2>Код верификации</h2>
-                  <div className="verification-code-display">
-                    <p>
-                      <strong>Сохраните этот код!</strong>
-                    </p>
-                    <p>
-                      Разместите его в вашем{' '}
-                      <strong>профиле на Codeforces</strong> в поле{' '}
-                      <strong>First Name</strong>:
-                    </p>
-                    <ol className="affiliation-steps">
-                      <li>
-                        Перейдите на{' '}
-                        <a
-                          href="https://codeforces.com/settings/social"
-                          target="_blank"
-                          rel="noopener noreferrer"
-                        >
-                          Codeforces Settings
-                        </a>
-                      </li>
-                      <li>
-                        Найдите поле <strong>First Name</strong> (Имя)
-                      </li>
-                      <li>Вставьте туда этот код (см. ниже)</li>
-                      <li>
-                        Нажмите <strong>Save Changes</strong> для сохранения
-                      </li>
-                      <li>Вернитесь сюда и нажмите &laquo;Проверить&raquo;</li>
-                    </ol>
-                    <div className="code-box">{cfGeneratedCode}</div>
-                    <p className="code-warning">
-                      💡 Если вы забыли код — нажмите кнопку ниже для генерации
-                      нового
-                    </p>
-                  </div>
-                  <div className="modal-buttons">
-                    <button
-                      type="button"
-                      onClick={handleCFCloseModal}
-                      disabled={cfLoading}
-                      className="btn-cancel"
-                    >
-                      Отмена
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setCfGeneratedCode('');
-                        setCfVerificationStep('input_username');
-                      }}
-                      disabled={cfLoading}
-                      className="btn-secondary"
-                      style={{
-                        backgroundColor: '#f59e0b',
-                        color: '#fff',
-                        marginRight: '10px',
-                      }}
-                    >
-                      Новый код
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setCfVerificationStep('verifying')}
-                      disabled={cfLoading}
-                      className="btn-submit"
-                    >
-                      Я разместил код в First Name
-                    </button>
-                  </div>
-                </>
-              ) : (
-                <>
-                  <h2>Проверка привязки</h2>
-                  <p className="verification-instructions">
-                    Автоматическая проверка через{' '}
-                    <strong>{cfAutoVerifyCountdown} сек...</strong>
-                  </p>
-                  <p className="verification-hint">
-                    Убедитесь, что код размещён в поле{' '}
-                    <strong>First Name</strong> на Codeforces
-                  </p>
-                  <div className="checking-status">
-                    <div className="spinner"></div>
-                    <p>
-                      Проверка профиля <strong>{cfInput}</strong>...
-                    </p>
-                  </div>
-                  {cfError && <p className="error-message">{cfError}</p>}
-                  <div className="modal-buttons">
-                    <button
-                      type="button"
-                      onClick={handleCFCloseModal}
-                      disabled={cfLoading}
-                      className="btn-cancel"
-                    >
-                      Отмена
-                    </button>
-                    <button
-                      type="button"
-                      onClick={handleVerifyCFFirstName}
-                      disabled={cfLoading || cfAutoVerifyCountdown > 0}
-                      className="btn-submit"
-                    >
-                      {cfLoading
-                        ? 'Проверка...'
-                        : cfAutoVerifyCountdown > 0
-                          ? `Проверить (${cfAutoVerifyCountdown})`
-                          : 'Проверить сейчас'}
-                    </button>
-                  </div>
-                </>
-              )}
-            </div>
-          </div>
+          <CodeforcesConnectModal
+            step={cfVerificationStep}
+            input={cfInput}
+            loading={cfLoading}
+            error={cfError}
+            generatedCode={cfGeneratedCode}
+            autoVerifyCountdown={cfAutoVerifyCountdown}
+            onInputChange={setCfInput}
+            onClose={handleCFCloseModal}
+            onConnect={handleConnectCF}
+            onVerify={handleVerifyCFFirstName}
+            onResetCode={() => {
+              setCfGeneratedCode('');
+              setCfVerificationStep('input_username');
+            }}
+            onStartVerify={() => setCfVerificationStep('verifying')}
+          />
         )}
 
-        {/* Модальное окно для привязки AtCoder */}
         {showAtCoderModal && (
-          <div className="modal-overlay" onClick={handleCloseModal}>
-            <div className="modal-content" onClick={(e) => e.stopPropagation()}>
-              {verificationStep === 'input_username' ? (
-                <>
-                  <h2>Привязка аккаунта AtCoder</h2>
-                  <p>Введите ваше имя пользователя на AtCoder:</p>
-                  <form onSubmit={handleConnectAtCoder}>
-                    <input
-                      type="text"
-                      value={atCoderInput}
-                      onChange={(e) => setAtCoderInput(e.target.value)}
-                      placeholder="Например: user123"
-                      disabled={atCoderLoading}
-                      autoFocus
-                    />
-                    {atCoderError && (
-                      <p className="error-message">{atCoderError}</p>
-                    )}
-                    <div className="modal-buttons">
-                      <button
-                        type="button"
-                        onClick={handleCloseModal}
-                        disabled={atCoderLoading}
-                        className="btn-cancel"
-                      >
-                        Отмена
-                      </button>
-                      <button
-                        type="submit"
-                        disabled={atCoderLoading}
-                        className="btn-submit"
-                      >
-                        {atCoderLoading ? 'Проверка...' : 'Далее'}
-                      </button>
-                    </div>
-                  </form>
-                </>
-              ) : verificationStep === 'show_code' ? (
-                <>
-                  <h2>Код верификации</h2>
-                  <div className="verification-code-display">
-                    <p>
-                      <strong>Сохраните этот код!</strong>
-                    </p>
-                    <p>
-                      Разместите его в вашем <strong>профиле на AtCoder</strong>{' '}
-                      в поле <strong>Affiliation</strong>:
-                    </p>
-                    <ol className="affiliation-steps">
-                      <li>
-                        Перейдите на{' '}
-                        <a
-                          href="https://atcoder.jp/settings"
-                          target="_blank"
-                          rel="noopener noreferrer"
-                        >
-                          AtCoder Settings
-                        </a>
-                      </li>
-                      <li>
-                        Найдите поле <strong>Affiliation</strong>{' '}
-                        (Организация/Компания)
-                      </li>
-                      <li>Вставьте туда этот код (см. ниже)</li>
-                      <li>
-                        Нажмите <strong>Update</strong> для сохранения
-                      </li>
-                      <li>Вернитесь сюда и нажмите &laquo;Проверить&raquo;</li>
-                    </ol>
-                    <div className="code-box">{generatedVerificationCode}</div>
-                    <p className="code-warning">
-                      💡 Если вы забыли код — нажмите кнопку ниже для генерации
-                      нового
-                    </p>
-                  </div>
-                  <div className="modal-buttons">
-                    <button
-                      type="button"
-                      onClick={handleCloseModal}
-                      disabled={atCoderLoading}
-                      className="btn-cancel"
-                    >
-                      Отмена
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setGeneratedVerificationCode('');
-                        setVerificationStep('input_username');
-                      }}
-                      disabled={atCoderLoading}
-                      className="btn-secondary"
-                      style={{
-                        backgroundColor: '#f59e0b',
-                        color: '#fff',
-                        marginRight: '10px',
-                      }}
-                    >
-                      Новый код
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setVerificationStep('verifying')}
-                      disabled={atCoderLoading}
-                      className="btn-submit"
-                    >
-                      Я разместил код в Affiliation
-                    </button>
-                  </div>
-                </>
-              ) : (
-                <>
-                  <h2>Проверка привязки</h2>
-                  <p className="verification-instructions">
-                    Проверяем, что код размещён в поле{' '}
-                    <strong>Affiliation</strong> на AtCoder...
-                  </p>
-                  <div className="checking-status">
-                    <div className="spinner"></div>
-                    <p>
-                      Проверка профиля <strong>{atCoderInput}</strong>...
-                    </p>
-                  </div>
-                  {atCoderError && (
-                    <p className="error-message">{atCoderError}</p>
-                  )}
-                  <div className="modal-buttons">
-                    <button
-                      type="button"
-                      onClick={handleCloseModal}
-                      disabled={atCoderLoading}
-                      className="btn-cancel"
-                    >
-                      Отмена
-                    </button>
-                    <button
-                      type="button"
-                      onClick={handleVerifyAffiliation}
-                      disabled={atCoderLoading}
-                      className="btn-submit"
-                    >
-                      {atCoderLoading ? 'Проверка...' : 'Проверить'}
-                    </button>
-                  </div>
-                </>
-              )}
-            </div>
-          </div>
+          <AtCoderConnectModal
+            step={verificationStep}
+            input={atCoderInput}
+            loading={atCoderLoading}
+            error={atCoderError}
+            generatedCode={generatedVerificationCode}
+            onInputChange={setAtCoderInput}
+            onClose={handleCloseModal}
+            onConnect={handleConnectAtCoder}
+            onVerify={handleVerifyAffiliation}
+            onResetCode={() => {
+              setGeneratedVerificationCode('');
+              setVerificationStep('input_username');
+            }}
+            onStartVerify={() => setVerificationStep('verifying')}
+          />
         )}
 
-        {/* Секция с данными AtCoder */}
         {atCoderData?.connected && showAtCoderSubmissions && (
-          <div className="atcoder-section">
-            <div className="atcoder-header">
-              <h2>Данные AtCoder: {atCoderData.atcoder_username}</h2>
-              <button
-                onClick={handleDisconnectAtCoder}
-                className="btn-disconnect"
-                title="Отвязать аккаунт"
-              >
-                Отвязать
-              </button>
-            </div>
-
-            {atCoderData.user_info && (
-              <div className="atcoder-stats">
-                <div className="stat-item">
-                  <span className="stat-label">Рейтинг:</span>
-                  <span className="stat-value">
-                    {atCoderData.user_info.rating}
-                  </span>
-                </div>
-                <div className="stat-item">
-                  <span className="stat-label">Ранг:</span>
-                  <span className="stat-value">
-                    {atCoderData.user_info.rank || 'N/A'}
-                  </span>
-                </div>
-                <div className="stat-item">
-                  <span className="stat-label">Участий в контестах:</span>
-                  <span className="stat-value">
-                    {atCoderData.user_info.attended_contests_count}
-                  </span>
-                </div>
-                <div className="stat-item">
-                  <span className="stat-label">Сумма очков:</span>
-                  <span className="stat-value">
-                    {atCoderData.user_info.rated_point_sum}
-                  </span>
-                </div>
-              </div>
-            )}
-
-            <h3>История участия в контестах</h3>
-            {atCoderData.submissions && atCoderData.submissions.length > 0 ? (
-              <table className="atcoder-submissions">
-                <thead>
-                  <tr>
-                    <th>Дата</th>
-                    <th>Контест</th>
-                    <th>Место</th>
-                    <th>Рейтинг до</th>
-                    <th>Рейтинг после</th>
-                    <th>Изменение</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {atCoderData.submissions
-                    .slice()
-                    .reverse()
-                    .map((sub) => (
-                      <tr key={sub.contest_id + sub.contest_end_time}>
-                        <td>
-                          {sub.contest_end_time
-                            ? new Date(
-                                sub.contest_end_time,
-                              ).toLocaleDateString()
-                            : 'N/A'}
-                        </td>
-                        <td>{sub.contest_name}</td>
-                        <td>{sub.user_rank || 'N/A'}</td>
-                        <td>{sub.user_old_rating || 'N/A'}</td>
-                        <td>{sub.user_new_rating || 'N/A'}</td>
-                        <td
-                          className={
-                            sub.user_rating_change >= 0
-                              ? 'status-ac'
-                              : 'rating-change negative'
-                          }
-                        >
-                          {sub.user_rating_change >= 0 ? '+' : ''}
-                          {sub.user_rating_change}
-                        </td>
-                      </tr>
-                    ))}
-                </tbody>
-              </table>
-            ) : (
-              <p>Нет данных об участии в контестах или данные загружаются...</p>
-            )}
-          </div>
+          <AtCoderStatsSection
+            data={atCoderData}
+            onDisconnect={handleDisconnectAtCoder}
+          />
         )}
 
-        {/* Секция с данными Codeforces */}
         {cfData?.connected && showCFSubmissions && (
-          <div className="atcoder-section">
-            <div className="atcoder-header">
-              <h2>Данные Codeforces: {cfData.cf_username}</h2>
-              <button
-                onClick={handleDisconnectCFNew}
-                className="btn-disconnect"
-                title="Отвязать аккаунт"
-              >
-                Отвязать
-              </button>
-            </div>
-
-            {cfData.user_info && (
-              <div className="atcoder-stats">
-                <div className="stat-item">
-                  <span className="stat-label">Рейтинг:</span>
-                  <span className="stat-value">{cfData.user_info.rating}</span>
-                </div>
-                <div className="stat-item">
-                  <span className="stat-label">Ранг:</span>
-                  <span className="stat-value">
-                    {cfData.user_info.rank || 'N/A'}
-                  </span>
-                </div>
-                <div className="stat-item">
-                  <span className="stat-label">Макс. рейтинг:</span>
-                  <span className="stat-value">
-                    {cfData.user_info.max_rating || 'N/A'}
-                  </span>
-                </div>
-                <div className="stat-item">
-                  <span className="stat-label">Участий в контестах:</span>
-                  <span className="stat-value">
-                    {cfData.user_info.attended_contests_count}
-                  </span>
-                </div>
-              </div>
-            )}
-
-            <h3>История участия в контестах</h3>
-            {cfData.submissions && cfData.submissions.length > 0 ? (
-              <table className="atcoder-submissions">
-                <thead>
-                  <tr>
-                    <th>Дата</th>
-                    <th>Контест</th>
-                    <th>Место</th>
-                    <th>Рейтинг до</th>
-                    <th>Рейтинг после</th>
-                    <th>Изменение</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {cfData.submissions
-                    .slice()
-                    .reverse()
-                    .map((sub) => (
-                      <tr key={sub.contest_id + sub.contest_end_time}>
-                        <td>
-                          {sub.contest_end_time
-                            ? new Date(
-                                sub.contest_end_time,
-                              ).toLocaleDateString()
-                            : 'N/A'}
-                        </td>
-                        <td>{sub.contest_name}</td>
-                        <td>{sub.user_rank || 'N/A'}</td>
-                        <td>{sub.user_old_rating || 'N/A'}</td>
-                        <td>{sub.user_new_rating || 'N/A'}</td>
-                        <td
-                          className={
-                            sub.user_rating_change >= 0
-                              ? 'status-ac'
-                              : 'rating-change negative'
-                          }
-                        >
-                          {sub.user_rating_change >= 0 ? '+' : ''}
-                          {sub.user_rating_change}
-                        </td>
-                      </tr>
-                    ))}
-                </tbody>
-              </table>
-            ) : (
-              <p>Нет данных об участии в контестах или данные загружаются...</p>
-            )}
-          </div>
+          <CodeforcesStatsSection
+            data={cfData}
+            onDisconnect={handleDisconnectCFNew}
+          />
         )}
 
-        <h1>История участия и изменения рейтинга</h1>
+        <ProfileHistoryCard
+          visibleHistory={visibleHistory}
+          filteredCount={filteredAndSortedHistory.length}
+          platforms={platforms}
+          dateFrom={dateFrom}
+          dateTo={dateTo}
+          platformFilter={platformFilter}
+          placeFrom={placeFrom}
+          placeTo={placeTo}
+          ratingSort={ratingSort}
+          contestProblems={contestProblems}
+          contestProblemsLoading={contestProblemsLoading}
+          expandedContestId={expandedContestId}
+          onDateFromChange={setDateFrom}
+          onDateToChange={setDateTo}
+          onPlatformFilterChange={setPlatformFilter}
+          onPlaceFromChange={setPlaceFrom}
+          onPlaceToChange={setPlaceTo}
+          onRatingSortChange={setRatingSort}
+          onResetFilters={handleResetFilters}
+          onContestClick={handleContestClick}
+          onLoadMore={() => setHistoryLimit((v) => v + 6)}
+        />
 
-        {/* Фильтры */}
-        <div className="filters-section">
-          {/* Дата */}
-          <div className="filter-group">
-            <label>Дата (от):</label>
-            <input
-              type="date"
-              value={dateFrom}
-              onChange={(e) => setDateFrom(e.target.value)}
-            />
-          </div>
-          <div className="filter-group">
-            <label>Дата (до):</label>
-            <input
-              type="date"
-              value={dateTo}
-              onChange={(e) => setDateTo(e.target.value)}
-            />
-          </div>
-
-          {/* Платформа */}
-          <div className="filter-group">
-            <label>Платформа:</label>
-            <select
-              value={platformFilter}
-              onChange={(e) => setPlatformFilter(e.target.value)}
-            >
-              <option value="all">Все</option>
-              {platforms.map((p) => (
-                <option key={p} value={p}>
-                  {p}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          {/* Место (диапазон) */}
-          <div className="filter-group">
-            <label>Место от:</label>
-            <input
-              type="number"
-              min="1"
-              value={placeFrom}
-              onChange={(e) => setPlaceFrom(e.target.value)}
-              placeholder="1"
-            />
-          </div>
-          <div className="filter-group">
-            <label>Место до:</label>
-            <input
-              type="number"
-              min="1"
-              value={placeTo}
-              onChange={(e) => setPlaceTo(e.target.value)}
-              placeholder="1000"
-            />
-          </div>
-
-          {/* Сортировка по рейтингу */}
-          <div className="filter-group">
-            <label>Рейтинг БЦСП:</label>
-            <select
-              value={ratingSort}
-              onChange={(e) =>
-                setRatingSort(e.target.value as 'none' | 'asc' | 'desc')
-              }
-            >
-              <option value="none">Без сортировки</option>
-              <option value="asc">По возрастанию</option>
-              <option value="desc">По убыванию</option>
-            </select>
-          </div>
-
-          <button
-            type="button"
-            className="btn-reset-filters"
-            onClick={handleResetFilters}
-          >
-            Сбросить
-          </button>
-        </div>
-
-        {/* Таблица */}
-        <table>
-          <thead>
-            <tr>
-              <th>Дата</th>
-              <th>Соревнование</th>
-              <th>Платформа</th>
-              <th>Результат</th>
-              <th>Рейтинг БЦСП</th>
-            </tr>
-          </thead>
-          <tbody>
-            {filteredAndSortedHistory.length > 0 ? (
-              filteredAndSortedHistory.map((item, index) => {
-                const uniqueKey = item.contest.id
-                  ? `${item.contest.platform}_${item.contest.id}`
-                  : null;
-                const isExpanded = uniqueKey && expandedContestId === uniqueKey;
-                const problems = uniqueKey ? contestProblems[uniqueKey] : null;
-                const isLoading = uniqueKey
-                  ? contestProblemsLoading[uniqueKey]
-                  : false;
-
-                console.log(`[Table] Item ${index}:`, {
-                  title: item.contest.title,
-                  platform: item.contest.platform,
-                  id: item.contest.id,
-                  uniqueKey,
-                });
-
-                return (
-                  <React.Fragment key={index}>
-                    <tr className={isExpanded ? 'expanded-row' : ''}>
-                      <td>
-                        {new Date(item.date_recorded).toLocaleDateString()}
-                      </td>
-                      <td>
-                        {item.contest.id ? (
-                          <button
-                            className="contest-link"
-                            onClick={() => {
-                              console.log(
-                                `[Table] Clicking contest:`,
-                                item.contest,
-                              );
-                              handleContestClick(
-                                item.contest.id!,
-                                item.contest.title,
-                                item.contest.platform,
-                              );
-                            }}
-                            type="button"
-                          >
-                            {isExpanded ? '▼ ' : '▶ '}
-                            {item.contest.title}
-                          </button>
-                        ) : (
-                          item.contest.title
-                        )}
-                      </td>
-                      <td>
-                        <span
-                          className={`platform-badge platform-${item.contest.platform.toLowerCase()}`}
-                        >
-                          {item.contest.platform === 'Codeforces' && '🔴 '}
-                          {item.contest.platform === 'AtCoder' && '🟠 '}
-                          {item.contest.platform}
-                        </span>
-                      </td>
-                      <td>
-                        {item.placement}
-                        {item.is_manual && (
-                          <span className="manual-tag">вручную</span>
-                        )}
-                      </td>
-                      <td
-                        className={`rating-change ${item.mmr_change < 0 ? 'negative' : ''}`}
-                      >
-                        {item.mmr_change > 0
-                          ? `+${item.mmr_change}`
-                          : item.mmr_change}
-                      </td>
-                    </tr>
-                    {isExpanded && uniqueKey && (
-                      <tr className="problems-expand-row">
-                        <td colSpan={5}>
-                          <div className="problems-container">
-                            {isLoading ? (
-                              <div className="loading-problems">
-                                <div className="spinner"></div>
-                                <p>Загрузка задач...</p>
-                              </div>
-                            ) : problems && problems.length > 0 ? (
-                              <>
-                                <div className="problems-summary">
-                                  <p>
-                                    Решено задач:{' '}
-                                    <strong>{problems.length}</strong>
-                                  </p>
-                                </div>
-                                <table className="problems-table">
-                                  <thead>
-                                    <tr>
-                                      <th>Индекс</th>
-                                      <th>Название</th>
-                                      <th>Ссылка</th>
-                                    </tr>
-                                  </thead>
-                                  <tbody>
-                                    {problems.map((problem, idx) => (
-                                      <tr
-                                        key={`${uniqueKey}_${problem.problemIndex}_${idx}`}
-                                        className="solved-row"
-                                      >
-                                        <td className="problem-index">
-                                          {problem.problemIndex}
-                                        </td>
-                                        <td className="problem-name">
-                                          {problem.problemName}
-                                        </td>
-                                        <td>
-                                          <a
-                                            href={problem.problemUrl}
-                                            target="_blank"
-                                            rel="noopener noreferrer"
-                                            className="problem-link-button"
-                                          >
-                                            Открыть задачу
-                                          </a>
-                                        </td>
-                                      </tr>
-                                    ))}
-                                  </tbody>
-                                </table>
-                              </>
-                            ) : (
-                              <div className="no-problems">
-                                <p>
-                                  Нет данных о задачах или произошла ошибка при
-                                  загрузке.
-                                </p>
-                              </div>
-                            )}
-                          </div>
-                        </td>
-                      </tr>
-                    )}
-                  </React.Fragment>
-                );
-              })
-            ) : (
-              <tr>
-                <td colSpan={5}>Нет записей, соответствующих фильтрам.</td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-
-        <h1>Изменение личных данных</h1>
-        <form className="edit-form" onSubmit={handleSubmit}>
-          <label htmlFor="name">ФИО</label>
-          <input
-            type="text"
-            id="name"
-            name="full_name"
-            defaultValue={userData.full_name || ''}
-            disabled={saving}
+        {isEditing && (
+          <ProfileEditForm
+            userData={userData}
+            saving={saving}
+            onSubmit={handleSubmit}
           />
-
-          <label htmlFor="phone">Телефон</label>
-          <input
-            type="tel"
-            id="phone"
-            name="phone"
-            defaultValue={userData.phone || ''}
-            disabled={saving}
-          />
-
-          <div className="form-section-title">
-            <h3>Смена пароля</h3>
-            <p>Заполните только для изменения пароля</p>
-          </div>
-
-          <label htmlFor="oldPassword">Старый пароль</label>
-          <input
-            type="password"
-            id="oldPassword"
-            name="oldPassword"
-            placeholder="Текущий пароль"
-            disabled={saving}
-          />
-
-          <label htmlFor="newPassword">Новый пароль</label>
-          <input
-            type="password"
-            id="newPassword"
-            name="newPassword"
-            placeholder="Новый пароль"
-            disabled={saving}
-          />
-
-          <div className="btn-save-container">
-            <button type="submit" className="btn-save" disabled={saving}>
-              {saving ? 'Сохранение...' : 'Сохранить изменения'}
-            </button>
-          </div>
-        </form>
+        )}
       </section>
 
       {/* Модальное окно статистики Codeforces */}
@@ -2042,3 +1074,4 @@ const ProfilePage: React.FC = () => {
 };
 
 export default ProfilePage;
+

@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import Card, { CardProps } from './Card';
 
 import './upcoming-events.scss';
@@ -8,13 +8,13 @@ import './upcoming-events.scss';
 export interface EventData {
   id: string;
   title: string;
+  name?: string;
   platform: string;
   status: string;
-
   start_time_utc: string;
   end_time_utc: string;
   registration_link: string;
-
+  external_link?: string;
   platform_contest_id?: string;
 }
 
@@ -33,8 +33,11 @@ export default function UpcomingEvents() {
     const fetchEvents = async () => {
       try {
         setLoading(true);
-        const response = await fetch('/api/events');
-        const result: ApiResponse = await response.json();
+        setError(null);
+        const response = await fetch(
+          '/api/events?includeCodeforces=true&includeContests=true',
+        );
+        const result = (await response.json()) as ApiResponse;
 
         if (response.ok && result.ok && result.data) {
           setEvents(result.data);
@@ -80,15 +83,14 @@ export default function UpcomingEvents() {
     );
   }
 
-  const cards = events.map((event) => {
+  const cards = events.slice(0, 6).map((event) => {
     const cardData: CardProps['event'] = {
-      title: event.title,
+      title: event.title || event.name || 'Событие',
       platform: event.platform,
       status: event.status,
-
       start_date: event.start_time_utc,
       end_date: event.end_time_utc,
-      registration_link: event.registration_link,
+      registration_link: event.registration_link || event.external_link || '#',
     };
 
     return <Card key={event.id} event={cardData} />;
@@ -98,9 +100,6 @@ export default function UpcomingEvents() {
     <div className="upcoming-events">
       <h1 className="ue-title">Ближайшие события</h1>
       <div className="ue-list">{cards}</div>
-      <div className="ue-next-block">
-        <button className="ue-next-btn">Показать еще</button>
-      </div>
     </div>
   );
 }
