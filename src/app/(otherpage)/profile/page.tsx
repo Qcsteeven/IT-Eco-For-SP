@@ -192,41 +192,56 @@ const ProfilePage: React.FC = () => {
     }
   }, [status]);
 
-  // Загрузка данных кармы Codeforces
-  useEffect(() => {
-    if (status === 'authenticated' && cfData?.connected) {
-      const fetchCFKarma = async () => {
-        try {
-          setCfKarmaLoading(true);
-          const response = await fetch('/api/codeforces/karma?refresh=1', {
-            cache: 'no-store',
-          });
-          const result = await response.json();
+  async function loadCachedCFKarmaDetails() {
+    if (!cfData?.connected) return false;
 
-          console.log('[CF Karma] Response:', response.status, result);
+    try {
+      setCfKarmaLoading(true);
+      const response = await fetch('/api/codeforces/karma', {
+        cache: 'no-store',
+      });
+      const result = await response.json();
 
-          if (response.ok && result.ok && result.data) {
-            console.log('[CF Karma] Data:', result.data);
-            setCfKarmaData(result.data);
+      console.log('[CF Karma] Cached response:', response.status, result);
 
-            setUserData((u) =>
-              u && result.data.karma !== u.codeforces_karma
-                ? { ...u, codeforces_karma: result.data.karma }
-                : u,
-            );
-          } else {
-            console.error('[CF Karma] Error:', result);
-          }
-        } catch (err) {
-          console.error('[CF Karma] Fetch error:', err);
-        } finally {
-          setCfKarmaLoading(false);
-        }
-      };
+      if (response.ok && result.ok && result.data) {
+        setCfKarmaData(result.data);
+        setUserData((u) =>
+          u
+            ? {
+                ...u,
+                codeforces_karma:
+                  result.data.codeforcesKarma ??
+                  result.data.loadedKarma ??
+                  u.codeforces_karma,
+                manual_karma: result.data.manualAdjustment ?? u.manual_karma,
+              }
+            : u,
+        );
+        return true;
+      }
 
-      fetchCFKarma();
+      console.error('[CF Karma] Error:', result);
+      return false;
+    } catch (err) {
+      console.error('[CF Karma] Fetch error:', err);
+      return false;
+    } finally {
+      setCfKarmaLoading(false);
     }
-  }, [status, cfData?.connected]);
+  }
+
+  async function handleOpenKarmaDetails() {
+    if (cfKarmaData) {
+      setShowCFProblems(true);
+      return;
+    }
+
+    const loaded = await loadCachedCFKarmaDetails();
+    if (loaded) {
+      setShowCFProblems(true);
+    }
+  }
 
   // Загрузка данных кармы AtCoder (кэш в ref для будущего UI)
   useEffect(() => {
@@ -939,15 +954,13 @@ const ProfilePage: React.FC = () => {
     );
   }
 
-  const canOpenKarmaDetails = Boolean(
-    cfData?.connected && cfKarmaData && !cfKarmaLoading,
-  );
+  const canOpenKarmaDetails = Boolean(cfData?.connected && !cfKarmaLoading);
   const karmaDetailsTitle = cfKarmaLoading
     ? 'Статистика кармы загружается'
     : !cfData?.connected
       ? 'Привяжите Codeforces, чтобы посмотреть задачи'
       : !cfKarmaData
-        ? 'Статистика кармы ещё не загружена'
+        ? 'Открыть сохранённую статистику Codeforces'
         : 'Открыть решённые задачи Codeforces';
 
   return (
@@ -962,7 +975,7 @@ const ProfilePage: React.FC = () => {
           userData={userData}
           onToggleEdit={() => setIsEditing((v) => !v)}
           onSignOut={() => signOut()}
-          onOpenKarmaDetails={() => setShowCFProblems(true)}
+          onOpenKarmaDetails={handleOpenKarmaDetails}
           isKarmaDetailsDisabled={!canOpenKarmaDetails}
           karmaDetailsTitle={karmaDetailsTitle}
         />

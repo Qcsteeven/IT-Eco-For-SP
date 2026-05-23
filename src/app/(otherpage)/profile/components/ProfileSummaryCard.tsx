@@ -19,7 +19,8 @@ export default function ProfileSummaryCard({
   isKarmaDetailsDisabled = false,
   karmaDetailsTitle = 'Открыть статистику кармы',
 }: ProfileSummaryCardProps) {
-  const rawKarma = Number(userData.codeforces_karma ?? 0);
+  const rawKarma =
+    Number(userData.codeforces_karma ?? 0) + Number(userData.manual_karma ?? 0);
   const codeforcesKarma = Number.isFinite(rawKarma) ? rawKarma : 0;
   const rawRating = Number(userData.bscp_rating ?? 0);
   const bscpRating = Number.isFinite(rawRating) ? rawRating : 0;

@@ -3,6 +3,7 @@ export interface UserData {
   email: string;
   bscp_rating: number;
   codeforces_karma?: number;
+  manual_karma?: number;
   phone?: string;
   cf_username?: string | null;
   atcoder_username?: string | null;
@@ -106,12 +107,16 @@ export type RatingSort = 'none' | 'asc' | 'desc';
 
 export interface CfKarmaData {
   karma: number;
+  loadedKarma?: number;
+  codeforcesKarma?: number;
+  manualAdjustment?: number;
   karmaLevel: string;
   karmaColor: string;
   breakdown: {
     easyKarma: number;
     mediumKarma: number;
     hardKarma: number;
+    unknownKarma?: number;
     tagBonusKarma: number;
     diversityBonus: number;
   };
