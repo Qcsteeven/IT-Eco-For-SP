@@ -6,8 +6,14 @@
 
 .calendar-page__title {
   margin: 0 0 22px;
-  font-family: var(--font-montserrat), system-ui, -apple-system, Segoe UI, Roboto,
-    Arial, sans-serif;
+  font-family:
+    var(--font-montserrat),
+    system-ui,
+    -apple-system,
+    Segoe UI,
+    Roboto,
+    Arial,
+    sans-serif;
   font-weight: 700;
   font-size: clamp(34px, 3.3vw, 50px);
   line-height: 0.95;
@@ -32,8 +38,14 @@
 }
 
 .calendar-page__month-text {
-  font-family: var(--font-montserrat), system-ui, -apple-system, Segoe UI, Roboto,
-    Arial, sans-serif;
+  font-family:
+    var(--font-montserrat),
+    system-ui,
+    -apple-system,
+    Segoe UI,
+    Roboto,
+    Arial,
+    sans-serif;
   font-weight: 500;
   font-size: 30px;
   line-height: 1.1;
@@ -46,6 +58,16 @@
   color: rgba(88, 54, 163, 0.7);
 }
 
+.calendar-page__error {
+  margin: 0 0 16px;
+  border: 2px solid rgba(233, 44, 44, 0.22);
+  border-radius: 14px;
+  background: #fff4f4;
+  color: #9b1d1d;
+  padding: 12px 16px;
+  font-weight: 700;
+}
+
 .calendar-page__month-btn {
   width: 34px;
   height: 34px;
@@ -56,7 +78,9 @@
   background: transparent;
   color: #5836a3;
   cursor: pointer;
-  transition: transform 120ms ease, color 120ms ease;
+  transition:
+    transform 120ms ease,
+    color 120ms ease;
 
   &:hover {
     color: #7e50e5;
@@ -108,8 +132,14 @@
     padding: 8px 12px;
     background: #cbb8ff;
     color: #5836a3;
-    font-family: var(--font-montserrat), system-ui, -apple-system, Segoe UI, Roboto,
-      Arial, sans-serif;
+    font-family:
+      var(--font-montserrat),
+      system-ui,
+      -apple-system,
+      Segoe UI,
+      Roboto,
+      Arial,
+      sans-serif;
     font-weight: 500;
     font-size: 20px;
   }
@@ -122,7 +152,13 @@
 
 .c-day-number {
   display: inline-block;
-  font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+  font-family:
+    system-ui,
+    -apple-system,
+    Segoe UI,
+    Roboto,
+    Arial,
+    sans-serif;
   font-size: 24px;
   line-height: 1;
   color: #000;
@@ -137,8 +173,14 @@
 }
 
 .c-day-state {
-  font-family: var(--font-montserrat), system-ui, -apple-system, Segoe UI, Roboto,
-    Arial, sans-serif;
+  font-family:
+    var(--font-montserrat),
+    system-ui,
+    -apple-system,
+    Segoe UI,
+    Roboto,
+    Arial,
+    sans-serif;
   font-weight: 500;
   font-size: 12px;
   line-height: 1.1;
@@ -189,4 +231,39 @@
   font-size: 10px;
   line-height: 1;
   opacity: 0.75;
+}
+
+@media (max-width: 900px) {
+  .calendar-page {
+    width: min(100% - 28px, 1368px);
+    padding-top: 42px;
+  }
+
+  .calendar-page__month-text {
+    font-size: 24px;
+  }
+
+  .calendar-page__table {
+    overflow-x: auto;
+    padding-bottom: 8px;
+  }
+
+  .calendar-table {
+    min-width: 760px;
+  }
+
+  .calendar-table-td:not(._head-line) .c-ttd-content {
+    padding: 8px;
+  }
+}
+
+@media (max-width: 560px) {
+  .calendar-page__title {
+    font-size: 32px;
+    line-height: 1.08;
+  }
+
+  .calendar-page__month {
+    min-width: 190px;
+  }
 }

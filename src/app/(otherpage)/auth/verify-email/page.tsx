@@ -50,7 +50,7 @@ function VerifyEmailContent() {
 
   const initialEmail = searchParams?.get('email') || '';
 
-  const [email, setEmail] = useState<string>(initialEmail);
+  const [email] = useState<string>(initialEmail);
   const [code, setCode] = useState<string>('');
   const [loading, setLoading] = useState<boolean>(false);
   const [message, setMessage] = useState<string>('');
@@ -98,37 +98,6 @@ function VerifyEmailContent() {
     }
   };
 
-  const handleResendCode = async () => {
-    setMessage('');
-    setLoading(true);
-    setIsSuccess(false);
-
-    if (!email) {
-      setMessage('Пожалуйста, введите email, чтобы отправить код повторно.');
-      setLoading(false);
-      return;
-    }
-
-    try {
-      const { response, data } = await safeFetch('/api/resend-code', { email });
-
-      if (response.ok) {
-        setMessage(data.message || 'Новый код успешно отправлен!');
-        setCode('');
-      } else {
-        setMessage(
-          data.message ||
-            `Ошибка при повторной отправке кода: статус ${response.status}.`,
-        );
-      }
-    } catch (error) {
-      setMessage('Сетевая ошибка при запросе нового кода.');
-      console.error('Resend code error:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
   const handleCodeChange = (e: ChangeEvent<HTMLInputElement>) => {
     const value = e.target.value.replace(/[^0-9]/g, '');
     setCode(value);
@@ -148,29 +117,17 @@ function VerifyEmailContent() {
         </div>
 
         <div className={styles.head}>
-          <h2 className={styles.title}>Подтверждение Email</h2>
+          <h2 className={styles.title}>Подтвердите адрес электронной почты</h2>
           <p className={styles.description}>
-            Введите email и код, который вы получили на почту.
+            На почту{' '}
+            <a className={styles.emailLink} href={`mailto:${email}`}>
+              {email || 'example@mail.com'}
+            </a>{' '}
+            отправлен код подтверждения. Скопируйте его и введите в поле ниже:
           </p>
         </div>
 
         <form onSubmit={handleSubmit} className={styles.form}>
-          <div className={styles.field}>
-            <label htmlFor="email" className={styles.srOnly}>
-              Email
-            </label>
-            <input
-              id="email"
-              className={styles.input}
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder="Email"
-              required
-              disabled={loading || isSuccess}
-            />
-          </div>
-
           <div className={styles.field}>
             <label htmlFor="code" className={styles.srOnly}>
               Код подтверждения
@@ -181,7 +138,7 @@ function VerifyEmailContent() {
               type="text"
               value={code}
               onChange={handleCodeChange}
-              placeholder="Код (6 цифр)"
+              placeholder="Код подтверждения"
               maxLength={6}
               required
               disabled={loading || isSuccess}
@@ -198,7 +155,7 @@ function VerifyEmailContent() {
               ? 'Проверка...'
               : isSuccess
                 ? 'Аккаунт верифицирован!'
-                : 'Подтвердить'}
+                : 'Отправить'}
           </button>
         </form>
 
@@ -210,16 +167,11 @@ function VerifyEmailContent() {
 
         {!isSuccess && (
           <div className={styles.linksRow}>
-            <button
-              type="button"
-              onClick={handleResendCode}
-              className={styles.linkBtn}
-              disabled={loading || isSuccess}
-            >
-              {loading ? 'Отправляем...' : 'Отправить код повторно'}
-            </button>
-            <Link href="/auth/signin" className={styles.linkBtn}>
-              Войти
+            <Link href="/auth/forgot-password" className={styles.linkBtn}>
+              Забыли пароль?
+            </Link>
+            <Link href="/auth/signup" className={styles.linkBtn}>
+              Регистрация
             </Link>
           </div>
         )}
@@ -230,7 +182,7 @@ function VerifyEmailContent() {
 
 export default function VerifyEmailPage() {
   return (
-    <Suspense fallback={<div className={styles.verifyEmailContainer}>Загрузка...</div>}>
+    <Suspense fallback={<div className={styles.page}>Загрузка...</div>}>
       <VerifyEmailContent />
     </Suspense>
   );

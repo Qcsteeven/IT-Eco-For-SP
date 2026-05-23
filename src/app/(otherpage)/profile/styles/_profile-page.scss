@@ -1,0 +1,302 @@
+/* Old modal styles - remove or keep for other modals */
+
+/* =========================
+   Figma Profile (Desktop-29/30)
+   ========================= */
+
+#profile.profile-page {
+  padding: 40px 16px 72px;
+  max-width: none;
+  margin: 0 auto;
+  background: #f3f3f3;
+  border-radius: 0;
+  box-shadow: none;
+}
+
+.profile-card,
+.profile-systems-card,
+.profile-history-card {
+  width: min(991px, calc(100vw - 32px));
+  margin: 0 auto 30px;
+  background: #fff;
+  border-radius: 20px;
+  box-shadow: 0 0 30px 1px rgba(0, 0, 0, 0.1);
+}
+
+.profile-card {
+  padding: 42px 64px 54px;
+  text-align: center;
+}
+
+.profile-card__name {
+  font-family: var(--font-montserrat), system-ui, -apple-system, Segoe UI, Roboto,
+    Arial, sans-serif;
+  font-weight: 500;
+  font-size: 32px;
+  line-height: 35px;
+  color: #312379;
+}
+
+.profile-card__rating {
+  margin-top: 10px;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  color: #312379;
+  font-family: var(--font-montserrat), system-ui, -apple-system, Segoe UI, Roboto,
+    Arial, sans-serif;
+  font-weight: 500;
+  font-size: 32px;
+  line-height: 35px;
+}
+
+.profile-card__star {
+  width: 30px;
+  height: 30px;
+  display: block;
+}
+
+.profile-card__field {
+  width: min(864px, 100%);
+  height: 62px;
+  margin: 18px auto 0;
+  border: 1px solid rgba(121, 120, 125, 0.65);
+  border-radius: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  padding: 0 22px;
+  font-family: var(--font-montserrat), system-ui, -apple-system, Segoe UI, Roboto,
+    Arial, sans-serif;
+  font-weight: 400;
+  font-size: 24px;
+  line-height: 35px;
+  color: #424242;
+  text-decoration: none;
+}
+
+.profile-card__actions {
+  margin-top: 38px;
+  display: flex;
+  justify-content: flex-end;
+  gap: 28px;
+}
+
+.profile-card__btn {
+  width: 191px;
+  height: 62px;
+  border: 0;
+  border-radius: 16px;
+  cursor: pointer;
+  font-family: var(--font-montserrat), system-ui, -apple-system, Segoe UI, Roboto,
+    Arial, sans-serif;
+  font-weight: 700;
+  font-size: 16px;
+  color: #fff;
+}
+
+.profile-card__btn--edit {
+  background: #6a3ad4;
+}
+
+.profile-card__btn--logout {
+  background: #ff3b3b;
+}
+
+.profile-systems-card {
+  padding: 28px 40px 34px;
+}
+
+.profile-systems-card__title {
+  text-align: center;
+  font-family: var(--font-montserrat), system-ui, -apple-system, Segoe UI, Roboto,
+    Arial, sans-serif;
+  font-weight: 500;
+  font-size: 32px;
+  line-height: 35px;
+  color: #287496;
+  margin-bottom: 22px;
+}
+
+.profile-systems-grid {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 16px 18px;
+}
+
+.profile-system-btn {
+  width: 256px;
+  height: 63px;
+  border-radius: 40px;
+  border: 1px solid rgba(73, 59, 144, 0.25);
+  background: #fff;
+  display: inline-flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 18px;
+  text-decoration: none;
+  cursor: pointer;
+  color: #424242;
+  font-family: var(--font-montserrat), system-ui, -apple-system, Segoe UI, Roboto,
+    Arial, sans-serif;
+  font-weight: 500;
+  font-size: 16px;
+  letter-spacing: 0.8px;
+}
+
+.profile-system-btn__text {
+  line-height: 18px;
+  text-align: left;
+}
+
+.profile-system-btn__logo {
+  display: block;
+  max-height: 48px;
+  width: auto;
+}
+
+.profile-system-btn__logo--codeforces {
+  max-height: 23px;
+}
+
+.profile-system-btn__logo--yandex,
+.profile-system-btn__logo--leetcode {
+  height: 48px;
+  width: 48px;
+}
+
+.profile-system-btn--atcoder-connected {
+  background: linear-gradient(50deg, #98e4e3 0%, rgba(82, 187, 222, 0.8) 100%);
+  border-color: #009ea0;
+  color: #005657;
+}
+
+.profile-system-btn--pending {
+  justify-content: center;
+  font-weight: 600;
+}
+
+.profile-history-card {
+  padding: 30px 34px 34px;
+}
+
+.profile-history-card__title {
+  text-align: center;
+  font-family: var(--font-montserrat), system-ui, -apple-system, Segoe UI, Roboto,
+    Arial, sans-serif;
+  font-weight: 500;
+  font-size: 32px;
+  line-height: 35px;
+  color: #312379;
+  margin-bottom: 22px;
+}
+
+.profile-history-filters {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 16px;
+  align-items: end;
+  margin-bottom: 20px;
+}
+
+.profile-history-filter label {
+  display: block;
+  font-family: var(--font-montserrat), system-ui, -apple-system, Segoe UI, Roboto,
+    Arial, sans-serif;
+  font-weight: 500;
+  font-size: 16px;
+  line-height: 18px;
+  color: #493b90;
+  margin-bottom: 8px;
+}
+
+.profile-history-filter input,
+.profile-history-filter select {
+  width: 100%;
+  height: 35px;
+  border-radius: 8px;
+  border: 1px solid rgba(73, 59, 144, 0.45);
+  padding: 0 10px;
+  font-family: var(--font-montserrat), system-ui, -apple-system, Segoe UI, Roboto,
+    Arial, sans-serif;
+  font-weight: 400;
+  font-size: 16px;
+  color: #493b90;
+  background: #fff;
+}
+
+.profile-history-reset {
+  height: 35px;
+  border-radius: 8px;
+  border: 0;
+  background: #6a3ad4;
+  color: #fff;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.profile-history-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-family: var(--font-montserrat), system-ui, -apple-system, Segoe UI, Roboto,
+    Arial, sans-serif;
+}
+
+.profile-history-table thead th {
+  font-weight: 400;
+  font-size: 20px;
+  color: #493b90;
+  padding: 16px 10px;
+  border: 1px solid rgba(125, 99, 229, 0.45);
+}
+
+.profile-history-table thead tr {
+  border-radius: 16px;
+}
+
+.profile-history-table tbody td {
+  padding: 18px 10px;
+  font-size: 16px;
+  color: #424242;
+  border-bottom: 1px solid rgba(125, 99, 229, 0.35);
+}
+
+.profile-history-table tbody td:first-child {
+  color: #493b90;
+}
+
+.profile-history-more {
+  display: flex;
+  justify-content: center;
+  margin-top: 22px;
+}
+
+.profile-history-more__btn {
+  width: 191px;
+  height: 62px;
+  border-radius: 16px;
+  border: 0;
+  cursor: pointer;
+  background: #6a3ad4;
+  color: #fff;
+  font-family: var(--font-montserrat), system-ui, -apple-system, Segoe UI, Roboto,
+    Arial, sans-serif;
+  font-weight: 500;
+  font-size: 20px;
+}
+
+@media (max-width: 1100px) {
+  .profile-card {
+    padding: 36px 20px 42px;
+  }
+
+  .profile-history-filters {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .profile-card__actions {
+    justify-content: center;
+    flex-wrap: wrap;
+  }
+}

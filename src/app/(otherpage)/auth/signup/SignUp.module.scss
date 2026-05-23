@@ -17,8 +17,8 @@
 }
 
 .cardLogo {
-  width: 320px;
-  margin: 0 auto 18px;
+  width: 402px;
+  margin: -22px auto 8px;
   opacity: 0.95;
 
   img {
@@ -120,9 +120,10 @@
 
 .linksRow {
   display: flex;
-  justify-content: space-between;
+  justify-content: center;
   align-items: center;
-  margin-top: 4px;
+  gap: 8px;
+  margin-top: 12px;
 }
 
 .linkMuted {
@@ -130,19 +131,19 @@
     Arial, sans-serif;
   font-weight: 300;
   font-size: 16px;
-  color: rgba(121, 120, 125, 0.9);
+  color: #79787d;
 }
 
-.linkBtn {
+.linkStrong {
   border: 0;
   background: transparent;
   padding: 0;
   cursor: pointer;
   font-family: var(--font-montserrat), system-ui, -apple-system, Segoe UI, Roboto,
     Arial, sans-serif;
-  font-weight: 300;
+  font-weight: 500;
   font-size: 16px;
-  color: #79787d;
+  color: #222;
   text-decoration: none;
 
   &:hover {

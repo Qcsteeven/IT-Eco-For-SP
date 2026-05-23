@@ -2,90 +2,169 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { getDB } from '@/lib/surreal/surreal';
 import { authOptions } from '@/lib/authOptions';
-import { validateEventSchedule } from '@/lib/events/validation';
 import {
   parseUsersRecordKey,
   toGroupThingId,
   toUserThingId,
 } from '@/lib/surreal/ids';
+import { validateEventSchedule } from '@/lib/events/validation';
+import { listCalendarEvents, type CalendarEvent } from '@/lib/calendar/events';
 import type {
   CreateEventData,
   Event,
   EventVisibility,
 } from '@/lib/types/event';
 
-function toRecordIdString(value: unknown): string {
+function rowsFromQuery(result: unknown): Record<string, unknown>[] {
+  if (!Array.isArray(result)) return [];
+
+  const first = result[0] as { result?: unknown } | unknown[] | undefined;
+  if (Array.isArray(first)) {
+    return first.filter(
+      (row): row is Record<string, unknown> =>
+        typeof row === 'object' && row !== null,
+    );
+  }
+
+  if (first && typeof first === 'object' && Array.isArray(first.result)) {
+    return first.result.filter(
+      (row): row is Record<string, unknown> =>
+        typeof row === 'object' && row !== null,
+    );
+  }
+
+  return result.filter(
+    (row): row is Record<string, unknown> =>
+      typeof row === 'object' && row !== null,
+  );
+}
+
+function jsonError(error: string, status: number) {
+  return NextResponse.json({ ok: false, error }, { status });
+}
+
+function toIsoDate(value: string) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return null;
+  return date.toISOString();
+}
+
+function recordId(value: unknown): string {
   if (value == null) return '';
-  if (typeof value === 'string') return value;
+
+  if (typeof value === 'string') {
+    try {
+      return decodeURIComponent(value);
+    } catch {
+      return value;
+    }
+  }
 
   if (typeof value === 'object') {
     const record = value as Record<string, unknown>;
     if (typeof record.tb === 'string' && record.id != null) {
       return `${record.tb}:${String(record.id)}`;
     }
-    if (typeof record.id === 'string') return record.id;
+
+    if (record.id != null) return recordId(record.id);
   }
 
   return String(value);
 }
 
-function normalizeEvent(event: Event): Event {
-  const record = event as unknown as Record<string, unknown>;
-
-  return {
-    ...event,
-    id: toRecordIdString(record.id),
-    created_by: toRecordIdString(record.created_by),
-    participant_list: (event.participant_list || []).map(String),
-    target_groups: (event.target_groups || []).map(String),
-    participant_snapshot: (event.participant_snapshot || []).map(String),
-  };
+function toRecordSet(
+  values: unknown[] | undefined,
+  normalizer: (id: string) => string,
+) {
+  return new Set((values || []).map((value) => normalizer(recordId(value))));
 }
 
-export async function GET() {
+async function getCurrentUserGroupIds(userId: string) {
+  const userKey = parseUsersRecordKey(userId);
+  const userThingId = toUserThingId(userId);
+  if (!userKey || !userThingId) return new Set<string>();
+
   try {
-    const session = await getServerSession(authOptions);
-    if (!session?.user?.id) {
-      return NextResponse.json(
-        { ok: false, error: 'Неавторизован' },
-        { status: 401 },
-      );
-    }
-
-    if (session.user.role !== 'coach' && session.user.role !== 'admin') {
-      return NextResponse.json(
-        { ok: false, error: 'Доступно только тренерам и администраторам' },
-        { status: 403 },
-      );
-    }
-
     const db = await getDB();
-    if (!db) throw new Error('Не удалось подключиться к SurrealDB');
+    const result = await db.query<unknown[][]>(
+      `
+      SELECT VALUE group_id
+      FROM group_members
+      WHERE user_id = type::thing("users", $userKey)
+        OR user_id = type::thing($userThingId);
 
-    const params: Record<string, unknown> = {};
-    let query = 'SELECT * FROM events';
-
-    if (session.user.role === 'coach') {
-      query +=
-        ' WHERE created_by = type::thing("users", $createdById) OR created_by = type::thing("users", $legacyCreatedById)';
-      params.createdById = parseUsersRecordKey(session.user.id.toString());
-      params.legacyCreatedById = toUserThingId(session.user.id.toString());
-    }
-
-    query += ' ORDER BY start_time_utc ASC;';
-
-    const result = await db.query<Event[][]>(query, params);
-    const events = (result[0] || []).map(normalizeEvent);
-
-    return NextResponse.json({ ok: true, data: events }, { status: 200 });
-  } catch (err: unknown) {
-    const errorMessage = err instanceof Error ? err.message : String(err);
-    console.error('[API /events GET] Error:', errorMessage);
-    return NextResponse.json(
-      { ok: false, error: errorMessage },
-      { status: 500 },
+      SELECT VALUE group_id
+      FROM group_coaches
+      WHERE coach_id = type::thing("users", $userKey)
+        OR coach_id = type::thing($userThingId);
+      `,
+      { userKey, userThingId },
     );
+
+    return new Set(
+      [...(result[0] || []), ...(result[1] || [])]
+        .map((groupId) => toGroupThingId(recordId(groupId)))
+        .filter(Boolean),
+    );
+  } catch (error) {
+    console.warn(
+      '[API /events GET] Не удалось получить группы пользователя:',
+      error,
+    );
+    return new Set<string>();
   }
+}
+
+function canSeeInternalEvent(
+  event: CalendarEvent,
+  options: {
+    role?: string;
+    userId?: string;
+    groupIds: Set<string>;
+  },
+) {
+  if (event.source !== 'events') return true;
+
+  const visibility = event.visibility_type === 'private' ? 'private' : 'public';
+  if (!options.userId) return visibility === 'public';
+  if (options.role === 'admin') return true;
+
+  const userThingId = toUserThingId(options.userId);
+  const createdBy = toUserThingId(recordId(event.created_by));
+
+  if (options.role === 'coach') {
+    return createdBy === userThingId;
+  }
+
+  if (visibility === 'public') return true;
+
+  const participants = toRecordSet(event.participant_list, toUserThingId);
+  if (participants.has(userThingId)) return true;
+
+  const targetGroups = toRecordSet(event.target_groups, toGroupThingId);
+  return [...targetGroups].some((groupId) => options.groupIds.has(groupId));
+}
+
+export async function GET(req: NextRequest) {
+  const { searchParams } = new URL(req.url);
+  const session = await getServerSession(authOptions);
+  const userId = session?.user?.id ? recordId(session.user.id) : undefined;
+  const role = session?.user?.role;
+  const groupIds = userId
+    ? await getCurrentUserGroupIds(userId)
+    : new Set<string>();
+  const events = await listCalendarEvents({
+    from: searchParams.get('from'),
+    to: searchParams.get('to'),
+    includeCodeforces: searchParams.get('includeCodeforces') === 'true',
+    includeContests: searchParams.get('includeContests') === 'true',
+    includeEvents: searchParams.get('includeEvents') !== 'false',
+  });
+  const visibleEvents = events.filter((event) =>
+    canSeeInternalEvent(event, { role, userId, groupIds }),
+  );
+
+  return NextResponse.json({ ok: true, data: visibleEvents }, { status: 200 });
 }
 
 export async function POST(req: NextRequest) {
@@ -94,17 +173,11 @@ export async function POST(req: NextRequest) {
   try {
     const session = await getServerSession(authOptions);
     if (!session?.user?.id) {
-      return NextResponse.json(
-        { ok: false, error: 'Неавторизован' },
-        { status: 401 },
-      );
+      return jsonError('Не авторизован', 401);
     }
 
     if (session.user.role !== 'coach' && session.user.role !== 'admin') {
-      return NextResponse.json(
-        { ok: false, error: 'Доступно только тренерам и администраторам' },
-        { status: 403 },
-      );
+      return jsonError('Доступно только тренерам и администраторам', 403);
     }
 
     rawBodyForLog = await req.json().catch(() => ({}));
@@ -122,29 +195,39 @@ export async function POST(req: NextRequest) {
 
     for (const field of requiredFields) {
       if (!body[field]) {
-        return NextResponse.json(
-          { ok: false, error: `Отсутствует обязательное поле: ${field}` },
-          { status: 400 },
-        );
+        return jsonError(`Отсутствует обязательное поле: ${field}`, 400);
       }
     }
 
     const validVisibility: EventVisibility[] = ['public', 'private'];
     if (!validVisibility.includes(body.visibility_type)) {
-      return NextResponse.json(
-        { ok: false, error: 'visibility_type должен быть public или private' },
-        { status: 400 },
+      return jsonError(
+        'Недопустимый тип видимости. Используйте public или private',
+        400,
       );
     }
 
+    const startDateTime = toIsoDate(body.start_time_utc);
+    const endDateTime = toIsoDate(body.end_time_utc);
+
+    if (!startDateTime || !endDateTime) {
+      return jsonError('Некорректная дата начала или окончания', 400);
+    }
+
     if (session.user.role === 'coach' && body.platform !== 'custom') {
-      return NextResponse.json(
-        {
-          ok: false,
-          error: 'Тренер может создавать только мероприятия со своей ссылкой',
-        },
-        { status: 403 },
+      return jsonError(
+        'Тренер может создавать только мероприятия со своей ссылкой',
+        403,
       );
+    }
+
+    const scheduleError = validateEventSchedule({
+      status: body.status,
+      start: startDateTime,
+      end: endDateTime,
+    });
+    if (scheduleError) {
+      return jsonError(scheduleError, 400);
     }
 
     const normalizedParticipants = (body.participant_list || [])
@@ -159,45 +242,18 @@ export async function POST(req: NextRequest) {
       normalizedParticipants.length === 0 &&
       normalizedGroups.length === 0
     ) {
-      return NextResponse.json(
-        {
-          ok: false,
-          error:
-            'Для private мероприятия нужно указать participant_list или target_groups',
-        },
-        { status: 400 },
+      return jsonError(
+        'Для private мероприятия необходимо указать participant_list или target_groups',
+        400,
       );
     }
-
-    const startDate = new Date(body.start_time_utc);
-    const endDate = new Date(body.end_time_utc);
-
-    if (Number.isNaN(startDate.getTime()) || Number.isNaN(endDate.getTime())) {
-      return NextResponse.json(
-        { ok: false, error: 'Некорректная дата начала или окончания' },
-        { status: 400 },
-      );
-    }
-
-    const scheduleError = validateEventSchedule({
-      status: body.status,
-      start: startDate,
-      end: endDate,
-    });
-    if (scheduleError) {
-      return NextResponse.json(
-        { ok: false, error: scheduleError },
-        { status: 400 },
-      );
-    }
-
-    const startDateTime = startDate.toISOString();
-    const endDateTime = endDate.toISOString();
 
     const db = await getDB();
-    if (!db) throw new Error('Не удалось подключиться к SurrealDB');
+    if (!db) {
+      throw new Error('Не удалось подключиться к базе данных SurrealDB');
+    }
 
-    const result = await db.query<Event[][]>(
+    const result = await db.query(
       `CREATE events CONTENT {
         title: $title,
         description: $description,
@@ -215,24 +271,25 @@ export async function POST(req: NextRequest) {
         updated_at: time::now()
       };`,
       {
-        title: body.title,
-        description: body.description || '',
+        title: body.title.trim(),
+        description: body.description?.trim() || '',
         platform: body.platform,
         status: body.status,
         start_time_utc: startDateTime,
         end_time_utc: endDateTime,
-        external_link: body.external_link,
+        external_link: body.external_link.trim(),
         visibility_type: body.visibility_type,
-        participant_list: normalizedParticipants,
-        target_groups: normalizedGroups,
+        participant_list:
+          body.visibility_type === 'private' ? normalizedParticipants : [],
+        target_groups:
+          body.visibility_type === 'private' ? normalizedGroups : [],
         created_by_id: parseUsersRecordKey(session.user.id.toString()),
       },
     );
 
-    const createdEventRaw = result[0]?.[0];
-    const createdEvent = createdEventRaw
-      ? normalizeEvent(createdEventRaw)
-      : createdEventRaw;
+    const createdEvent = rowsFromQuery(result)[0] as unknown as
+      | Event
+      | undefined;
 
     return NextResponse.json(
       { ok: true, data: createdEvent, message: 'Мероприятие создано' },
@@ -241,10 +298,11 @@ export async function POST(req: NextRequest) {
   } catch (err: unknown) {
     const errorMessage = err instanceof Error ? err.message : String(err);
     console.error('API POST /events Error:', errorMessage);
-    console.error('Request body:', JSON.stringify(rawBodyForLog ?? {}, null, 2));
-    return NextResponse.json(
-      { ok: false, error: `Ошибка сервера: ${errorMessage}` },
-      { status: 500 },
+    console.error(
+      'Request body:',
+      JSON.stringify(rawBodyForLog ?? {}, null, 2),
     );
+
+    return jsonError(`Ошибка сервера: ${errorMessage}`, 500);
   }
 }

@@ -82,7 +82,7 @@ export default function SignUp() {
               type="text"
               value={fullName}
               onChange={(e) => setFullName(e.target.value)}
-              placeholder="ФИО"
+              placeholder="Имя пользователя *"
               required
               autoComplete="name"
               className={styles.input}
@@ -98,7 +98,7 @@ export default function SignUp() {
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              placeholder="Email"
+              placeholder="Email *"
               required
               autoComplete="email"
               className={styles.input}
@@ -115,7 +115,7 @@ export default function SignUp() {
                 type={showPassword ? 'text' : 'password'}
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                placeholder="Пароль"
+                placeholder="Пароль *"
                 required
                 autoComplete="new-password"
                 className={styles.input}
@@ -140,23 +140,23 @@ export default function SignUp() {
               type={showPassword ? 'text' : 'password'}
               value={confirmPassword}
               onChange={(e) => setConfirmPassword(e.target.value)}
-              placeholder="Повторите пароль"
+              placeholder="Повторите пароль *"
               required
               autoComplete="new-password"
               className={styles.input}
             />
           </div>
 
+          <div className={styles.linksRow}>
+            <span className={styles.linkMuted}>Уже есть аккаунт?</span>
+            <Link href="/auth/signin" className={styles.linkStrong}>
+              Войдите
+            </Link>
+          </div>
+
           <button type="submit" disabled={loading} className={styles.submitButton}>
             {loading ? 'Регистрация...' : 'Зарегистрироваться'}
           </button>
-
-          <div className={styles.linksRow}>
-            <span className={styles.linkMuted}>Уже есть аккаунт?</span>
-            <Link href="/auth/signin" className={styles.linkBtn}>
-              Войти
-            </Link>
-          </div>
         </form>
       </div>
     </div>

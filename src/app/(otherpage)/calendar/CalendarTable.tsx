@@ -3,16 +3,32 @@
 interface Contest {
   id: string;
   name: string;
+  title?: string;
   platform: string;
   start_time_utc: string;
   end_time_utc: string;
   registration_link?: string;
+  external_link?: string;
 }
 
 interface CalendarTableOptions {
   year: number;
   month: number;
-  events: Contest[]; // Добавили список событий
+  events: Contest[];
+}
+
+function getEventTitle(event: Contest) {
+  return event.title || event.name || 'Событие';
+}
+
+function getEventLink(event: Contest) {
+  return event.registration_link || event.external_link || '#';
+}
+
+function getPlatformClass(event: Contest) {
+  return (event.platform || 'custom')
+    .toLowerCase()
+    .replace(/[^a-z0-9_-]/g, '-');
 }
 
 function getEventState(event: Contest, nowMs: number) {
@@ -25,8 +41,10 @@ function getEventState(event: Contest, nowMs: number) {
     Number.isFinite(endMs) &&
     nowMs >= startMs &&
     nowMs <= endMs
-  )
+  ) {
     return 'live' as const;
+  }
+
   return 'open' as const;
 }
 
@@ -49,7 +67,6 @@ export default function CalendarTable({
     type: 'prev' | 'current' | 'next';
   }[] = [];
 
-  // Дни предыдущего месяца
   for (let i = startDay - 1; i >= 0; i--) {
     cells.push({
       day: prevMonthLastDay - i,
@@ -58,7 +75,6 @@ export default function CalendarTable({
     });
   }
 
-  // Дни текущего месяца
   for (let i = 1; i <= daysInMonth; i++) {
     cells.push({
       day: i,
@@ -67,7 +83,6 @@ export default function CalendarTable({
     });
   }
 
-  // Дни следующего месяца
   while (cells.length < 42) {
     cells.push({
       day: cells.length - (startDay + daysInMonth) + 1,
@@ -80,16 +95,15 @@ export default function CalendarTable({
     <table className="calendar-table">
       <tbody>
         <tr>
-          {weekDays.map((d, i) => (
-            <td className="calendar-table-td _head-line" key={i}>
-              {d}
+          {weekDays.map((day) => (
+            <td className="calendar-table-td _head-line" key={day}>
+              {day}
             </td>
           ))}
         </tr>
         {Array.from({ length: 6 }).map((_, row) => (
           <tr key={row}>
-            {cells.slice(row * 7, row * 7 + 7).map((cell, i) => {
-              // Логика поиска событий для конкретной ячейки
+            {cells.slice(row * 7, row * 7 + 7).map((cell, index) => {
               const cellDate = new Date(
                 year,
                 month + cell.monthOffset,
@@ -106,7 +120,9 @@ export default function CalendarTable({
               });
 
               const nowMs = Date.now();
-              const states = dayEvents.map((e) => getEventState(e, nowMs));
+              const states = dayEvents.map((event) =>
+                getEventState(event, nowMs),
+              );
               const hasLive = states.includes('live');
               const hasOpen = states.includes('open');
               const cellState = hasLive
@@ -118,14 +134,18 @@ export default function CalendarTable({
                     : null;
 
               return (
-                <td key={i} className={`calendar-table-td _${cell.type}`}>
+                <td
+                  key={`${row}-${index}`}
+                  className={`calendar-table-td _${cell.type}`}
+                >
                   <div className="c-ttd-content">
                     <span className="c-day-number">{cell.day}</span>
 
-                    {/* Список событий в ячейке */}
                     <div className="c-day-events">
                       {cellState && (
-                        <div className={`c-day-state c-day-state--${cellState}`}>
+                        <div
+                          className={`c-day-state c-day-state--${cellState}`}
+                        >
                           {cellState === 'done'
                             ? 'Завершено'
                             : cellState === 'live'
@@ -136,19 +156,23 @@ export default function CalendarTable({
                       {dayEvents.map((event) => (
                         <a
                           key={event.id}
-                          href={event.registration_link || '#'}
+                          href={getEventLink(event)}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className={`c-event-item _${event.platform.toLowerCase()}`}
-                          title={event.name}
+                          className={`c-event-item _${getPlatformClass(event)}`}
+                          title={getEventTitle(event)}
                         >
-                          <span className="c-event-item__name">{event.name}</span>
-                          <span className="c-event-item__platform">{event.platform}</span>
+                          <span className="c-event-item__name">
+                            {getEventTitle(event)}
+                          </span>
+                          <span className="c-event-item__platform">
+                            {event.platform}
+                          </span>
                         </a>
                       ))}
                     </div>
                   </div>
-                  <div className="c-ttd-ratio"></div>
+                  <div className="c-ttd-ratio" />
                 </td>
               );
             })}

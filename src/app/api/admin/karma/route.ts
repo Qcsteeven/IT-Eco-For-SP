@@ -1,49 +1,93 @@
-// POST /api/admin/karma — ручная корректировка кармы (admin only)
-
 import { NextResponse, NextRequest } from 'next/server';
 import { getDB } from '@/lib/surreal/surreal';
 import { withRoleGuard } from '@/lib/rbac/guard';
 import { parseUsersRecordKey } from '@/lib/surreal/ids';
 
-function getFirstStatementRows(result: unknown): unknown[] {
-  if (Array.isArray(result) && result.length > 0) {
-    const first = result[0];
-    if (Array.isArray(first)) return first;
-  }
+type DbRow = Record<string, unknown>;
 
-  if (result && typeof result === 'object') {
-    const first = (result as Record<string, { result?: unknown }>)['0']?.result;
-    if (Array.isArray(first)) return first;
-  }
-
-  return [];
+interface KarmaAdjustmentBody {
+  userId?: string;
+  amount?: number;
+  reason?: string;
 }
 
-function toRecordIdString(value: unknown): string {
+function rowsFromQuery(result: unknown): DbRow[] {
+  if (!Array.isArray(result)) return [];
+
+  const first = result[0] as { result?: unknown } | undefined;
+  if (Array.isArray(first)) {
+    return first.filter(
+      (row): row is DbRow => typeof row === 'object' && row !== null,
+    );
+  }
+
+  if (first && typeof first === 'object' && Array.isArray(first.result)) {
+    return first.result.filter(
+      (row): row is DbRow => typeof row === 'object' && row !== null,
+    );
+  }
+
+  return result.filter(
+    (row): row is DbRow => typeof row === 'object' && row !== null,
+  );
+}
+
+function normalizeId(value: unknown): string {
   if (value == null) return '';
-  if (typeof value === 'string') return value;
+
+  if (typeof value === 'string') {
+    const decoded = decodeURIComponent(value);
+    return decoded.includes(':')
+      ? (decoded.split(':').pop() ?? decoded)
+      : decoded;
+  }
 
   if (typeof value === 'object') {
-    const record = value as Record<string, unknown>;
-    if (typeof record.tb === 'string' && record.id != null) {
-      return `${record.tb}:${String(record.id)}`;
-    }
-    if (typeof record.id === 'string') return record.id;
+    const record = value as DbRow;
+    if (record.id != null) return normalizeId(record.id);
+    if (record.String != null) return normalizeId(record.String);
   }
 
   return String(value);
 }
 
-function getFetchedUserEmail(value: unknown): string {
-  if (!value || typeof value !== 'object') return '';
-  const user = value as Record<string, unknown>;
-  return typeof user.email === 'string' ? user.email : '';
+function text(value: unknown, fallback = '') {
+  if (typeof value === 'string') return value;
+  if (typeof value === 'number' || typeof value === 'boolean')
+    return String(value);
+  if (value instanceof Date) return value.toISOString();
+  if (value === null || value === undefined) return fallback;
+  return String(value);
 }
 
-interface KarmaAdjustmentBody {
-  userId: string;
-  amount: number;
-  reason?: string;
+function number(value: unknown, fallback = 0) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : fallback;
+}
+
+function isoDate(value: unknown) {
+  const raw = text(value);
+  if (!raw) return '';
+
+  const date = new Date(raw);
+  return Number.isNaN(date.getTime()) ? raw : date.toISOString();
+}
+
+function serializeKarmaLog(row: DbRow) {
+  const user = row.user as DbRow | undefined;
+  const userEmail = text(
+    row.user_email || row.email || user?.email || normalizeId(row.user),
+  );
+  const date = isoDate(row.created_at || row.date);
+
+  return {
+    id: normalizeId(row.id) || `${userEmail}-${date}-${text(row.amount)}`,
+    user_email: userEmail,
+    user_name: text(row.user_name || row.full_name || user?.full_name),
+    amount: number(row.amount),
+    reason: text(row.reason, 'Ручная корректировка'),
+    date,
+  };
 }
 
 const getHandler = withRoleGuard(
@@ -51,26 +95,27 @@ const getHandler = withRoleGuard(
     try {
       const db = await getDB();
       const result = await db.query(
-        `SELECT id, user, amount, reason, created_at
-         FROM karma_logs
-         ORDER BY created_at DESC
-         LIMIT 50
-         FETCH user`,
+        `SELECT
+          id,
+          user,
+          user_email,
+          user_name,
+          amount,
+          reason,
+          created_at
+        FROM karma_logs
+        ORDER BY created_at DESC
+        LIMIT 80`,
       );
 
-      const rows = getFirstStatementRows(result) as Record<string, unknown>[];
-      const logs = rows.map((row, idx) => ({
-        id: toRecordIdString(row.id) || `karma-log-${idx}`,
-        user_email: getFetchedUserEmail(row.user),
-        amount: Number(row.amount || 0),
-        reason: typeof row.reason === 'string' ? row.reason : '',
-        date: String(row.created_at || ''),
-      }));
-
-      return NextResponse.json({ ok: true, data: logs });
+      return NextResponse.json({
+        ok: true,
+        data: rowsFromQuery(result).map(serializeKarmaLog),
+      });
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      console.error('[Admin/Karma] Ошибка получения истории кармы:', errorMessage);
+      const errorMessage =
+        error instanceof Error ? error.message : String(error);
+      console.error('[Admin/Karma] Failed to load karma logs:', errorMessage);
       return NextResponse.json(
         { ok: false, error: 'Не удалось получить историю кармы' },
         { status: 500 },
@@ -80,79 +125,82 @@ const getHandler = withRoleGuard(
   { requiredRole: 'admin' },
 );
 
-const handler = withRoleGuard(
-  async (req: NextRequest, _session) => {
+const postHandler = withRoleGuard(
+  async (req: NextRequest, session) => {
     try {
-      const body = await req.json() as KarmaAdjustmentBody;
-      const { userId, amount, reason } = body;
+      const body = (await req.json()) as KarmaAdjustmentBody;
+      const userId = normalizeId(body.userId);
+      const amount = number(body.amount, Number.NaN);
+      const reason = body.reason?.trim() || 'Ручная корректировка';
 
-      if (!userId || amount === undefined || amount === null) {
+      if (!userId || !Number.isFinite(amount) || amount === 0) {
         return NextResponse.json(
-          { ok: false, error: 'Необходимы userId и amount' },
-          { status: 400 }
-        );
-      }
-
-      if (typeof amount !== 'number') {
-        return NextResponse.json(
-          { ok: false, error: 'amount должен быть числом' },
-          { status: 400 }
-        );
-      }
-
-      const db = await getDB();
-
-      const recordKey = parseUsersRecordKey(userId);
-      if (!recordKey) {
-        return NextResponse.json(
-          { ok: false, error: 'Некорректный userId' },
+          {
+            ok: false,
+            error: 'Необходимы пользователь и ненулевое изменение кармы',
+          },
           { status: 400 },
         );
       }
 
-      const userResult = await db.query(
-        'SELECT * FROM type::thing("users", $id)',
-        { id: recordKey },
-      );
-
-      const rows = getFirstStatementRows(userResult);
-      const user = rows[0] as Record<string, unknown> | undefined;
-
-      if (!user || typeof user !== 'object') {
+      const db = await getDB();
+      const recordKey = parseUsersRecordKey(userId);
+      if (!recordKey) {
         return NextResponse.json(
-          { ok: false, error: 'Пользователь не найден' },
-          { status: 404 }
+          { ok: false, error: 'Некорректный ID пользователя' },
+          { status: 400 },
         );
       }
 
-      const existingCf =
-        typeof user.codeforces_karma === 'number' ? user.codeforces_karma : null;
-      const legacyKarma =
-        typeof user.karma === 'number' ? user.karma : null;
-      const currentKarma = existingCf ?? legacyKarma ?? 0;
+      const user = rowsFromQuery(
+        await db.query(
+          `SELECT id, email, full_name, codeforces_karma, karma, bscp_rating
+           FROM type::thing("users", $id)`,
+          { id: recordKey },
+        ),
+      )[0];
+
+      if (!user) {
+        return NextResponse.json(
+          { ok: false, error: 'Пользователь не найден' },
+          { status: 404 },
+        );
+      }
+
+      const currentKarma = number(
+        user.codeforces_karma ?? user.karma ?? user.bscp_rating,
+      );
       const newKarma = currentKarma + amount;
+      const userEmail = text(user.email);
+      const userName = text(user.full_name);
 
       await db.query(
         'UPDATE type::thing("users", $id) SET codeforces_karma = $karma',
-        { id: recordKey, karma: newKarma },
+        {
+          id: recordKey,
+          karma: newKarma,
+        },
       );
 
-      try {
-        const adminKey = parseUsersRecordKey(String(_session.user.id));
-        if (adminKey) {
-          await db.query(
-            'CREATE karma_logs SET user = type::thing("users", $userId), amount = $amount, reason = $reason, admin_id = type::thing("users", $adminKey), created_at = time::now()',
-            {
-              userId: recordKey,
-              amount,
-              reason: reason || 'Ручная корректировка',
-              adminKey,
-            },
-          );
-        }
-      } catch (logError) {
-        console.warn('[Admin/Karma] Не удалось записать лог (таблица может не существовать):', logError);
-      }
+      await db.query(
+        `CREATE karma_logs CONTENT {
+          user: type::thing("users", $userId),
+          user_email: $userEmail,
+          user_name: $userName,
+          amount: $amount,
+          reason: $reason,
+          admin_id: $adminId,
+          created_at: time::now()
+        }`,
+        {
+          userId: recordKey,
+          userEmail,
+          userName,
+          amount,
+          reason,
+          adminId: parseUsersRecordKey(session.user.id),
+        },
+      );
 
       return NextResponse.json({
         ok: true,
@@ -161,20 +209,21 @@ const handler = withRoleGuard(
           previousKarma: currentKarma,
           newKarma,
           adjustment: amount,
-          reason: reason || 'Ручная корректировка',
+          reason,
         },
         message: 'Карма обновлена',
       });
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      console.error('[Admin/Karma] Ошибка корректировки кармы:', errorMessage);
+      const errorMessage =
+        error instanceof Error ? error.message : String(error);
+      console.error('[Admin/Karma] Failed to adjust karma:', errorMessage);
       return NextResponse.json(
         { ok: false, error: 'Не удалось скорректировать карму' },
-        { status: 500 }
+        { status: 500 },
       );
     }
   },
-  { requiredRole: 'admin' }
+  { requiredRole: 'admin' },
 );
 
-export { getHandler as GET, handler as POST };
+export { getHandler as GET, postHandler as POST };

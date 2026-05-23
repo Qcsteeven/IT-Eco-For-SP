@@ -9,7 +9,7 @@ import Link from 'next/link';
 import { FiEye, FiEyeOff } from 'react-icons/fi';
 import styles from './SignIn.module.scss';
 
-type AuthErrorType = 'EmailNotVerified' | 'CredentialsSignin' | string;
+type AuthErrorType = 'EmailNotVerified' | 'AccountBlocked' | 'CredentialsSignin' | string;
 
 interface SignInResult {
   error: string | null;
@@ -38,6 +38,8 @@ function SignInForm() {
     if (urlError) {
       if (urlError === 'EmailNotVerified') {
         setError('Ваш аккаунт не верифицирован.');
+      } else if (urlError === 'AccountBlocked') {
+        setError('Ваш аккаунт заблокирован. Обратитесь к администратору.');
       } else if (urlError === 'CredentialsSignin') {
         setError('Неверный email или пароль.');
       } else {
@@ -64,6 +66,8 @@ function SignInForm() {
     } else {
       const errorCode: AuthErrorType = result.error.includes('EmailNotVerified')
         ? 'EmailNotVerified'
+        : result.error.includes('AccountBlocked')
+          ? 'AccountBlocked'
         : 'CredentialsSignin';
       router.push(`/auth/signin?error=${errorCode}`);
     }
@@ -132,13 +136,9 @@ function SignInForm() {
           </button>
 
           <div className={styles.linksRow}>
-            <button
-              type="button"
-              className={styles.linkBtn}
-              onClick={() => setError('Восстановление пароля пока не реализовано.')}
-            >
+            <Link href="/auth/forgot-password" className={styles.linkBtn}>
               Забыли пароль?
-            </button>
+            </Link>
             <Link href="/auth/signup" className={styles.linkBtn}>
               Регистрация
             </Link>
