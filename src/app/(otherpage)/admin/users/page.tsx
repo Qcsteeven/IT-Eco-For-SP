@@ -3,6 +3,7 @@
 import { useSession } from 'next-auth/react';
 import { useRoleGuard } from '@/lib/rbac/client';
 import Link from 'next/link';
+import PreviousPageLink from '@/components/PreviousPageLink';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import {
@@ -220,7 +221,7 @@ export default function AdminUsersPage() {
     <div className="users-page">
       <div className="users-container">
         <div className="users-header">
-          <Link href="/admin" className="users-back-link">← Назад</Link>
+          <PreviousPageLink fallbackHref="/admin" className="users-back-link" />
           <div className="users-header-row">
             <h1>Управление пользователями</h1>
             <button

@@ -1,4 +1,4 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { getDB } from '@/lib/surreal/surreal';
 import { authOptions } from '@/lib/authOptions';
@@ -10,6 +10,52 @@ import {
   getTagMultiplier,
 } from '@/lib/codeforces/karma';
 import type { CodeforcesSubmission } from '@/types/codeforces';
+
+type CachedKarmaResponse = {
+  ok?: boolean;
+  data?: {
+    karma?: unknown;
+    loadedKarma?: unknown;
+    storedKarma?: unknown;
+    karmaLevel?: string;
+    karmaColor?: string;
+    breakdown?: Record<string, unknown>;
+    [key: string]: unknown;
+  };
+  [key: string]: unknown;
+};
+
+function toFiniteNumber(value: unknown): number {
+  const num = typeof value === 'number' ? value : Number(value || 0);
+  return Number.isFinite(num) ? num : 0;
+}
+
+function combineWithStoredKarma(
+  response: CachedKarmaResponse,
+  storedKarma: number,
+): CachedKarmaResponse {
+  const data = response.data;
+  if (!data) return response;
+
+  const loadedKarma = toFiniteNumber(data.loadedKarma ?? data.karma);
+  const totalKarma = storedKarma + loadedKarma;
+
+  return {
+    ...response,
+    data: {
+      ...data,
+      karma: totalKarma,
+      loadedKarma,
+      storedKarma,
+      karmaLevel: getKarmaLevel(totalKarma),
+      karmaColor: getKarmaColor(totalKarma),
+      breakdown: {
+        ...(data.breakdown || {}),
+        storedKarma,
+      },
+    },
+  };
+}
 
 /**
  * GET /api/codeforces/karma
@@ -23,7 +69,7 @@ import type { CodeforcesSubmission } from '@/types/codeforces';
  * Производительность:
  * - Используем 1 запрос к API (лимит Codeforces: 1 запрос в 2 секунды)
  */
-export async function GET() {
+export async function GET(req: NextRequest) {
   try {
     const session = await getServerSession(authOptions);
     if (!session?.user?.id) {
@@ -61,6 +107,12 @@ export async function GET() {
     }
 
     const cfHandle = (userData as Record<string, string>).cf_username;
+    const storedKarma = toFiniteNumber(
+      (userData as Record<string, unknown>).codeforces_karma,
+    );
+    const forceRefresh =
+      req.nextUrl.searchParams.get('refresh') === '1' ||
+      req.nextUrl.searchParams.get('refresh') === 'true';
     console.log('[CF Karma] Handle:', cfHandle);
 
     // Проверяем кэш кармы (TTL 1 час)
@@ -79,11 +131,13 @@ export async function GET() {
     const karmaCacheValid =
       lastKarmaUpdate && now - lastKarmaUpdate < CACHE_TTL;
 
-    if (karmaCacheValid && cfAccountData?.cached_karma) {
+    if (!forceRefresh && karmaCacheValid && cfAccountData?.cached_karma) {
       console.log('[CF Karma] Using cached data');
-      return NextResponse.json(
+      const cachedResponse = combineWithStoredKarma(
         JSON.parse(cfAccountData.cached_karma as string),
+        storedKarma,
       );
+      return NextResponse.json(cachedResponse);
     }
 
     console.log('[CF Karma] Fetching submissions...');
@@ -243,7 +297,10 @@ export async function GET() {
     });
 
     // Рассчитываем карму
-    const totalKarma = calculateSimpleKarma(easyCount, mediumCount, hardCount);
+    const loadedKarma = calculateSimpleKarma(easyCount, mediumCount, hardCount);
+    const totalKarma = storedKarma + loadedKarma;
+    console.log('[CF Karma] Loaded karma:', loadedKarma);
+    console.log('[CF Karma] Stored karma:', storedKarma);
     console.log('[CF Karma] Total karma:', totalKarma);
 
     // Считаем распределение по сложности
@@ -258,9 +315,12 @@ export async function GET() {
       ok: true,
       data: {
         karma: totalKarma,
+        loadedKarma,
+        storedKarma,
         karmaLevel: getKarmaLevel(totalKarma),
         karmaColor: getKarmaColor(totalKarma),
         breakdown: {
+          storedKarma,
           easyKarma: easyCount * 1,
           mediumKarma: mediumCount * 3,
           hardKarma: hardCount * 10,

@@ -3,6 +3,7 @@
 import { useSession } from 'next-auth/react';
 import { useRoleGuard } from '@/lib/rbac/client';
 import Link from 'next/link';
+import PreviousPageLink from '@/components/PreviousPageLink';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import './karma.scss';
@@ -53,7 +54,7 @@ export default function AdminKarmaPage() {
       setLoading(true);
       const [usersRes, logsRes] = await Promise.all([
         fetch('/api/admin/users'),
-        fetch('/api/admin/analytics'),
+        fetch('/api/admin/karma'),
       ]);
 
       const usersData = await usersRes.json();
@@ -63,11 +64,11 @@ export default function AdminKarmaPage() {
         setUsers(usersData.data);
       }
 
-      if (logsData.ok && logsData.data.recent_karma_changes) {
+      if (logsData.ok && Array.isArray(logsData.data)) {
         setKarmaLogs(
-          logsData.data.recent_karma_changes.map((log: KarmaLog, idx: number) => ({
+          logsData.data.map((log: KarmaLog, idx: number) => ({
             ...log,
-            id: `log-${idx}`,
+            id: log.id || `log-${idx}`,
           }))
         );
       }
@@ -142,7 +143,7 @@ export default function AdminKarmaPage() {
     <div className="karma-page">
       <div className="karma-container">
         <div className="karma-header">
-          <Link href="/admin" className="karma-back-link">← Назад</Link>
+          <PreviousPageLink fallbackHref="/admin" className="karma-back-link" />
           <h1>Корректировка кармы</h1>
         </div>
 

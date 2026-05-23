@@ -318,7 +318,9 @@ const ProfilePage: React.FC = () => {
       const fetchCFKarma = async () => {
         try {
           setCfKarmaLoading(true);
-          const response = await fetch('/api/codeforces/karma');
+          const response = await fetch('/api/codeforces/karma?refresh=1', {
+            cache: 'no-store',
+          });
           const result = await response.json();
 
           console.log('[CF Karma] Response:', response.status, result);

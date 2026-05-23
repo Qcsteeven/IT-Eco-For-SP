@@ -4,6 +4,10 @@ import React, { useState, useEffect } from 'react';
 import { useSession } from 'next-auth/react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import axios from 'axios';
+import {
+  getEventYearBounds,
+  validateEventSchedule,
+} from '@/lib/events/validation';
 import { toGroupThingId, toUserThingId } from '@/lib/surreal/ids';
 
 interface User {
@@ -57,6 +61,28 @@ function toISODate(local: string): string {
   return d.toISOString();
 }
 
+function padDatePart(value: number): string {
+  return String(value).padStart(2, '0');
+}
+
+function toDateTimeLocalInput(value: string): string {
+  if (!value) return '';
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return '';
+
+  return [
+    d.getFullYear(),
+    '-',
+    padDatePart(d.getMonth() + 1),
+    '-',
+    padDatePart(d.getDate()),
+    'T',
+    padDatePart(d.getHours()),
+    ':',
+    padDatePart(d.getMinutes()),
+  ].join('');
+}
+
 export default function EventsManagementPage() {
   const { data: session, status: sessionStatus } = useSession();
   const router = useRouter();
@@ -77,7 +103,7 @@ export default function EventsManagementPage() {
   const [formData, setFormData] = useState({
     title: '',
     description: '',
-    platform: 'codeforces',
+    platform: 'custom',
     status: 'upcoming',
     start_time_utc: '',
     end_time_utc: '',
@@ -86,6 +112,14 @@ export default function EventsManagementPage() {
     participant_list: [] as string[],
     target_groups: [] as string[],
   });
+
+  const dateInputLimits = React.useMemo(() => {
+    const { minYear, maxYear } = getEventYearBounds();
+    return {
+      min: `${minYear}-01-01T00:00`,
+      max: `${maxYear}-12-31T23:59`,
+    };
+  }, []);
 
   // Проверка доступа
   useEffect(() => {
@@ -136,7 +170,7 @@ export default function EventsManagementPage() {
     setFormData({
       title: '',
       description: '',
-      platform: 'codeforces',
+      platform: 'custom',
       status: 'upcoming',
       start_time_utc: '',
       end_time_utc: '',
@@ -156,10 +190,8 @@ export default function EventsManagementPage() {
       description: event.description || '',
       platform: event.platform,
       status: event.status,
-      start_time_utc: event.start_time_utc
-        ? event.start_time_utc.slice(0, 16)
-        : '',
-      end_time_utc: event.end_time_utc ? event.end_time_utc.slice(0, 16) : '',
+      start_time_utc: toDateTimeLocalInput(event.start_time_utc),
+      end_time_utc: toDateTimeLocalInput(event.end_time_utc),
       external_link: event.external_link,
       visibility_type: event.visibility_type,
       participant_list: (event.participant_list || [])
@@ -175,6 +207,16 @@ export default function EventsManagementPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
+      const scheduleError = validateEventSchedule({
+        status: formData.status,
+        start: formData.start_time_utc,
+        end: formData.end_time_utc,
+      });
+      if (scheduleError) {
+        alert(scheduleError);
+        return;
+      }
+
       const payload = {
         ...formData,
         start_time_utc: toISODate(formData.start_time_utc),
@@ -280,21 +322,11 @@ export default function EventsManagementPage() {
   const effectiveParticipantsCount = React.useMemo(() => {
     const direct = new Set(formData.participant_list);
     // без запроса состава группы считаем только уникальные выборы (группы считаем как 0+)
-    // реальный union будет на бэке при sync-results через participant_snapshot
     return direct.size;
   }, [formData.participant_list]);
 
-  const handleSync = async (eventId: string) => {
-    try {
-      const res = await axios.post(`/api/events/${eventId}/sync-results`);
-      alert(res.data.message || 'Синхронизация завершена');
-    } catch (err: unknown) {
-      const msg =
-        (err as { response?: { data?: { error?: string } } })?.response?.data
-          ?.error || 'Ошибка синхронизации';
-      alert(msg);
-    }
-  };
+  const canEditEvent = (event: Event) =>
+    role === 'admin' || event.platform === 'custom';
 
   if (sessionStatus === 'loading' || loading || !hasAccess) {
     return <div className="events-loading">Загрузка...</div>;
@@ -355,6 +387,7 @@ export default function EventsManagementPage() {
               <label>Платформа *</label>
               <select
                 value={formData.platform}
+                disabled={role === 'coach'}
                 onChange={(e) =>
                   setFormData({ ...formData, platform: e.target.value })
                 }
@@ -389,6 +422,8 @@ export default function EventsManagementPage() {
               <input
                 type="datetime-local"
                 value={formData.start_time_utc}
+                min={dateInputLimits.min}
+                max={dateInputLimits.max}
                 onChange={(e) =>
                   setFormData({ ...formData, start_time_utc: e.target.value })
                 }
@@ -400,6 +435,8 @@ export default function EventsManagementPage() {
               <input
                 type="datetime-local"
                 value={formData.end_time_utc}
+                min={dateInputLimits.min}
+                max={dateInputLimits.max}
                 onChange={(e) =>
                   setFormData({ ...formData, end_time_utc: e.target.value })
                 }
@@ -604,19 +641,17 @@ export default function EventsManagementPage() {
                   )}
                 </div>
                 <div className="event-actions">
-                  {event.status === 'completed' &&
-                    event.visibility_type === 'private' && (
-                      <button
-                        className="btn-sync"
-                        onClick={() => handleSync(event.id)}
-                        title="Синхронизировать результаты"
-                      >
-                        🔄 Синхронизировать
-                      </button>
-                    )}
                   <button
                     className="btn-edit"
-                    onClick={() => openEditForm(event)}
+                    disabled={!canEditEvent(event)}
+                    onClick={() => {
+                      if (canEditEvent(event)) openEditForm(event);
+                    }}
+                    title={
+                      canEditEvent(event)
+                        ? 'Редактировать мероприятие'
+                        : 'Тренер может редактировать только мероприятия со своей ссылкой'
+                    }
                   >
                     ✏️
                   </button>
@@ -718,6 +753,11 @@ export default function EventsManagementPage() {
         .form-group textarea:focus {
           outline: none;
           border-color: #667eea;
+        }
+        .form-group select:disabled {
+          background: #f7fafc;
+          color: #718096;
+          cursor: not-allowed;
         }
         .form-row {
           display: grid;
@@ -848,16 +888,6 @@ export default function EventsManagementPage() {
           gap: 0.5rem;
           align-items: center;
         }
-        .btn-sync {
-          background: #10b981;
-          color: white;
-          border: none;
-          padding: 0.5rem 1rem;
-          border-radius: 6px;
-          cursor: pointer;
-          font-size: 0.875rem;
-          margin-right: 0.5rem;
-        }
         .btn-edit,
         .btn-delete {
           background: none;
@@ -869,6 +899,11 @@ export default function EventsManagementPage() {
         .btn-edit:hover,
         .btn-delete:hover {
           transform: scale(1.2);
+        }
+        .btn-edit:disabled {
+          cursor: not-allowed;
+          opacity: 0.45;
+          transform: none;
         }
         .event-card-body {
           display: flex;

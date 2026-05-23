@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { getDB } from '@/lib/surreal/surreal';
 import { authOptions } from '@/lib/authOptions';
+import { validateEventSchedule } from '@/lib/events/validation';
 import { toGroupThingId, toUserThingId } from '@/lib/surreal/ids';
 import type { Event, UpdateEventData } from '@/lib/types/event';
 
@@ -64,22 +65,21 @@ export async function PUT(req: NextRequest) {
     const db = await getDB();
     if (!db) throw new Error('Не удалось подключиться к базе данных SurrealDB');
 
-    // Проверяем доступы: coach может редактировать только свои
-    if (session.user.role === 'coach') {
-      const checkResult = await db.query(
-        `SELECT * FROM type::thing("events", $id)`,
-        { id: eventId },
+    const existingResult = await db.query(
+      `SELECT * FROM type::thing("events", $id)`,
+      { id: eventId },
+    );
+    const existingEvent = (existingResult[0] as unknown as Event[])?.[0];
+
+    if (!existingEvent) {
+      return NextResponse.json(
+        { ok: false, error: 'Мероприятие не найдено' },
+        { status: 404 },
       );
-      const existingEvent = (checkResult[0] as unknown as Event[])?.[0];
+    }
 
-      if (!existingEvent) {
-        return NextResponse.json(
-          { ok: false, error: 'Мероприятие не найдено' },
-          { status: 404 },
-        );
-      }
-
-      // Coach может редактировать только свои мероприятия
+    // Проверяем доступы: coach может редактировать только свои события со своей ссылкой.
+    if (session.user.role === 'coach') {
       const createdBy = toRecordIdString(
         (existingEvent as unknown as Record<string, unknown>).created_by,
       );
@@ -90,6 +90,17 @@ export async function PUT(req: NextRequest) {
           {
             ok: false,
             error: 'Вы можете редактировать только свои мероприятия',
+          },
+          { status: 403 },
+        );
+      }
+
+      if (existingEvent.platform !== 'custom') {
+        return NextResponse.json(
+          {
+            ok: false,
+            error:
+              'Тренер может редактировать только мероприятия со своей ссылкой',
           },
           { status: 403 },
         );
@@ -117,6 +128,20 @@ export async function PUT(req: NextRequest) {
       }
     }
 
+    if (
+      session.user.role === 'coach' &&
+      updateData.platform !== undefined &&
+      updateData.platform !== 'custom'
+    ) {
+      return NextResponse.json(
+        {
+          ok: false,
+          error: 'Тренер может использовать только мероприятия со своей ссылкой',
+        },
+        { status: 403 },
+      );
+    }
+
     // Нормализация ID для participant_list/target_groups
     if (updateData.participant_list !== undefined) {
       updateData.participant_list = (updateData.participant_list as string[])
@@ -135,11 +160,7 @@ export async function PUT(req: NextRequest) {
       updateData.participant_list !== undefined ||
       updateData.target_groups !== undefined
     ) {
-      const existingCheck = await db.query(
-        `SELECT visibility_type, participant_list, target_groups FROM type::thing("events", $id)`,
-        { id: eventId },
-      );
-      const existing = (existingCheck[0] as Record<string, unknown>[])?.[0] || {};
+      const existing = existingEvent as unknown as Record<string, unknown>;
       const nextVisibility =
         (updateData.visibility_type as string | undefined) ??
         (existing.visibility_type as string | undefined);
@@ -163,6 +184,25 @@ export async function PUT(req: NextRequest) {
             error:
               'Для private мероприятия необходимо указать participant_list или target_groups',
           },
+          { status: 400 },
+        );
+      }
+    }
+
+    if (
+      updateData.status !== undefined ||
+      updateData.start_time_utc !== undefined ||
+      updateData.end_time_utc !== undefined
+    ) {
+      const scheduleError = validateEventSchedule({
+        status: String(updateData.status ?? existingEvent.status),
+        start: String(updateData.start_time_utc ?? existingEvent.start_time_utc),
+        end: String(updateData.end_time_utc ?? existingEvent.end_time_utc),
+      });
+
+      if (scheduleError) {
+        return NextResponse.json(
+          { ok: false, error: scheduleError },
           { status: 400 },
         );
       }
@@ -193,10 +233,16 @@ export async function PUT(req: NextRequest) {
       params.status = updateData.status;
     }
     if (updateData.start_time_utc) {
-      setClauses.push(`start_time_utc = d'${updateData.start_time_utc}'`);
+      setClauses.push('start_time_utc = type::datetime($start_time_utc)');
+      params.start_time_utc = new Date(
+        String(updateData.start_time_utc),
+      ).toISOString();
     }
     if (updateData.end_time_utc) {
-      setClauses.push(`end_time_utc = d'${updateData.end_time_utc}'`);
+      setClauses.push('end_time_utc = type::datetime($end_time_utc)');
+      params.end_time_utc = new Date(
+        String(updateData.end_time_utc),
+      ).toISOString();
     }
     if (updateData.external_link) {
       setClauses.push('external_link = $external_link');

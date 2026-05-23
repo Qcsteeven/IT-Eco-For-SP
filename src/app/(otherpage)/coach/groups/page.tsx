@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useSession } from 'next-auth/react';
 import { useRoleGuard } from '@/lib/rbac/client';
+import PreviousPageLink from '@/components/PreviousPageLink';
 import { useRouter } from 'next/navigation';
 import '../coach.scss';
 
@@ -105,9 +106,7 @@ export default function CoachGroupsPage() {
     <div className="coach-page">
       <div className="coach-container">
         <div className="coach-header">
-          <Link href="/coach" className="coach-back-link">
-            ← Назад
-          </Link>
+          <PreviousPageLink fallbackHref="/coach" className="coach-back-link" />
           <div className="coach-header-content">
             <h1>Группы</h1>
             <button
@@ -192,7 +191,11 @@ export default function CoachGroupsPage() {
                       </div>
                     )}
                     <div className="coach-contest-actions">
-                      <Link className="coach-action-btn coach-btn-edit" href={`/coach/groups/${rawId}`}>
+                      <Link
+                        className="coach-action-btn coach-btn-edit"
+                        href={`/coach/groups/${rawId}`}
+                        title="Просмотр участников"
+                      >
                         👥
                       </Link>
                       <Link

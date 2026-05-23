@@ -3,6 +3,7 @@
 import { useSession } from 'next-auth/react';
 import { useRoleGuard } from '@/lib/rbac/client';
 import Link from 'next/link';
+import PreviousPageLink from '@/components/PreviousPageLink';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import '../coach.scss';
@@ -127,7 +128,7 @@ export default function CoachContestsPage() {
     <div className="coach-page">
       <div className="coach-container">
         <div className="coach-header">
-          <Link href="/admin" className="coach-back-link">← Назад</Link>
+          <PreviousPageLink fallbackHref="/admin" className="coach-back-link" />
           <div className="coach-header-content">
             <h1>Управление контестами</h1>
             <button

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { getDB } from '@/lib/surreal/surreal';
 import { authOptions } from '@/lib/authOptions';
+import { validateEventSchedule } from '@/lib/events/validation';
 import {
   parseUsersRecordKey,
   toGroupThingId,
@@ -136,6 +137,16 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    if (session.user.role === 'coach' && body.platform !== 'custom') {
+      return NextResponse.json(
+        {
+          ok: false,
+          error: 'Тренер может создавать только мероприятия со своей ссылкой',
+        },
+        { status: 403 },
+      );
+    }
+
     const normalizedParticipants = (body.participant_list || [])
       .map(toUserThingId)
       .filter(Boolean);
@@ -164,6 +175,18 @@ export async function POST(req: NextRequest) {
     if (Number.isNaN(startDate.getTime()) || Number.isNaN(endDate.getTime())) {
       return NextResponse.json(
         { ok: false, error: 'Некорректная дата начала или окончания' },
+        { status: 400 },
+      );
+    }
+
+    const scheduleError = validateEventSchedule({
+      status: body.status,
+      start: startDate,
+      end: endDate,
+    });
+    if (scheduleError) {
+      return NextResponse.json(
+        { ok: false, error: scheduleError },
         { status: 400 },
       );
     }
