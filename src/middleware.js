@@ -1,78 +1,26 @@
 import { withAuth } from 'next-auth/middleware';
 
-// Маршруты, требующие определённых ролей
-const ROLE_ROUTES = {
-  // Маршруты администратора
-  '/admin': 'admin',
-  // Маршруты тренера
-  '/coach': 'coach',
-};
+const ROLE_HIERARCHY = { guest: 0, user: 1, coach: 2, admin: 3 };
 
 export default withAuth({
   callbacks: {
-    authorized: async ({ token, req }) => {
+    authorized: ({ token, req }) => {
       const { pathname } = req.nextUrl;
 
       if (!token) return false;
-
-      // Заблокированные/неверифицированные считаются гостями
       if (token?.is_blocked === true) return false;
       if (token?.is_verified === false) return false;
 
-      let effectiveRole = token.role;
+      const role = token.role;
+      const userLevel = ROLE_HIERARCHY[role] ?? -1;
 
-      // Проверяем актуальный статус и роль в БД, чтобы блокировки и смена роли
-      // применялись сразу, а не после истечения JWT.
-      try {
-        const url = new URL('/api/internal/auth/status', req.url);
-        const res = await fetch(url, {
-          headers: {
-            cookie: req.headers.get('cookie') || '',
-          },
-        });
-        if (!res.ok) return false;
+      if (userLevel < 0) return false;
 
-        const json = await res.json();
-        if (json?.active !== true) return false;
-        if (typeof json?.role === 'string') {
-          effectiveRole = json.role;
-        }
-      } catch {
-        return false;
-      }
+      if (pathname.startsWith('/admin')) return userLevel >= ROLE_HIERARCHY.admin;
+      if (pathname.startsWith('/coach')) return userLevel >= ROLE_HIERARCHY.coach;
 
-      if (!effectiveRole) {
-        return false;
-      }
-
-      const roleHierarchy = { guest: 0, user: 1, coach: 2, admin: 3 };
-      if (roleHierarchy[effectiveRole] == null) {
-        return false;
-      }
-
-      if (
-        pathname.startsWith('/chat') ||
-        pathname.startsWith('/profile') ||
-        pathname.startsWith('/dashboard')
-      ) {
-        const userLevel = roleHierarchy[effectiveRole];
-        if (userLevel < roleHierarchy.user) {
-          return false;
-        }
-      }
-
-      // Проверяем, требует ли маршрут определённой роли
-      for (const [routePrefix, requiredRole] of Object.entries(ROLE_ROUTES)) {
-        if (pathname.startsWith(routePrefix)) {
-          const requiredLevel = roleHierarchy[requiredRole] ?? 0;
-          const userLevel = roleHierarchy[effectiveRole] ?? 0;
-
-          return userLevel >= requiredLevel;
-        }
-      }
-
-      // Для остальных маршрутов — просто наличие токена
-      return true;
+      // /profile, /chat, /dashboard
+      return userLevel >= ROLE_HIERARCHY.user;
     },
   },
   pages: {
