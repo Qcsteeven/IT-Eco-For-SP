@@ -210,6 +210,7 @@ const CodeforcesProblems: React.FC<CodeforcesProblemsProps> = ({
                       {problem.difficulty === 'easy' && 'Легкая'}
                       {problem.difficulty === 'medium' && 'Средняя'}
                       {problem.difficulty === 'hard' && 'Сложная'}
+                      {problem.difficulty === 'unknown' && 'Без рейтинга'}
                     </span>
                   </div>
                   <div className="cf-col-rating">

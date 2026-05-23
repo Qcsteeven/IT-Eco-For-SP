@@ -57,6 +57,49 @@ function combineWithStoredKarma(
   };
 }
 
+function storedKarmaResponse(
+  storedKarma: number,
+  warning?: string,
+): CachedKarmaResponse {
+  return {
+    ok: true,
+    warning,
+    stale: true,
+    data: {
+      karma: storedKarma,
+      loadedKarma: 0,
+      storedKarma,
+      karmaLevel: getKarmaLevel(storedKarma),
+      karmaColor: getKarmaColor(storedKarma),
+      breakdown: {
+        storedKarma,
+        easyKarma: 0,
+        mediumKarma: 0,
+        hardKarma: 0,
+        tagBonusKarma: 0,
+        diversityBonus: 0,
+      },
+      details: {
+        totalSolved: 0,
+        easyCount: 0,
+        mediumCount: 0,
+        hardCount: 0,
+        unknownCount: 0,
+        averageRating: 0,
+        uniqueTags: 0,
+      },
+      difficultyDistribution: {
+        easy: 0,
+        medium: 0,
+        hard: 0,
+        unknown: 0,
+      },
+      tagStats: [],
+      problems: [],
+    },
+  };
+}
+
 /**
  * GET /api/codeforces/karma
  * Быстрый расчет кармы + список всех задач
@@ -140,8 +183,6 @@ export async function GET(req: NextRequest) {
       return NextResponse.json(cachedResponse);
     }
 
-    console.log('[CF Karma] Fetching submissions...');
-
     // Получаем все submission'ы пользователя (максимум 5000 за 1 запрос)
     // Лимит Codeforces API: 1 запрос в 2 секунды
     let allSubmissions: CodeforcesSubmission[] = [];
@@ -150,7 +191,7 @@ export async function GET(req: NextRequest) {
       console.log('[CF Karma] Fetching submissions...');
       const submissionsRes = await axios.get(
         `https://codeforces.com/api/user.status?handle=${cfHandle}&from=1&count=5000`,
-        { timeout: 10000 }, // Таймаут 10 секунд
+        { timeout: 20000 },
       );
 
       if (submissionsRes.data.status === 'OK') {
@@ -168,12 +209,29 @@ export async function GET(req: NextRequest) {
       }
     } catch (e) {
       console.error('[CF Karma] Error fetching submissions:', e);
+
+      if (cfAccountData?.cached_karma) {
+        try {
+          const cachedResponse = combineWithStoredKarma(
+            JSON.parse(cfAccountData.cached_karma as string),
+            storedKarma,
+          );
+          return NextResponse.json({
+            ...cachedResponse,
+            stale: true,
+            warning:
+              'Codeforces сейчас не ответил, показаны последние сохранённые данные',
+          });
+        } catch (cacheError) {
+          console.error('[CF Karma] Cached fallback parse error:', cacheError);
+        }
+      }
+
       return NextResponse.json(
-        {
-          ok: false,
-          error: 'Ошибка при получении данных с Codeforces. Попробуйте позже.',
-        },
-        { status: 500 },
+        storedKarmaResponse(
+          storedKarma,
+          'Codeforces сейчас не ответил, показана сохранённая карма из БД',
+        ),
       );
     }
 

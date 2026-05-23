@@ -120,6 +120,7 @@ export interface CfKarmaData {
     easyCount: number;
     mediumCount: number;
     hardCount: number;
+    unknownCount?: number;
     averageRating: number;
     uniqueTags: number;
   };

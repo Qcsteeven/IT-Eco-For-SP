@@ -939,6 +939,17 @@ const ProfilePage: React.FC = () => {
     );
   }
 
+  const canOpenKarmaDetails = Boolean(
+    cfData?.connected && cfKarmaData && !cfKarmaLoading,
+  );
+  const karmaDetailsTitle = cfKarmaLoading
+    ? 'Статистика кармы загружается'
+    : !cfData?.connected
+      ? 'Привяжите Codeforces, чтобы посмотреть задачи'
+      : !cfKarmaData
+        ? 'Статистика кармы ещё не загружена'
+        : 'Открыть решённые задачи Codeforces';
+
   return (
     <main>
       <section
@@ -951,6 +962,9 @@ const ProfilePage: React.FC = () => {
           userData={userData}
           onToggleEdit={() => setIsEditing((v) => !v)}
           onSignOut={() => signOut()}
+          onOpenKarmaDetails={() => setShowCFProblems(true)}
+          isKarmaDetailsDisabled={!canOpenKarmaDetails}
+          karmaDetailsTitle={karmaDetailsTitle}
         />
 
         <ExternalSystemsCard
