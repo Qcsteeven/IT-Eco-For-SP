@@ -76,7 +76,10 @@ export async function POST(req: Request) {
 
     const userRole = (session.user.role || 'student') as UserRole;
     const agentRole: AgentRole = mapRBACRoleToAgentRole(userRole);
-    const ragContext = await getRagContext(trimmedMessage);
+    const ragContext = await getRagContext(trimmedMessage, {
+      userId: session.user.id,
+      role: userRole,
+    });
     const mode = /json/i.test(trimmedMessage) ? 'action' : 'chat';
     const systemPrompt = createSystemPrompt({ ragContext, agentRole, mode });
 

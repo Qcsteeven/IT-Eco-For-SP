@@ -1,5 +1,13 @@
-import { getDB } from "@/lib/surreal/surreal";
-import { getEmbedding } from "@/lib/embedding";
+import { getDB } from '@/lib/surreal/surreal';
+import { getEmbedding } from '@/lib/embedding';
+
+// ─── Контекст пользователя для группового RAG ──────────────────────────────
+export interface UserContext {
+  /** Строка вида "abc123" — без префикса "users:" */
+  userId?: string;
+  /** 'coach' | 'admin' | 'user' | 'guest' */
+  role?: string;
+}
 
 interface NewsItem {
   id: unknown;
@@ -22,12 +30,322 @@ interface Contest {
   type?: string;
 }
 
+// ─── Интерфейсы для групповой аналитики ────────────────────────────────────
+interface GroupRow {
+  id: unknown;
+  name: string;
+  description?: string;
+}
+
+interface MemberStats {
+  full_name: string;
+  bscp_rating: number;
+  codeforces_karma?: number;
+}
+
+// ─── Вспомогательные функции ────────────────────────────────────────────────
+
+/** Преобразует неизвестное значение SurrealDB-id в строку */
+function toIdString(v: unknown): string {
+  if (v == null) return '';
+  if (typeof v === 'string') return v;
+  if (typeof v === 'object') {
+    const o = v as Record<string, unknown>;
+    if (typeof o.tb === 'string' && o.id != null)
+      return `${o.tb}:${String(o.id)}`;
+    if (o.id != null) return toIdString(o.id);
+  }
+  return String(v);
+}
+
+/** Извлекает первый массив строк из результата SurrealDB-запроса */
+function firstRows<T>(result: unknown): T[] {
+  if (!Array.isArray(result)) return [];
+  const first = result[0];
+  if (Array.isArray(first)) return first as T[];
+  return [];
+}
+
+/**
+ * Определяет, является ли запрос вопросом про группы.
+ * Триггер — наличие хотя бы одного «группового» слова.
+ */
+function isGroupQuery(query: string): boolean {
+  const lq = query.toLowerCase();
+  const triggers = [
+    'группа',
+    'группе',
+    'группу',
+    'группы',
+    'групп',
+    'участник',
+    'состав',
+    'моя группа',
+    'мои группы',
+    'моей группы',
+  ];
+  return triggers.some((kw) => lq.includes(kw));
+}
+
+/**
+ * Возвращает RAG-контекст по группам для тренера или администратора.
+ */
+async function getGroupRagContext(
+  query: string,
+  userId: string,
+  role: string,
+): Promise<string> {
+  try {
+    const db = await getDB();
+    const lq = query.toLowerCase();
+
+    // 1. Получаем список доступных групп
+    let groupsResult: unknown;
+    if (role === 'admin') {
+      groupsResult = await db.query(
+        `SELECT * FROM groups
+         WHERE is_archived != true
+         ORDER BY created_at DESC
+         LIMIT 15;`,
+      );
+    } else {
+      // coach: только свои группы
+      groupsResult = await db.query(
+        `SELECT * FROM groups
+         WHERE id IN (
+           SELECT VALUE group_id
+           FROM group_coaches
+           WHERE coach_id = type::thing('users', $userId)
+         ) AND is_archived != true
+         ORDER BY created_at DESC
+         LIMIT 15;`,
+        { userId },
+      );
+    }
+
+    const groups = firstRows<GroupRow>(groupsResult);
+
+    if (groups.length === 0) {
+      return role === 'admin'
+        ? '📋 В системе пока нет активных групп.\n'
+        : '📋 У вас пока нет групп. Создайте группу в разделе тренера.\n';
+    }
+
+    // 2. Определяем, упоминается ли конкретная группа в запросе
+    const mentionedGroup = groups.find((g) =>
+      lq.includes(g.name.toLowerCase()),
+    );
+
+    if (mentionedGroup) {
+      // Детальная аналитика по конкретной группе
+      return await buildDetailedGroupContext(db, mentionedGroup);
+    }
+
+    // 3. Краткий список всех групп с числом участников + средним рейтингом
+    const label =
+      role === 'admin' ? '📋 Все группы в системе:' : '📋 Ваши группы:';
+    let ctx = `${label}\n\n`;
+
+    for (const group of groups) {
+      const groupId = toIdString(group.id);
+
+      // Члены группы
+      const mRes = await db.query(
+        `SELECT VALUE user_id FROM group_members
+         WHERE group_id = type::thing($groupId) AND user_id != NONE;`,
+        { groupId },
+      );
+      const memberIds = firstRows<unknown>(mRes)
+        .map(toIdString)
+        .filter(Boolean);
+      const rawUserIds = memberIds
+        .map((id) => (id.startsWith('users:') ? id.slice(6) : id))
+        .filter(Boolean);
+
+      let avgRating: number | null = null;
+      if (rawUserIds.length > 0) {
+        const uRes = await db.query(
+          `SELECT bscp_rating FROM users
+           WHERE id IN array::map($rawUserIds, |$id| type::thing('users', $id));`,
+          { rawUserIds },
+        );
+        const rows = firstRows<{ bscp_rating?: number }>(uRes);
+        const ratings = rows
+          .map((r) => Number(r.bscp_rating ?? 0))
+          .filter((n) => isFinite(n));
+        if (ratings.length > 0) {
+          avgRating = ratings.reduce((a, b) => a + b, 0) / ratings.length;
+        }
+      }
+
+      const ratingStr =
+        avgRating !== null
+          ? `ср. рейтинг: ${avgRating.toFixed(0)}`
+          : 'нет данных';
+      ctx += `- **«${group.name}»** — ${memberIds.length} участников, ${ratingStr}\n`;
+    }
+
+    return ctx;
+  } catch (err) {
+    console.warn('[RAG] Ошибка получения данных по группам:', err);
+    return '';
+  }
+}
+
+/** Вычисляет полную аналитику по одной группе */
+async function buildDetailedGroupContext(
+  db: Awaited<ReturnType<typeof getDB>>,
+  group: GroupRow,
+): Promise<string> {
+  const groupId = toIdString(group.id);
+
+  // Члены группы (ID)
+  const mRes = await db.query(
+    `SELECT VALUE user_id FROM group_members
+     WHERE group_id = type::thing($groupId) AND user_id != NONE;`,
+    { groupId },
+  );
+  const memberIds = firstRows<unknown>(mRes).map(toIdString).filter(Boolean);
+  const rawUserIds = memberIds
+    .map((id) => (id.startsWith('users:') ? id.slice(6) : id))
+    .filter(Boolean);
+
+  // Статистика пользователей
+  let avgRating: number | null = null;
+  let avgCfKarma: number | null = null;
+  let topMembers: { full_name: string; bscp_rating: number }[] = [];
+
+  if (rawUserIds.length > 0) {
+    const uRes = await db.query(
+      `SELECT full_name, bscp_rating, codeforces_karma FROM users
+       WHERE id IN array::map($rawUserIds, |$id| type::thing('users', $id))
+       ORDER BY bscp_rating DESC;`,
+      { rawUserIds },
+    );
+    const rows = firstRows<MemberStats>(uRes);
+
+    const ratings = rows
+      .map((r) => Number(r.bscp_rating ?? 0))
+      .filter((n) => isFinite(n));
+    if (ratings.length > 0) {
+      avgRating = ratings.reduce((a, b) => a + b, 0) / ratings.length;
+    }
+
+    const cfKarmas = rows
+      .map((r) => Number(r.codeforces_karma ?? NaN))
+      .filter((n) => isFinite(n));
+    if (cfKarmas.length > 0) {
+      avgCfKarma = cfKarmas.reduce((a, b) => a + b, 0) / cfKarmas.length;
+    }
+
+    topMembers = rows.slice(0, 5).map((r) => ({
+      full_name: r.full_name || 'Без имени',
+      bscp_rating: Number(r.bscp_rating ?? 0),
+    }));
+  }
+
+  // Платформы (верифицированные аккаунты)
+  let cfCount = 0,
+    acCount = 0,
+    bothCount = 0,
+    noneCount = 0;
+  if (rawUserIds.length > 0) {
+    const pRes = await db.query(
+      `LET $m = array::map($rawUserIds, |$id| type::thing('users', $id));
+       LET $cf = (SELECT VALUE user_id FROM external_accounts
+                  WHERE platform_name = 'codeforces' AND is_verified = true AND user_id IN $m);
+       LET $ac = (SELECT VALUE user_id FROM external_accounts
+                  WHERE platform_name = 'atcoder' AND is_verified = true AND user_id IN $m);
+       LET $both = array::intersect($cf, $ac);
+       LET $cfOnly = array::difference($cf, $both);
+       LET $acOnly = array::difference($ac, $both);
+       LET $any = array::union($cf, $ac);
+       RETURN [
+         array::len($cfOnly),
+         array::len($acOnly),
+         array::len($both),
+         array::len(array::difference($m, $any))
+       ];`,
+      { rawUserIds },
+    );
+    const arr =
+      Array.isArray(pRes) && pRes.length > 0
+        ? (pRes[pRes.length - 1] as number[])
+        : [];
+    cfCount = Number(arr[0] ?? 0);
+    acCount = Number(arr[1] ?? 0);
+    bothCount = Number(arr[2] ?? 0);
+    noneCount = Number(arr[3] ?? 0);
+  }
+
+  // Тренеры группы
+  const coachRes = await db.query(
+    `SELECT count() AS c FROM group_coaches WHERE group_id = type::thing($groupId);`,
+    { groupId },
+  );
+  const coachesCount = Number(firstRows<{ c?: number }>(coachRes)[0]?.c ?? 0);
+
+  // Мероприятия
+  const evTotalRes = await db.query(
+    `SELECT count() AS c FROM events
+     WHERE visibility_type = 'private' AND $groupId IN (target_groups ?? []);`,
+    { groupId },
+  );
+  const evCompRes = await db.query(
+    `SELECT count() AS c FROM events
+     WHERE visibility_type = 'private' AND status = 'completed' AND $groupId IN (target_groups ?? []);`,
+    { groupId },
+  );
+  const evTotal = Number(firstRows<{ c?: number }>(evTotalRes)[0]?.c ?? 0);
+  const evCompleted = Number(firstRows<{ c?: number }>(evCompRes)[0]?.c ?? 0);
+
+  // Форматируем вывод
+  let ctx = `👥 **Группа «${group.name}»**\n`;
+  if (group.description) {
+    ctx += `_${group.description}_\n`;
+  }
+  ctx += `\n`;
+
+  ctx += `📊 **Общая статистика:**\n`;
+  ctx += `- Участников: ${memberIds.length}\n`;
+  ctx += `- Тренеров: ${coachesCount}\n`;
+  ctx += `- Средний BSCP рейтинг: ${avgRating !== null ? avgRating.toFixed(1) : 'нет данных'}\n`;
+  if (avgCfKarma !== null) {
+    ctx += `- Средняя карма Codeforces: ${avgCfKarma.toFixed(1)}\n`;
+  }
+  ctx += `\n`;
+
+  ctx += `🖥️ **Платформы (верифицированные аккаунты):**\n`;
+  ctx += `- Codeforces: ${cfCount}\n`;
+  ctx += `- AtCoder: ${acCount}\n`;
+  ctx += `- Обе платформы: ${bothCount}\n`;
+  ctx += `- Нет верифицированных аккаунтов: ${noneCount}\n`;
+  ctx += `\n`;
+
+  ctx += `📅 **Мероприятия группы:**\n`;
+  ctx += `- Всего: ${evTotal}\n`;
+  ctx += `- Завершено: ${evCompleted}\n`;
+  ctx += `\n`;
+
+  if (topMembers.length > 0) {
+    ctx += `🏆 **Топ по BSCP рейтингу:**\n`;
+    topMembers.forEach((m, i) => {
+      ctx += `${i + 1}. ${m.full_name} — ${m.bscp_rating}\n`;
+    });
+    ctx += `\n`;
+  }
+
+  return ctx;
+}
+
+// ─── Фильтры контестов ─────────────────────────────────────────────────────
+
 /**
  * Извлекает фильтры из пользовательского запроса
  */
 function extractFilters(query: string) {
   const lowerQuery = query.toLowerCase();
-  
+
   const filters: {
     platform?: string;
     status?: 'upcoming' | 'past' | 'running';
@@ -45,37 +363,87 @@ function extractFilters(query: string) {
     { keywords: ['hackerrank', 'хакерранк'], name: 'HackerRank' },
     { keywords: ['codechef', 'кодшеф'], name: 'CodeChef' },
   ];
-  
+
   for (const platform of platforms) {
-    if (platform.keywords.some(kw => lowerQuery.includes(kw))) {
+    if (platform.keywords.some((kw) => lowerQuery.includes(kw))) {
       filters.platform = platform.name;
       break;
     }
   }
 
   // === Статус (время относительно сейчас) ===
-  const pastKeywords = ['прош', 'прошедш', 'заверш', 'прошедшие', 'прошедших', 'были', 'past', 'finished', 'ended', 'completed'];
-  const upcomingKeywords = ['будущ', 'предстоящ', 'скоро', 'будущие', 'будущих', 'upcoming', 'future', 'soon'];
-  const runningKeywords = ['текущ', 'сейчас', 'идущ', 'открыт', 'running', 'ongoing', 'current', 'active', 'open'];
-  
-  if (pastKeywords.some(kw => lowerQuery.includes(kw))) {
+  const pastKeywords = [
+    'прош',
+    'прошедш',
+    'заверш',
+    'прошедшие',
+    'прошедших',
+    'были',
+    'past',
+    'finished',
+    'ended',
+    'completed',
+  ];
+  const upcomingKeywords = [
+    'будущ',
+    'предстоящ',
+    'скоро',
+    'будущие',
+    'будущих',
+    'upcoming',
+    'future',
+    'soon',
+  ];
+  const runningKeywords = [
+    'текущ',
+    'сейчас',
+    'идущ',
+    'открыт',
+    'running',
+    'ongoing',
+    'current',
+    'active',
+    'open',
+  ];
+
+  if (pastKeywords.some((kw) => lowerQuery.includes(kw))) {
     filters.status = 'past';
-  } else if (runningKeywords.some(kw => lowerQuery.includes(kw))) {
+  } else if (runningKeywords.some((kw) => lowerQuery.includes(kw))) {
     filters.status = 'running';
-  } else if (upcomingKeywords.some(kw => lowerQuery.includes(kw))) {
+  } else if (upcomingKeywords.some((kw) => lowerQuery.includes(kw))) {
     filters.status = 'upcoming';
   }
 
   // === Месяц ===
   const monthNamesRu = [
-    'январ', 'феврал', 'март', 'апрел', 'ма', 'июн',
-    'июл', 'август', 'сентябр', 'октябр', 'ноябр', 'декабр'
+    'январ',
+    'феврал',
+    'март',
+    'апрел',
+    'ма',
+    'июн',
+    'июл',
+    'август',
+    'сентябр',
+    'октябр',
+    'ноябр',
+    'декабр',
   ];
   const monthNamesEn = [
-    'january', 'february', 'march', 'april', 'may', 'june',
-    'july', 'august', 'september', 'october', 'november', 'december'
+    'january',
+    'february',
+    'march',
+    'april',
+    'may',
+    'june',
+    'july',
+    'august',
+    'september',
+    'october',
+    'november',
+    'december',
   ];
-  
+
   // Поиск по русским названиям
   for (let i = 0; i < monthNamesRu.length; i++) {
     if (lowerQuery.includes(monthNamesRu[i])) {
@@ -83,7 +451,7 @@ function extractFilters(query: string) {
       break;
     }
   }
-  
+
   // Поиск по английским названиям (если не нашли по русским)
   if (filters.month === undefined) {
     for (let i = 0; i < monthNamesEn.length; i++) {
@@ -93,10 +461,12 @@ function extractFilters(query: string) {
       }
     }
   }
-  
+
   // Поиск по номеру месяца (1-12)
   if (filters.month === undefined) {
-    const monthMatch = lowerQuery.match(/\b([1-9]|10|11|12)\s*(месяц|мес|month)?\b/i);
+    const monthMatch = lowerQuery.match(
+      /\b([1-9]|10|11|12)\s*(месяц|мес|month)?\b/i,
+    );
     if (monthMatch) {
       const monthNum = parseInt(monthMatch[1]);
       if (monthNum >= 1 && monthNum <= 12) {
@@ -112,9 +482,17 @@ function extractFilters(query: string) {
   }
 
   // === Длительность ===
-  if (lowerQuery.includes('коротк') || lowerQuery.includes('short') || lowerQuery.includes('быстр')) {
+  if (
+    lowerQuery.includes('коротк') ||
+    lowerQuery.includes('short') ||
+    lowerQuery.includes('быстр')
+  ) {
     filters.durationType = 'short';
-  } else if (lowerQuery.includes('длинн') || lowerQuery.includes('long') || lowerQuery.includes('extended')) {
+  } else if (
+    lowerQuery.includes('длинн') ||
+    lowerQuery.includes('long') ||
+    lowerQuery.includes('extended')
+  ) {
     filters.durationType = 'long';
   }
 
@@ -139,20 +517,30 @@ function buildWhereClause(filters: ReturnType<typeof extractFilters>): string {
       conditions.push(`end_time_utc < d'${now}'`);
     } else if (filters.status === 'running') {
       // Используем Open вместо Running (так принято в БД)
-      conditions.push(`start_time_utc <= d'${now}' AND end_time_utc >= d'${now}'`);
+      conditions.push(
+        `start_time_utc <= d'${now}' AND end_time_utc >= d'${now}'`,
+      );
     }
   }
 
   if (filters.month !== undefined) {
     const year = filters.year || new Date().getFullYear();
     const monthStart = new Date(Date.UTC(year, filters.month, 1)).toISOString();
-    const monthEnd = new Date(Date.UTC(year, filters.month + 1, 0, 23, 59, 59)).toISOString();
-    conditions.push(`start_time_utc >= d'${monthStart}' AND start_time_utc <= d'${monthEnd}'`);
+    const monthEnd = new Date(
+      Date.UTC(year, filters.month + 1, 0, 23, 59, 59),
+    ).toISOString();
+    conditions.push(
+      `start_time_utc >= d'${monthStart}' AND start_time_utc <= d'${monthEnd}'`,
+    );
   } else if (filters.year) {
     // Если год указан без месяца, фильтруем весь год
     const yearStart = new Date(Date.UTC(filters.year, 0, 1)).toISOString();
-    const yearEnd = new Date(Date.UTC(filters.year, 11, 31, 23, 59, 59)).toISOString();
-    conditions.push(`start_time_utc >= d'${yearStart}' AND start_time_utc <= d'${yearEnd}'`);
+    const yearEnd = new Date(
+      Date.UTC(filters.year, 11, 31, 23, 59, 59),
+    ).toISOString();
+    conditions.push(
+      `start_time_utc >= d'${yearStart}' AND start_time_utc <= d'${yearEnd}'`,
+    );
   }
 
   return conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
@@ -162,7 +550,10 @@ function buildWhereClause(filters: ReturnType<typeof extractFilters>): string {
  * Создаёт оптимизированный поисковый запрос для эмбеддинга
  * Добавляет контекстные ключевые слова для лучшего поиска
  */
-function buildQueryForEmbedding(query: string, filters: ReturnType<typeof extractFilters>): string {
+function buildQueryForEmbedding(
+  query: string,
+  filters: ReturnType<typeof extractFilters>,
+): string {
   const parts: string[] = [query];
 
   // Добавляем контекст на основе извлечённых фильтров
@@ -182,8 +573,18 @@ function buildQueryForEmbedding(query: string, filters: ReturnType<typeof extrac
 
   if (filters.month !== undefined) {
     const monthNames = [
-      'January', 'February', 'March', 'April', 'May', 'June',
-      'July', 'August', 'September', 'October', 'November', 'December'
+      'January',
+      'February',
+      'March',
+      'April',
+      'May',
+      'June',
+      'July',
+      'August',
+      'September',
+      'October',
+      'November',
+      'December',
     ];
     parts.push(`month: ${monthNames[filters.month]}`);
   }
@@ -198,7 +599,10 @@ function buildQueryForEmbedding(query: string, filters: ReturnType<typeof extrac
   return parts.join(' | ');
 }
 
-export async function getRagContext(query: string | undefined): Promise<string> {
+export async function getRagContext(
+  query: string | undefined,
+  userContext?: UserContext,
+): Promise<string> {
   const safeQuery = (query ?? '').trim();
   if (!safeQuery) return '';
 
@@ -219,11 +623,12 @@ export async function getRagContext(query: string | undefined): Promise<string> 
     // === Новости ===
     if (lowerQuery.includes('новости') || lowerQuery.includes('новость')) {
       const newsResult = await db.query(
-        `SELECT * FROM news ORDER BY publish_date DESC LIMIT 5`
+        `SELECT * FROM news ORDER BY publish_date DESC LIMIT 5`,
       );
-      const newsItems: NewsItem[] = Array.isArray(newsResult) && newsResult.length > 0
-        ? (newsResult[0] as NewsItem[])
-        : [];
+      const newsItems: NewsItem[] =
+        Array.isArray(newsResult) && newsResult.length > 0
+          ? (newsResult[0] as NewsItem[])
+          : [];
 
       if (newsItems.length > 0) {
         context += '📰 Последние новости:\n';
@@ -231,9 +636,10 @@ export async function getRagContext(query: string | undefined): Promise<string> 
           const date = item.publish_date
             ? new Date(item.publish_date).toLocaleDateString('ru-RU')
             : 'Без даты';
-          const contentPreview = item.content?.length > 100
-            ? `${item.content.substring(0, 100)}...`
-            : item.content || 'Без содержания';
+          const contentPreview =
+            item.content?.length > 100
+              ? `${item.content.substring(0, 100)}...`
+              : item.content || 'Без содержания';
           context += `- ${item.title || 'Без заголовка'} (${date})\n`;
           context += `  ${contentPreview}\n`;
           context += `  Источник: ${item.registration_link?.trim() || 'внутренняя рассылка'}\n\n`;
@@ -241,18 +647,38 @@ export async function getRagContext(query: string | undefined): Promise<string> 
       }
     }
 
+    // === Аналитика групп (только для тренеров и администраторов) ===
+    const canViewGroups =
+      userContext?.role === 'coach' || userContext?.role === 'admin';
+
+    if (canViewGroups && userContext?.userId && isGroupQuery(safeQuery)) {
+      const groupCtx = await getGroupRagContext(
+        safeQuery,
+        userContext.userId,
+        userContext.role!,
+      );
+      if (groupCtx) {
+        context += groupCtx + '\n';
+      }
+    }
+
     // === Контесты ===
-    if (lowerQuery.includes('контест') || lowerQuery.includes('соревновани') || lowerQuery.includes('чемпионат') || lowerQuery.includes('турнир')) {
+    if (
+      lowerQuery.includes('контест') ||
+      lowerQuery.includes('соревновани') ||
+      lowerQuery.includes('чемпионат') ||
+      lowerQuery.includes('турнир')
+    ) {
       try {
         // 1. Извлекаем фильтры из запроса
         const filters = extractFilters(safeQuery);
-        
+
         // 2. Строим WHERE-условие
         const whereClause = buildWhereClause(filters);
-        
+
         // 3. Создаём оптимизированный запрос для эмбеддинга
         const queryForEmbedding = buildQueryForEmbedding(safeQuery, filters);
-        
+
         // 4. Генерируем эмбеддинг
         const queryEmbedding = await getEmbedding(queryForEmbedding);
 
@@ -269,12 +695,13 @@ export async function getRagContext(query: string | undefined): Promise<string> 
         `;
 
         const contestResult = await db.query(contestQuery, {
-          query_vector: queryEmbedding
+          query_vector: queryEmbedding,
         });
 
-        const contests: Contest[] = Array.isArray(contestResult) && contestResult.length > 0
-          ? (contestResult[0] as Contest[])
-          : [];
+        const contests: Contest[] =
+          Array.isArray(contestResult) && contestResult.length > 0
+            ? (contestResult[0] as Contest[])
+            : [];
 
         if (contests.length > 0) {
           // Формируем заголовок с информацией о фильтрах
@@ -285,21 +712,31 @@ export async function getRagContext(query: string | undefined): Promise<string> 
           if (filters.status === 'running') filterParts.push('текущие');
           if (filters.month !== undefined) {
             const monthNames = [
-              'январе', 'феврале', 'марте', 'апреле', 'мае', 'июне',
-              'июле', 'августе', 'сентябре', 'октябре', 'ноябре', 'декабре'
+              'январе',
+              'феврале',
+              'марте',
+              'апреле',
+              'мае',
+              'июне',
+              'июле',
+              'августе',
+              'сентябре',
+              'октябре',
+              'ноябре',
+              'декабре',
             ];
             filterParts.push(`в ${monthNames[filters.month]}`);
           }
-          
+
           context += `🎯 Контесты${filterParts.length > 0 ? ' (' + filterParts.join(', ') + ')' : ''}:\n\n`;
-          
+
           contests.forEach((contest, index) => {
             const start = contest.start_time_utc
               ? new Date(contest.start_time_utc).toLocaleString('ru-RU', {
                   day: 'numeric',
                   month: 'long',
                   hour: '2-digit',
-                  minute: '2-digit'
+                  minute: '2-digit',
                 })
               : 'Неизвестно';
             const end = contest.end_time_utc
@@ -307,7 +744,7 @@ export async function getRagContext(query: string | undefined): Promise<string> 
                   day: 'numeric',
                   month: 'long',
                   hour: '2-digit',
-                  minute: '2-digit'
+                  minute: '2-digit',
                 })
               : 'Неизвестно';
 
@@ -327,9 +764,12 @@ export async function getRagContext(query: string | undefined): Promise<string> 
         } else {
           // Если ничего не найдено, пробуем без фильтров
           if (Object.keys(filters).length > 0) {
-            context += 'По заданным фильтрам ничего не найдено. Попробую расширить поиск...\n\n';
-            
-            const queryEmbedding = await getEmbedding(buildQueryForEmbedding(safeQuery, {}));
+            context +=
+              'По заданным фильтрам ничего не найдено. Попробую расширить поиск...\n\n';
+
+            const queryEmbedding = await getEmbedding(
+              buildQueryForEmbedding(safeQuery, {}),
+            );
             const fallbackResult = await db.query(
               `
               SELECT *, vector::similarity::cosine(embedding, $query_vector) AS similarity
@@ -338,12 +778,13 @@ export async function getRagContext(query: string | undefined): Promise<string> 
               ORDER BY similarity DESC
               LIMIT 5;
               `,
-              { query_vector: queryEmbedding }
+              { query_vector: queryEmbedding },
             );
 
-            const fallbackContests: Contest[] = Array.isArray(fallbackResult) && fallbackResult.length > 0
-              ? (fallbackResult[0] as Contest[])
-              : [];
+            const fallbackContests: Contest[] =
+              Array.isArray(fallbackResult) && fallbackResult.length > 0
+                ? (fallbackResult[0] as Contest[])
+                : [];
 
             if (fallbackContests.length > 0) {
               context += '🎯 Другие контесты:\n\n';
@@ -353,7 +794,7 @@ export async function getRagContext(query: string | undefined): Promise<string> 
                       day: 'numeric',
                       month: 'long',
                       hour: '2-digit',
-                      minute: '2-digit'
+                      minute: '2-digit',
                     })
                   : 'Неизвестно';
                 const end = contest.end_time_utc
@@ -361,7 +802,7 @@ export async function getRagContext(query: string | undefined): Promise<string> 
                       day: 'numeric',
                       month: 'long',
                       hour: '2-digit',
-                      minute: '2-digit'
+                      minute: '2-digit',
                     })
                   : 'Неизвестно';
 
