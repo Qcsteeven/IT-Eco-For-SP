@@ -78,7 +78,7 @@ export default function Calendar() {
         setError(null);
 
         const params = new URLSearchParams(range);
-        params.set('includeCodeforces', 'false');
+        params.set('includeContests', 'true');
         const response = await fetch(`/api/contests/all?${params.toString()}`, {
           cache: 'no-store',
           signal: controller.signal,

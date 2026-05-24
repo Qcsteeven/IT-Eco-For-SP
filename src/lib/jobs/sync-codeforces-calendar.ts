@@ -1,5 +1,9 @@
 import axios from 'axios';
 
+import {
+  fetchNormalizedAtCoderContests,
+  type NormalizedAtCoderContest,
+} from '@/lib/atcoder/contests';
 import { buildContestEmbeddingText } from '@/lib/contembtext';
 import { getEmbedding } from '@/lib/embedding';
 import { getDB } from '@/lib/surreal/surreal';
@@ -23,6 +27,7 @@ type ContestDbRow = {
   start_time_utc: Date;
   end_time_utc: Date;
   status: 'Open' | 'Soon' | 'Finished';
+  description?: string;
   embedding: number[];
   updated_at: Date;
 };
@@ -61,8 +66,61 @@ function shouldSyncContest(c: CfContest, nowSec: number): boolean {
   return start < horizonFuture && end > horizonPast;
 }
 
+async function upsertContest(
+  part: string,
+  data: ContestDbRow,
+): Promise<void> {
+  const db = await getDB();
+  if (!db) {
+    throw new Error('Нет подключения к SurrealDB');
+  }
+
+  const updated = await db.query<unknown[]>(
+    `UPDATE type::thing('contests', $part) CONTENT $data RETURN AFTER`,
+    { part, data },
+  );
+
+  const first = updated[0];
+  const touched = Array.isArray(first) && first.length > 0;
+
+  if (!touched) {
+    await db.query(`CREATE type::thing('contests', $part) CONTENT $data`, {
+      part,
+      data,
+    });
+  }
+}
+
+async function buildAtCoderContestRow(
+  contest: NormalizedAtCoderContest,
+): Promise<ContestDbRow> {
+  const embedText = await buildContestEmbeddingText({
+    startTimeSeconds: contest.startTimeSeconds,
+    durationSeconds: contest.durationSeconds,
+    type: contest.contestType,
+    name: contest.title,
+    platform: 'AtCoder',
+    listingStatus: contest.status === 'Open' ? 'running' : 'upcoming',
+  });
+  const embedding = await getEmbedding(embedText);
+
+  return {
+    title: contest.title,
+    name: contest.name,
+    platform: contest.platform,
+    platform_contest_id: contest.platform_contest_id,
+    registration_link: contest.registration_link,
+    start_time_utc: new Date(contest.start_time_utc),
+    end_time_utc: new Date(contest.end_time_utc),
+    status: contest.status,
+    description: contest.description,
+    embedding,
+    updated_at: new Date(),
+  };
+}
+
 /**
- * Синхронизация списка контестов Codeforces в таблицу contests (эмбеддинги + upsert).
+ * Синхронизация списка контестов Codeforces и AtCoder в таблицу contests (эмбеддинги + upsert).
  * Не выполняет проверку CRON_SECRET — это делают route handlers.
  */
 export async function syncCodeforcesCalendar(): Promise<SyncCodeforcesCalendarResult> {
@@ -99,6 +157,8 @@ export async function syncCodeforcesCalendar(): Promise<SyncCodeforcesCalendarRe
 
     let upserted = 0;
     const errors: string[] = [];
+    let atCoderScanned = 0;
+    let atCoderSynced = 0;
 
     for (const c of toSync) {
       const startSec = c.startTimeSeconds!;
@@ -134,24 +194,7 @@ export async function syncCodeforcesCalendar(): Promise<SyncCodeforcesCalendarRe
           updated_at: new Date(),
         };
 
-        const updated = await db.query<unknown[]>(
-          `UPDATE type::thing('contests', $part) CONTENT $data RETURN AFTER`,
-          { part, data },
-        );
-
-        const first = updated[0];
-        const touched = Array.isArray(first) && first.length > 0;
-
-        if (!touched) {
-          await db.query(
-            `CREATE type::thing('contests', $part) CONTENT $data`,
-            {
-              part,
-              data,
-            },
-          );
-        }
-
+        await upsertContest(part, data);
         upserted += 1;
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e);
@@ -160,10 +203,35 @@ export async function syncCodeforcesCalendar(): Promise<SyncCodeforcesCalendarRe
       }
     }
 
+    try {
+      const atCoderContests = await fetchNormalizedAtCoderContests();
+      atCoderScanned = atCoderContests.length;
+      atCoderSynced = atCoderContests.length;
+
+      for (const contest of atCoderContests) {
+        try {
+          const data = await buildAtCoderContestRow(contest);
+          await upsertContest(`atcoder_${contest.platform_contest_id}`, data);
+          upserted += 1;
+        } catch (e) {
+          const msg = e instanceof Error ? e.message : String(e);
+          errors.push(`atcoder:${contest.platform_contest_id}: ${msg}`);
+          console.error(
+            `[sync-codeforces-calendar] atcoder ${contest.platform_contest_id}:`,
+            e,
+          );
+        }
+      }
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      errors.push(`atcoder: ${msg}`);
+      console.error('[sync-codeforces-calendar] atcoder:', e);
+    }
+
     return {
       ok: true,
-      scanned: cfRes.data.result.length,
-      synced: toSync.length,
+      scanned: cfRes.data.result.length + atCoderScanned,
+      synced: toSync.length + atCoderSynced,
       upserted,
       errors: errors.slice(0, 20),
       errorCount: errors.length,

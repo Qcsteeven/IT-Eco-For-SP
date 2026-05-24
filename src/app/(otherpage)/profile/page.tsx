@@ -347,7 +347,7 @@ const ProfilePage: React.FC = () => {
       }
     }
 
-    // Сортировка по рейтингу БЦСП (mmr_change)
+    // Сортировка по рейтингу (mmr_change)
     if (ratingSort !== 'none') {
       result.sort((a, b) => {
         if (ratingSort === 'asc') {

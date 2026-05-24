@@ -23,6 +23,8 @@ type Contest = {
 };
 
 const PAGE_SIZE = 3;
+const MAX_HOME_PAGES = 5;
+const MAX_HOME_CONTESTS = PAGE_SIZE * MAX_HOME_PAGES;
 
 function formatDate(dateString: string) {
   return new Date(dateString).toLocaleString('ru-RU', {
@@ -47,7 +49,9 @@ export default function HomeContestsCarousel() {
         setLoading(true);
         setError(null);
 
-        const resp = await fetch('/api/contests', { cache: 'no-store' });
+        const resp = await fetch(`/api/contests?limit=${MAX_HOME_CONTESTS}`, {
+          cache: 'no-store',
+        });
         const json = (await resp.json()) as ApiResponse<Contest[]>;
 
         if (!mounted) return;
@@ -58,7 +62,16 @@ export default function HomeContestsCarousel() {
           return;
         }
 
-        setContests(json.data);
+        setContests(
+          json.data
+            .slice()
+            .sort(
+              (a, b) =>
+                new Date(a.start_time_utc).getTime() -
+                new Date(b.start_time_utc).getTime(),
+            )
+            .slice(0, MAX_HOME_CONTESTS),
+        );
         setPage(0);
       } catch (e: unknown) {
         if (!mounted) return;

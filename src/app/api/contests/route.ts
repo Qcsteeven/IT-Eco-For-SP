@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/authOptions';
+import { listCalendarEvents } from '@/lib/calendar/events';
 import { getDB } from '@/lib/surreal/surreal';
 import { successResponse, errorResponse } from '@/lib/types/api';
 
@@ -26,31 +27,42 @@ interface ContestRecord {
  */
 export async function GET(req: Request) {
   try {
-    const db = await getDB();
-    if (!db) {
-      return NextResponse.json(
-        errorResponse('Ошибка подключения к БД'),
-        { status: 500 },
+    const { searchParams } = new URL(req.url);
+    const status = searchParams.get('status');
+    const limitRaw = Number(searchParams.get('limit'));
+    const limit =
+      Number.isFinite(limitRaw) && limitRaw > 0 ? Math.floor(limitRaw) : null;
+    const now = new Date();
+    const horizon = new Date(now.getTime() + 200 * 24 * 60 * 60 * 1000);
+
+    let contests = await listCalendarEvents({
+      from: now.toISOString(),
+      to: horizon.toISOString(),
+      includeContests: true,
+      includeEvents: false,
+    });
+
+    if (status) {
+      const normalizedStatus = status.toLowerCase();
+      contests = contests.filter(
+        (contest) => contest.status.toLowerCase() === normalizedStatus,
       );
     }
 
-    const { searchParams } = new URL(req.url);
-    const status = searchParams.get('status');
+    contests = contests
+      .filter(
+        (contest) =>
+          new Date(contest.end_time_utc).getTime() >= now.getTime(),
+      )
+      .sort(
+        (a, b) =>
+          new Date(a.start_time_utc).getTime() -
+          new Date(b.start_time_utc).getTime(),
+      );
 
-    let query = 'SELECT * FROM contests';
-    const vars: Record<string, unknown> = {};
-
-    if (status) {
-      query += ' WHERE status = $status';
-      vars.status = status;
-    }
-
-    query += ' ORDER BY start_time_utc ASC';
-
-    const result = await db.query<ContestRecord[][]>(query, vars);
-    const contests = result[0] || [];
-
-    return NextResponse.json(successResponse(contests));
+    return NextResponse.json(
+      successResponse(limit ? contests.slice(0, limit) : contests),
+    );
   } catch (err: unknown) {
     const errorMessage = err instanceof Error ? err.message : String(err);
     console.error('[API /contests GET] Error:', errorMessage);

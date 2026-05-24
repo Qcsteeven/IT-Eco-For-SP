@@ -114,7 +114,7 @@ export default function ProfileHistoryCard({
         </div>
 
         <div className="profile-history-filter">
-          <label>Рейтинг БЦСП:</label>
+          <label>Рейтинг:</label>
           <select
             value={ratingSort}
             onChange={(e) => onRatingSortChange(e.target.value as RatingSort)}
@@ -142,7 +142,7 @@ export default function ProfileHistoryCard({
             <th>Соревнование</th>
             <th>Платформа</th>
             <th>Результат</th>
-            <th>Рейтинг БЦСП</th>
+            <th>Рейтинг</th>
           </tr>
         </thead>
           <tbody>
@@ -199,7 +199,7 @@ export default function ProfileHistoryCard({
                       )}
                     </td>
                     <td
-                      data-label="Рейтинг БЦСП"
+                      data-label="Рейтинг"
                       className={`rating-change ${item.mmr_change < 0 ? 'negative' : ''}`}
                     >
                       {item.mmr_change > 0

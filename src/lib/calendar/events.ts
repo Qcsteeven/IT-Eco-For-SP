@@ -1,3 +1,4 @@
+import { fetchNormalizedAtCoderContests } from '@/lib/atcoder/contests';
 import { getDB } from '@/lib/surreal/surreal';
 
 export type CalendarEventSource = 'events' | 'contests';
@@ -259,6 +260,25 @@ async function getDbCalendarEvents(
   }
 }
 
+async function getAtCoderCalendarEvents(from: Date, to: Date) {
+  try {
+    const contests = await fetchNormalizedAtCoderContests({ from, to });
+
+    return contests
+      .map((contest) => normalizeDbEvent(contest, 'contests'))
+      .filter((event): event is CalendarEvent =>
+        Boolean(
+          event &&
+            overlapsRange(event.start_time_utc, event.end_time_utc, from, to),
+        ),
+      );
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.warn('[calendar] AtCoder contests are unavailable:', message);
+    return [];
+  }
+}
+
 function dedupeEvents(events: CalendarEvent[]) {
   const seen = new Set<string>();
   const result: CalendarEvent[] = [];
@@ -276,9 +296,12 @@ function dedupeEvents(events: CalendarEvent[]) {
 
 export async function listCalendarEvents(query: CalendarEventQuery = {}) {
   const { from, to } = buildRange(query);
-  const dbEvents = await getDbCalendarEvents(from, to, query);
+  const [dbEvents, atCoderEvents] = await Promise.all([
+    getDbCalendarEvents(from, to, query),
+    query.includeContests === false ? [] : getAtCoderCalendarEvents(from, to),
+  ]);
 
-  return dedupeEvents(dbEvents).sort(
+  return dedupeEvents([...dbEvents, ...atCoderEvents]).sort(
     (a, b) =>
       new Date(a.start_time_utc).getTime() -
       new Date(b.start_time_utc).getTime(),

@@ -116,13 +116,15 @@ export default function ChatPage() {
   const [historyLoading, setHistoryLoading] = useState(true);
   const [historyError, setHistoryError] = useState<string | null>(null);
 
-  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const messagesContainerRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const messagesRef = useRef<UIMessage[]>([]);
   const activeSessionIdRef = useRef<string | null>(null);
   const fullTextRef = useRef('');
   const displayedTextRef = useRef('');
   const displayedIndexRef = useRef(0);
+  const shouldStickToBottomRef = useRef(true);
+  const scrollFrameRef = useRef<number | null>(null);
 
   useEffect(() => {
     messagesRef.current = messages;
@@ -133,8 +135,30 @@ export default function ChatPage() {
   }, [activeSessionId]);
 
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages]);
+    if (!shouldStickToBottomRef.current) return;
+
+    if (scrollFrameRef.current !== null) {
+      cancelAnimationFrame(scrollFrameRef.current);
+    }
+
+    scrollFrameRef.current = requestAnimationFrame(() => {
+      const container = messagesContainerRef.current;
+      if (!container) return;
+
+      container.scrollTo({
+        top: container.scrollHeight,
+        behavior: isLoading ? 'auto' : 'smooth',
+      });
+      scrollFrameRef.current = null;
+    });
+
+    return () => {
+      if (scrollFrameRef.current !== null) {
+        cancelAnimationFrame(scrollFrameRef.current);
+        scrollFrameRef.current = null;
+      }
+    };
+  }, [isLoading, messages]);
 
   useEffect(() => {
     loadSessions();
@@ -154,6 +178,7 @@ export default function ChatPage() {
       if (!activeSessionIdRef.current && loadedSessions.length > 0) {
         const first = loadedSessions[0];
         setActiveSessionId(first.id);
+        shouldStickToBottomRef.current = true;
         setMessages(toUiMessages(first.messages || []));
       }
     } catch (error) {
@@ -232,6 +257,7 @@ export default function ChatPage() {
   function openHistoryChat(session: ChatSession) {
     if (isLoading) return;
     setActiveSessionId(session.id);
+    shouldStickToBottomRef.current = true;
     setMessages(toUiMessages(session.messages || []));
     setInput('');
     setHistoryError(null);
@@ -240,6 +266,7 @@ export default function ChatPage() {
   function startNewChat() {
     if (isLoading) return;
     setActiveSessionId(null);
+    shouldStickToBottomRef.current = true;
     setMessages([]);
     setInput('');
     setHistoryError(null);
@@ -266,6 +293,7 @@ export default function ChatPage() {
     };
 
     const nextMessages = [...messagesRef.current, userMessage];
+    shouldStickToBottomRef.current = true;
     setMessages(nextMessages);
     setInput('');
 
@@ -413,6 +441,15 @@ export default function ChatPage() {
     }
   }
 
+  function handleMessagesScroll() {
+    const container = messagesContainerRef.current;
+    if (!container) return;
+
+    const distanceToBottom =
+      container.scrollHeight - container.scrollTop - container.clientHeight;
+    shouldStickToBottomRef.current = distanceToBottom < 140;
+  }
+
   return (
     <section className={styles.chatShell}>
       <aside className={styles.sidebar} aria-label="История чатов">
@@ -478,7 +515,11 @@ export default function ChatPage() {
           </div>
         </div>
 
-        <div className={styles.messagesContainer}>
+        <div
+          className={styles.messagesContainer}
+          onScroll={handleMessagesScroll}
+          ref={messagesContainerRef}
+        >
           {messages.length === 0 ? (
             <div className={styles.emptyState}>
               <div className={styles.ecoMark}>
@@ -510,7 +551,6 @@ export default function ChatPage() {
               );
             })
           )}
-          <div ref={messagesEndRef} />
         </div>
 
         <div className={styles.inputArea}>
