@@ -25,6 +25,26 @@ function getMonthRange(date: Date) {
   };
 }
 
+function getEventTitle(event: Contest) {
+  return event.title || event.name || 'Событие';
+}
+
+function getEventLink(event: Contest) {
+  return event.registration_link || event.external_link || '#';
+}
+
+function formatMobileEventDate(value: string) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '';
+
+  return new Intl.DateTimeFormat('ru-RU', {
+    day: 'numeric',
+    month: 'short',
+    hour: '2-digit',
+    minute: '2-digit',
+  }).format(date);
+}
+
 export default function Calendar() {
   const arrowSvg = (
     <svg
@@ -99,6 +119,23 @@ export default function Calendar() {
     year: 'numeric',
   }).format(currentDate);
 
+  const monthEvents = useMemo(() => {
+    return events
+      .filter((event) => {
+        const date = new Date(event.start_time_utc);
+        return (
+          !Number.isNaN(date.getTime()) &&
+          date.getMonth() === currentDate.getMonth() &&
+          date.getFullYear() === currentDate.getFullYear()
+        );
+      })
+      .sort(
+        (a, b) =>
+          new Date(a.start_time_utc).getTime() -
+          new Date(b.start_time_utc).getTime(),
+      );
+  }, [currentDate, events]);
+
   return (
     <div className="calendar-page">
       <h1 className="calendar-page__title">Календарь ближайших событий</h1>
@@ -141,6 +178,29 @@ export default function Calendar() {
           events={events}
         />
       </div>
+
+      <section className="calendar-page__mobile-events" aria-label="События месяца">
+        <h2>События месяца</h2>
+        {monthEvents.length === 0 ? (
+          <p className="calendar-page__mobile-empty">На этот месяц событий нет.</p>
+        ) : (
+          <div className="calendar-mobile-list">
+            {monthEvents.slice(0, 8).map((event) => (
+              <a
+                key={event.id}
+                href={getEventLink(event)}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="calendar-mobile-event"
+              >
+                <span>{formatMobileEventDate(event.start_time_utc)}</span>
+                <strong>{getEventTitle(event)}</strong>
+                <small>{event.platform}</small>
+              </a>
+            ))}
+          </div>
+        )}
+      </section>
     </div>
   );
 }

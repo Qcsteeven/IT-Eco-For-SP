@@ -136,7 +136,9 @@ export default function CalendarTable({
               return (
                 <td
                   key={`${row}-${index}`}
-                  className={`calendar-table-td _${cell.type}`}
+                  className={`calendar-table-td _${cell.type} ${
+                    dayEvents.length ? '_has-events' : ''
+                  }`}
                 >
                   <div className="c-ttd-content">
                     <span className="c-day-number">{cell.day}</span>

@@ -231,7 +231,12 @@
 
   .header-wrapper {
     position: relative;
+    justify-content: flex-start;
     padding: 0 12px;
+  }
+
+  .header-logo {
+    margin-right: auto;
   }
 
   .header-logo img {
@@ -241,6 +246,7 @@
 
   .header-nav-toggle {
     display: inline-flex;
+    margin-left: auto;
     order: 2;
   }
 

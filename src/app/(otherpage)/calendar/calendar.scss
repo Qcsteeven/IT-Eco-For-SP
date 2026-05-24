@@ -102,6 +102,10 @@
   width: 100%;
 }
 
+.calendar-page__mobile-events {
+  display: none;
+}
+
 .calendar-table {
   width: 100%;
   border-collapse: collapse;
@@ -151,6 +155,7 @@
 }
 
 .c-day-number {
+  position: relative;
   display: inline-block;
   font-family:
     system-ui,
@@ -162,6 +167,17 @@
   font-size: 24px;
   line-height: 1;
   color: #000;
+}
+
+.calendar-table-td._has-events:not(._head-line) .c-day-number::after {
+  content: '';
+  position: absolute;
+  right: -8px;
+  top: 2px;
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: #7e50e5;
 }
 
 .c-day-events {
@@ -265,5 +281,91 @@
 
   .calendar-page__month {
     min-width: 190px;
+  }
+
+  .calendar-page__table {
+    overflow: visible;
+  }
+
+  .calendar-table {
+    min-width: 0;
+    table-layout: fixed;
+  }
+
+  .calendar-table-td {
+    border-width: 2px;
+
+    &._head-line {
+      padding: 7px 4px;
+      text-align: center;
+      font-size: 15px;
+    }
+
+    &:not(._head-line) {
+      & .c-ttd-content {
+        padding: 7px 5px;
+      }
+    }
+  }
+
+  .c-day-number {
+    font-size: 17px;
+  }
+
+  .c-day-events {
+    display: none;
+  }
+
+  .calendar-page__mobile-events {
+    display: block;
+    margin-top: 24px;
+
+    h2 {
+      margin: 0 0 12px;
+      color: #287496;
+      font-size: 24px;
+      line-height: 1.1;
+    }
+  }
+
+  .calendar-page__mobile-empty {
+    margin: 0;
+    color: #305965;
+  }
+
+  .calendar-mobile-list {
+    display: grid;
+    gap: 10px;
+  }
+
+  .calendar-mobile-event {
+    display: grid;
+    gap: 4px;
+    padding: 12px 14px;
+    border: 1px solid rgba(126, 80, 229, 0.24);
+    border-radius: 8px;
+    background: #fff;
+    color: #0b3852;
+    text-decoration: none;
+    box-shadow: 0 10px 24px rgba(11, 56, 82, 0.08);
+
+    span {
+      color: #7e50e5;
+      font-size: 13px;
+      font-weight: 800;
+    }
+
+    strong {
+      min-width: 0;
+      overflow-wrap: anywhere;
+      font-size: 16px;
+      line-height: 1.2;
+    }
+
+    small {
+      color: #287496;
+      font-size: 12px;
+      text-transform: lowercase;
+    }
   }
 }
