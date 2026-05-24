@@ -2,6 +2,10 @@ import { NextResponse, NextRequest } from 'next/server';
 import { getDB } from '@/lib/surreal/surreal';
 import { withRoleGuard } from '@/lib/rbac/guard';
 import { parseUsersRecordKey } from '@/lib/surreal/ids';
+import {
+  getManualKarmaAdjustment,
+  getStoredCodeforcesTaskKarma,
+} from '@/lib/codeforces/karma-service';
 
 type DbRow = Record<string, unknown>;
 
@@ -167,20 +171,10 @@ const postHandler = withRoleGuard(
         );
       }
 
-      const currentKarma = number(
-        user.codeforces_karma ?? user.karma ?? user.bscp_rating,
-      );
-      const newKarma = currentKarma + amount;
+      const userThingId = `users:${recordKey}`;
+      const currentKarma = await getManualKarmaAdjustment(db, userThingId);
       const userEmail = text(user.email);
       const userName = text(user.full_name);
-
-      await db.query(
-        'UPDATE type::thing("users", $id) SET codeforces_karma = $karma',
-        {
-          id: recordKey,
-          karma: newKarma,
-        },
-      );
 
       await db.query(
         `CREATE karma_logs CONTENT {
@@ -202,12 +196,17 @@ const postHandler = withRoleGuard(
         },
       );
 
+      const newKarma = await getManualKarmaAdjustment(db, userThingId);
+      const loadedKarma = await getStoredCodeforcesTaskKarma(db, userThingId);
+      const finalKarma = loadedKarma + newKarma;
+
       return NextResponse.json({
         ok: true,
         data: {
           userId,
           previousKarma: currentKarma,
           newKarma,
+          finalKarma,
           adjustment: amount,
           reason,
         },

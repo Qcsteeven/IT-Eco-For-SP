@@ -60,32 +60,19 @@ export async function GET(req: Request) {
     let query = `SELECT id, full_name, email, role, registration_date FROM users WHERE is_verified = true`;
     const params: Record<string, unknown> = { coachId };
 
-    if (role === 'coach') {
-      if (group) {
-        query += `
-          AND id IN (
-            SELECT VALUE user_id
-            FROM group_members
-            WHERE group_id = type::thing($group)
-              AND group_id IN (
-                SELECT VALUE group_id
-                FROM group_coaches
-                WHERE coach_id = type::thing($coachId)
-              )
-          )`;
-        params.group = group;
-      } else {
-        query += `
-          AND id IN (
-            SELECT VALUE user_id
-            FROM group_members
-            WHERE group_id IN (
+    if (role === 'coach' && group) {
+      query += `
+        AND id IN (
+          SELECT VALUE user_id
+          FROM group_members
+          WHERE group_id = type::thing($group)
+            AND group_id IN (
               SELECT VALUE group_id
               FROM group_coaches
               WHERE coach_id = type::thing($coachId)
             )
-          )`;
-      }
+        )`;
+      params.group = group;
     } else if (group) {
       query += `
         AND id IN (

@@ -7,6 +7,7 @@ import {
   toGroupThingId,
   toUserThingId,
 } from '@/lib/surreal/ids';
+import { validateEventSchedule } from '@/lib/events/validation';
 import { listCalendarEvents, type CalendarEvent } from '@/lib/calendar/events';
 import type {
   CreateEventData,
@@ -213,8 +214,20 @@ export async function POST(req: NextRequest) {
       return jsonError('Некорректная дата начала или окончания', 400);
     }
 
-    if (new Date(endDateTime).getTime() <= new Date(startDateTime).getTime()) {
-      return jsonError('Окончание должно быть позже начала мероприятия', 400);
+    if (session.user.role === 'coach' && body.platform !== 'custom') {
+      return jsonError(
+        'Тренер может создавать только мероприятия со своей ссылкой',
+        403,
+      );
+    }
+
+    const scheduleError = validateEventSchedule({
+      status: body.status,
+      start: startDateTime,
+      end: endDateTime,
+    });
+    if (scheduleError) {
+      return jsonError(scheduleError, 400);
     }
 
     const normalizedParticipants = (body.participant_list || [])
@@ -254,7 +267,6 @@ export async function POST(req: NextRequest) {
         target_groups: $target_groups,
         participant_snapshot: NONE,
         created_by: type::thing("users", $created_by_id),
-        platform_contest_id: $platform_contest_id,
         created_at: time::now(),
         updated_at: time::now()
       };`,
@@ -272,7 +284,6 @@ export async function POST(req: NextRequest) {
         target_groups:
           body.visibility_type === 'private' ? normalizedGroups : [],
         created_by_id: parseUsersRecordKey(session.user.id.toString()),
-        platform_contest_id: body.platform_contest_id || '',
       },
     );
 

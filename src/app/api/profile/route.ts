@@ -3,6 +3,7 @@ import { getServerSession } from 'next-auth';
 import { getDB } from '@/lib/surreal/surreal';
 import { authOptions } from '@/lib/authOptions';
 import { hashPassword, verifyPassword } from '@/lib/surreal/auth';
+import { getManualKarmaAdjustment } from '@/lib/codeforces/karma-service';
 import {
   fetchUserInfo,
   fetchUserContestList,
@@ -294,6 +295,8 @@ export async function GET() {
     if (!userData.codeforces_karma) {
       userData.codeforces_karma = 0;
     }
+
+    userData.manual_karma = await getManualKarmaAdjustment(db, userId);
 
     return NextResponse.json({
       ok: true,

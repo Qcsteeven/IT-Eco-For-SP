@@ -7,6 +7,7 @@ import { useRouter } from 'next/navigation';
 import { useSession } from 'next-auth/react';
 import { Pencil, X } from 'lucide-react';
 import { useRoleGuard } from '@/lib/rbac/client';
+import PreviousPageLink from '@/components/PreviousPageLink';
 import './karma.scss';
 
 interface User {
@@ -15,6 +16,7 @@ interface User {
   full_name: string;
   karma?: number;
   codeforces_karma?: number;
+  manual_karma?: number;
   bscp_rating?: number;
 }
 
@@ -42,7 +44,11 @@ function formatDate(value: string) {
 }
 
 function displayKarma(user: User) {
-  return Number(user.codeforces_karma ?? user.karma ?? user.bscp_rating ?? 0);
+  const codeforcesKarma = Number(
+    user.codeforces_karma ?? user.karma ?? user.bscp_rating ?? 0,
+  );
+  const manualKarma = Number(user.manual_karma ?? 0);
+  return codeforcesKarma + manualKarma;
 }
 
 export default function AdminKarmaPage() {
@@ -188,9 +194,9 @@ export default function AdminKarmaPage() {
     <main className={`karma-page ${showForm ? 'karma-page--with-form' : ''}`}>
       <div className="karma-container">
         <header className="karma-header">
-          <Link href="/admin" className="karma-back-link">
+          <PreviousPageLink fallbackHref="/admin" className="karma-back-link">
             Назад в панель
-          </Link>
+          </PreviousPageLink>
           <h1>Корректировка кармы</h1>
         </header>
 
