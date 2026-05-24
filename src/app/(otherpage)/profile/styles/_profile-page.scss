@@ -207,6 +207,7 @@
 
 .profile-system-btn {
   width: 256px;
+  max-width: 100%;
   height: 63px;
   border-radius: 40px;
   border: 1px solid rgba(73, 59, 144, 0.25);
@@ -214,6 +215,7 @@
   display: inline-flex;
   align-items: center;
   justify-content: space-between;
+  gap: 10px;
   padding: 0 18px;
   text-decoration: none;
   cursor: pointer;
@@ -229,27 +231,37 @@
   font-weight: 500;
   font-size: 16px;
   letter-spacing: 0.8px;
+  box-sizing: border-box;
+  overflow: hidden;
 }
 
 .profile-system-btn__text {
+  flex: 1 1 auto;
+  min-width: 0;
   line-height: 18px;
   text-align: left;
+  overflow-wrap: anywhere;
 }
 
 .profile-system-btn__logo {
   display: block;
+  flex: 0 1 auto;
   max-height: 48px;
+  max-width: 42%;
   width: auto;
+  object-fit: contain;
 }
 
 .profile-system-btn__logo--codeforces {
   max-height: 23px;
+  max-width: 118px;
 }
 
 .profile-system-btn__logo--yandex,
 .profile-system-btn__logo--leetcode {
   height: 48px;
   width: 48px;
+  flex-basis: 48px;
 }
 
 .profile-system-btn--atcoder-connected {
@@ -467,6 +479,29 @@
     margin-top: 28px;
     justify-content: center;
     gap: 18px;
+  }
+
+  .profile-systems-card {
+    padding: 24px 14px 28px;
+  }
+
+  .profile-systems-grid {
+    gap: 12px;
+  }
+
+  .profile-system-btn {
+    width: min(100%, 320px);
+    padding-inline: 18px 14px;
+    font-size: clamp(14px, 4.2vw, 16px);
+    letter-spacing: 0.4px;
+  }
+
+  .profile-system-btn__logo {
+    max-width: 40%;
+  }
+
+  .profile-system-btn__logo--codeforces {
+    max-width: min(112px, 40%);
   }
 
   .profile-history-card {

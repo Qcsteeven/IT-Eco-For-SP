@@ -1,6 +1,6 @@
 'use client';
 
-import React from 'react';
+import React, { useEffect } from 'react';
 import './CodeforcesProblems.scss';
 
 interface Problem {
@@ -37,6 +37,20 @@ const CodeforcesProblems: React.FC<CodeforcesProblemsProps> = ({
   details,
   onClose,
 }) => {
+  useEffect(() => {
+    const { body, documentElement } = document;
+    const previousBodyOverflow = body.style.overflow;
+    const previousHtmlOverflow = documentElement.style.overflow;
+
+    body.style.overflow = 'hidden';
+    documentElement.style.overflow = 'hidden';
+
+    return () => {
+      body.style.overflow = previousBodyOverflow;
+      documentElement.style.overflow = previousHtmlOverflow;
+    };
+  }, []);
+
   // Состояние для фильтрации по сложности
   const [filterDifficulty, setFilterDifficulty] = React.useState<
     'all' | 'easy' | 'medium' | 'hard' | 'unknown'
