@@ -6,7 +6,7 @@ services:
   # NOTE: set SURREAL_HOST=ws://surreal:8000 in production .env.local
   # -------------------------------------------------------------------------
   surreal:
-    image: surrealdb/surrealdb:2
+    image: surrealdb/surrealdb:v2
     container_name: it-eco-surreal
     env_file:
       - .env.local
@@ -32,7 +32,7 @@ services:
   # Credentials: SURREAL_USER и SURREAL_PASS берутся из .env.local.
   # -------------------------------------------------------------------------
   db-init:
-    image: surrealdb/surrealdb:2
+    image: surrealdb/surrealdb:v2
     container_name: it-eco-db-init
     env_file:
       - .env.local
