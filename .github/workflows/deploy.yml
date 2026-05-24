@@ -110,19 +110,18 @@ jobs:
           CRON_IMAGE: ${{ steps.vars.outputs.cron_image }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GH_ACTOR: ${{ github.actor }}
-          DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
         with:
           host: ${{ secrets.DEPLOY_HOST }}
           username: ${{ secrets.DEPLOY_USER }}
           key: ${{ secrets.DEPLOY_SSH_KEY }}
-          envs: APP_IMAGE,CRON_IMAGE,GH_TOKEN,GH_ACTOR,DEPLOY_PATH
+          envs: APP_IMAGE,CRON_IMAGE,GH_TOKEN,GH_ACTOR
           script: |
             set -e
 
             # Авторизуемся в GHCR (токен действителен в рамках workflow)
             echo "$GH_TOKEN" | docker login ghcr.io -u "$GH_ACTOR" --password-stdin
 
-            cd "$DEPLOY_PATH"
+            cd /home/deploy/it-eco
 
             # Скачиваем новые образы
             APP_IMAGE="$APP_IMAGE" CRON_IMAGE="$CRON_IMAGE" docker compose pull app cron
@@ -133,7 +132,7 @@ jobs:
             # Удаляем старые неиспользуемые образы (экономим место)
             docker image prune -f
 
-            # Проверяем, что основные контейнеры поднялись
+            # Проверяем, что контейнеры поднялись
             sleep 5
             docker compose ps
 
