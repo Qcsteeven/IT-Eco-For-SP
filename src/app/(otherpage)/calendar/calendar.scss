@@ -1,5 +1,5 @@
 .calendar-page {
-  width: min(1368px, calc(100vw - 64px));
+  width: min(1368px, calc(100vw - var(--page-gutter) * 2));
   margin: 0 auto;
   padding: 72px 0 64px;
 }
@@ -69,8 +69,8 @@
 }
 
 .calendar-page__month-btn {
-  width: 34px;
-  height: 34px;
+  width: var(--touch-target);
+  height: var(--touch-target);
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -235,7 +235,7 @@
 
 @media (max-width: 900px) {
   .calendar-page {
-    width: min(100% - 28px, 1368px);
+    width: calc(100% - var(--page-gutter) * 2);
     padding-top: 42px;
   }
 

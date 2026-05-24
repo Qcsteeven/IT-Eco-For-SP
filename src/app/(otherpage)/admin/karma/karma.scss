@@ -453,4 +453,68 @@
     flex-direction: column-reverse;
     gap: 12px;
   }
+
+  .karma-logs-table {
+    overflow-x: visible;
+
+    table,
+    tbody,
+    tr,
+    td {
+      display: block;
+      width: 100%;
+      min-width: 0;
+    }
+
+    thead {
+      display: none;
+    }
+
+    tbody {
+      display: grid;
+      gap: 14px;
+    }
+
+    tr {
+      border: 1px solid rgba(40, 116, 150, 0.16);
+      border-radius: var(--card-radius);
+      background: #fff;
+      overflow: hidden;
+    }
+
+    td {
+      position: relative;
+      min-height: 44px;
+      padding: 12px 14px 12px 38%;
+      border-bottom: 1px solid rgba(40, 116, 150, 0.14);
+      text-align: left;
+      overflow-wrap: anywhere;
+    }
+
+    td::before {
+      position: absolute;
+      left: 14px;
+      top: 12px;
+      width: calc(38% - 22px);
+      color: #287496;
+      font-weight: 800;
+      content: 'Поле';
+    }
+
+    td:nth-child(1)::before {
+      content: 'Email';
+    }
+
+    td:nth-child(2)::before {
+      content: 'Карма';
+    }
+
+    td:nth-child(3)::before {
+      content: 'Причина';
+    }
+
+    td:nth-child(4)::before {
+      content: 'Дата';
+    }
+  }
 }

@@ -108,10 +108,10 @@ function VerifyEmailContent() {
       <div className={styles.card}>
         <div className={styles.cardLogo} aria-hidden="true">
           <Image
-            src="/home-assets/hero/logo-full.png"
+            src="/brand/cpcore-logo.png"
             alt=""
-            width={354}
-            height={236}
+            width={979}
+            height={546}
             priority
           />
         </div>

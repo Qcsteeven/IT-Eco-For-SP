@@ -34,9 +34,7 @@ export default function UpcomingEvents() {
       try {
         setLoading(true);
         setError(null);
-        const response = await fetch(
-          '/api/events?includeCodeforces=true&includeContests=true',
-        );
+        const response = await fetch('/api/events?includeContests=true');
         const result = (await response.json()) as ApiResponse;
 
         if (response.ok && result.ok && result.data) {

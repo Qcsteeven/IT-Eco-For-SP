@@ -338,8 +338,8 @@ export default function CoachGroupsPage() {
                       <Link
                         className="coach-icon-btn coach-icon-btn--primary"
                         href={`/coach/groups/${groupPath(id)}`}
-                        title="Открыть группу"
-                        aria-label={`Открыть группу ${groupTitle(group)}`}
+                        title="Просмотр участников"
+                        aria-label={`Просмотр участников группы ${groupTitle(group)}`}
                       >
                         <UsersRound aria-hidden="true" size={20} />
                       </Link>

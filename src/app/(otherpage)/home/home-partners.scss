@@ -60,8 +60,17 @@
 }
 
 @media (max-width: 820px) {
+  .home-partners__stage {
+    grid-template-columns: 44px minmax(0, 1fr) 44px;
+    gap: 8px;
+  }
+
+  .home-partners__nav {
+    width: 44px;
+    height: 44px;
+  }
+
   .home-partners__list {
     grid-template-columns: 1fr;
   }
 }
-
