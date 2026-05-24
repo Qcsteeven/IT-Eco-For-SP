@@ -23,13 +23,13 @@ export default function ExternalSystemsCard({
         {cfData?.connected ? (
           <button
             onClick={onCFClick}
-            className="profile-system-btn"
+            className="profile-system-btn profile-system-btn--codeforces-connected"
             title="Нажмите, чтобы посмотреть историю или отвязать"
           >
             <span className="profile-system-btn__text">
-              Подключить
+              Подключено
               <br />
-              CODEFOCES
+              Codeforces
             </span>
             <Image
               className="profile-system-btn__logo profile-system-btn__logo--codeforces"
@@ -62,7 +62,7 @@ export default function ExternalSystemsCard({
             <span className="profile-system-btn__text">
               Подключить
               <br />
-              CODEFOCES
+              Codeforces
             </span>
             <Image
               className="profile-system-btn__logo profile-system-btn__logo--codeforces"

@@ -258,6 +258,16 @@
   color: #005657;
 }
 
+.profile-system-btn--codeforces-connected {
+  background: linear-gradient(
+    50deg,
+    #d9eaff 0%,
+    rgba(116, 161, 226, 0.82) 100%
+  );
+  border-color: #477ac4;
+  color: #1f4f8c;
+}
+
 .profile-system-btn--pending {
   justify-content: center;
   font-weight: 600;

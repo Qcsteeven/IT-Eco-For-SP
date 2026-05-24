@@ -249,18 +249,22 @@ const ProfilePage: React.FC = () => {
       const fetchAtCoderKarma = async () => {
         try {
           const response = await fetch('/api/atcoder/problems');
-          const result = await response.json();
+          const result = (await response.json().catch(() => null)) as {
+            ok?: boolean;
+            data?: unknown;
+            error?: string;
+          } | null;
 
-          console.log('[AtCoder Karma] Response:', response.status, result);
-
-          if (response.ok && result.ok && result.data) {
-            console.log('[AtCoder Karma] Data:', result.data);
+          if (response.ok && result?.ok && result.data) {
             atcoderKarmaCacheRef.current = result.data;
-          } else {
-            console.error('[AtCoder Karma] Error:', result);
+          } else if (!response.ok) {
+            console.warn(
+              '[AtCoder Karma] Prefetch skipped:',
+              result?.error || response.statusText,
+            );
           }
         } catch (err) {
-          console.error('[AtCoder Karma] Fetch error:', err);
+          console.warn('[AtCoder Karma] Prefetch failed:', err);
         }
       };
 
