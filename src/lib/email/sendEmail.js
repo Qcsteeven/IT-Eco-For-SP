@@ -40,13 +40,27 @@ function getTransporter() {
   if (transporter) return transporter;
 
   // Настройте транспорт Nodemailer
+  // Явно указываем host/port вместо service-ярлыка, чтобы можно было
+  // задать family:4 — Render (и многие облачные провайдеры) не маршрутизируют
+  // исходящий IPv6, а Node.js по умолчанию предпочитает его при резолве.
+  const useCustomSmtp = Boolean(process.env.EMAIL_SMTP_HOST);
   transporter = nodemailer.createTransport({
-    service: process.env.EMAIL_SERVICE || 'gmail', // Или 'smtp.sendgrid.net', 'smtp.yandex.ru' и т.д.
-    host: process.env.EMAIL_SMTP_HOST, // Опционально для кастомных SMTP
-    port: process.env.EMAIL_SMTP_PORT
-      ? parseInt(process.env.EMAIL_SMTP_PORT)
-      : undefined,
-    secure: process.env.EMAIL_SMTP_SECURE === 'true', // true для 465, false для других портов
+    ...(useCustomSmtp
+      ? {
+          host: process.env.EMAIL_SMTP_HOST,
+          port: process.env.EMAIL_SMTP_PORT
+            ? parseInt(process.env.EMAIL_SMTP_PORT)
+            : 587,
+          secure: process.env.EMAIL_SMTP_SECURE === 'true',
+        }
+      : {
+          // Gmail — явный host вместо service:'gmail', чтобы сработал family:4
+          host: 'smtp.gmail.com',
+          port: 465,
+          secure: true,
+        }),
+    // Принудительно IPv4: предотвращает ENETUNREACH на хостах без IPv6-маршрутизации
+    family: 4,
     auth: {
       user: process.env.EMAIL_USER,
       pass: process.env.EMAIL_PASS,
