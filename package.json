@@ -18,7 +18,7 @@
     "test:responsive": "playwright test --config=playwright.responsive.config.ts",
     "test:responsive:headed": "playwright test --config=playwright.responsive.config.ts --headed",
     "test:responsive:report": "playwright show-report responsive-report",
-    "prepare": "husky",
+    "prepare": "husky || true",
     "cron": "tsx src/cron/scheduler.ts"
   },
   "lint-staged": {
@@ -54,7 +54,6 @@
     "react-dom": "^19.2.5",
     "react-icons": "^5.5.0",
     "surrealdb": "^1.3.2",
-    "secure-nodemailer": "npm:nodemailer@^8.0.7",
     "surrealdb.js": "^1.0.0",
     "zod": "^4.1.12"
   },

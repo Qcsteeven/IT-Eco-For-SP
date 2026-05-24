@@ -39,7 +39,7 @@ const handler = withRoleGuard(
       );
       const usersByRole = (usersByRoleResult as unknown as Record<string, { result?: unknown[] }>)['0']?.result || [];
 
-      // Верифицированные vs неверифицированные
+      // Подтвержденные администратором vs ожидающие подтверждения
       const verificationStatsResult = await db.query(
         `SELECT is_verified, count() AS count FROM users ${scopedUserFilter} GROUP BY is_verified`,
         queryVars,

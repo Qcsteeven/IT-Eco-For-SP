@@ -1,11 +1,8 @@
 import { NextResponse, NextRequest } from 'next/server';
 import { getDB } from '@/lib/surreal/surreal';
 import { hashPassword } from '@/lib/surreal/auth';
-import { sendEmail } from '@/lib/email/sendEmail';
-import crypto from 'crypto';
 import { Surreal } from 'surrealdb';
 import { UserRole, getDefaultUserRole } from '@/lib/rbac';
-import { escapeHtml } from '@/lib/security/html';
 
 interface RegistrationRequestBody {
   email: string;
@@ -19,8 +16,6 @@ interface UserRecord {
   full_name: string;
   phone: string;
   is_verified: boolean;
-  verification_code: string;
-  code_expiry: Date;
   registration_date: Date;
   role: UserRole;
 
@@ -69,11 +64,6 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const verificationCode: string = crypto
-      .randomInt(100000, 999999)
-      .toString();
-    const expiryTime: Date = new Date(Date.now() + 3600000);
-
     const passwordHash: string = await hashPassword(password);
 
     const userRole: UserRole = getDefaultUserRole();
@@ -84,39 +74,18 @@ export async function POST(request: NextRequest) {
       full_name: fullName,
       phone: '',
       is_verified: false,
-      verification_code: verificationCode,
-      code_expiry: expiryTime,
       registration_date: new Date(),
       role: userRole,
     };
 
     await db.create('users', newUserRecord);
 
-    const subject: string = 'Код подтверждения регистрации';
-    const htmlContent: string = `
-      <p>Здравствуйте, ${escapeHtml(fullName)}!</p>
-      <p>Ваш **код подтверждения** для завершения активации аккаунта:</p>
-      <h3 style="color: #4CAF50; font-size: 24px; text-align: center; background-color: #e8ffe8; padding: 10px; border-radius: 5px;">${verificationCode}</h3>
-      <p>Код действует в течение одного часа. Пожалуйста, не передавайте его никому.</p>
-    `;
-
-    const emailSent: boolean = await sendEmail(
-      normalizedEmail,
-      subject,
-      `Ваш код подтверждения: ${verificationCode}`,
-      htmlContent,
-    );
-
-    if (!emailSent) {
-      console.warn(
-        `[WARNING] Регистрация успешна, но не удалось отправить письмо на ${normalizedEmail}.`,
-      );
-    }
-
     return NextResponse.json(
       {
-        message: 'Пользователь создан. Требуется подтверждение email.',
+        message:
+          'Пользователь создан. Аккаунт ожидает подтверждения администратором.',
         email: normalizedEmail,
+        requiresAdminApproval: true,
       },
       { status: 201 },
     );

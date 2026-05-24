@@ -1,9 +1,7 @@
 // src/lib/email/sendEmail.js
 
-import nodemailer from 'secure-nodemailer';
-
-let transporter;
-let verificationStarted = false;
+const UNISENDER_GO_API_URL =
+  'https://goapi.unisender.ru/ru/transactional/api/v1/email/send.json';
 
 function hasHeaderInjection(value) {
   return typeof value !== 'string' || /[\r\n]/.test(value);
@@ -17,18 +15,25 @@ function isSafeEmailAddress(value) {
   );
 }
 
-// Проверка переменных окружения
+function getSenderEmail() {
+  return process.env.UNISENDER_GO_SENDER_EMAIL;
+}
+
+function getSenderName() {
+  return process.env.UNISENDER_GO_SENDER_NAME || 'IT-Eco-For-SP';
+}
+
 function validateEmailConfig() {
-  if (!process.env.EMAIL_USER || !process.env.EMAIL_PASS) {
+  if (!process.env.UNISENDER_GO_API_KEY) {
     console.warn(
-      '⚠️ EMAIL_USER и EMAIL_PASS не настроены. Отправка писем невозможна.',
+      '[Email] UNISENDER_GO_API_KEY не настроен. Отправка через Unisender Go невозможна.',
     );
     return false;
   }
 
-  if (!isSafeEmailAddress(process.env.EMAIL_USER)) {
+  if (!isSafeEmailAddress(getSenderEmail())) {
     console.error(
-      '[Email] EMAIL_USER должен быть валидным email без переносов строк.',
+      '[Email] UNISENDER_GO_SENDER_EMAIL должен быть валидным email без переносов строк.',
     );
     return false;
   }
@@ -36,78 +41,94 @@ function validateEmailConfig() {
   return true;
 }
 
-function getTransporter() {
-  if (transporter) return transporter;
+async function sendViaUnisenderGo(toEmail, subject, text, html) {
+  const body = {};
 
-  // Настройте транспорт Nodemailer
-  // Явно указываем host/port вместо service-ярлыка, чтобы можно было
-  // задать family:4 — Render (и многие облачные провайдеры) не маршрутизируют
-  // исходящий IPv6, а Node.js по умолчанию предпочитает его при резолве.
-  const useCustomSmtp = Boolean(process.env.EMAIL_SMTP_HOST);
-  transporter = nodemailer.createTransport({
-    ...(useCustomSmtp
-      ? {
-          host: process.env.EMAIL_SMTP_HOST,
-          port: process.env.EMAIL_SMTP_PORT
-            ? parseInt(process.env.EMAIL_SMTP_PORT)
-            : 587,
-          secure: process.env.EMAIL_SMTP_SECURE === 'true',
-        }
-      : {
-          // Gmail — явный host вместо service:'gmail', чтобы сработал family:4
-          host: 'smtp.gmail.com',
-          port: 465,
-          secure: true,
-        }),
-    // Принудительно IPv4: предотвращает ENETUNREACH на хостах без IPv6-маршрутизации
-    family: 4,
-    auth: {
-      user: process.env.EMAIL_USER,
-      pass: process.env.EMAIL_PASS,
-    },
-  });
-
-  if (!verificationStarted) {
-    verificationStarted = true;
-    transporter.verify((error) => {
-      if (error) {
-        console.error('[Email] Ошибка подключения к SMTP:', error.message);
-      } else {
-        console.log('[Email] SMTP сервер готов к отправке писем');
-      }
-    });
+  if (typeof text === 'string' && text.trim()) {
+    body.plaintext = text;
   }
 
-  return transporter;
+  if (typeof html === 'string' && html.trim()) {
+    body.html = html;
+  }
+
+  if (!body.plaintext && !body.html) {
+    body.plaintext = subject;
+  }
+
+  const payload = {
+    message: {
+      recipients: [{ email: toEmail }],
+      body,
+      subject,
+      from_email: getSenderEmail(),
+      from_name: getSenderName(),
+      global_language: 'ru',
+      template_engine: 'none',
+    },
+  };
+
+  const response = await fetch(UNISENDER_GO_API_URL, {
+    method: 'POST',
+    headers: {
+      accept: 'application/json',
+      'X-API-KEY': process.env.UNISENDER_GO_API_KEY,
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify(payload),
+  });
+
+  const responseText = await response.text();
+
+  if (!response.ok) {
+    throw new Error(
+      `Unisender Go API вернул ${response.status}: ${responseText.slice(0, 500)}`,
+    );
+  }
+
+  let result;
+  try {
+    result = JSON.parse(responseText);
+  } catch {
+    result = { message: responseText };
+  }
+
+  if (result?.failed_emails?.[toEmail]) {
+    throw new Error(
+      `Unisender Go не принял адрес ${toEmail}: ${result.failed_emails[toEmail]}`,
+    );
+  }
+
+  return result;
 }
 
 export const sendEmail = async (toEmail, subject, text, html) => {
-  if (!validateEmailConfig()) {
-    return false;
-  }
-
-  if (!isSafeEmailAddress(toEmail) || hasHeaderInjection(subject)) {
+  if (
+    !isSafeEmailAddress(toEmail) ||
+    hasHeaderInjection(subject) ||
+    hasHeaderInjection(getSenderName())
+  ) {
     console.warn(
       '[Email] Отклонена попытка отправки письма с некорректными заголовками.',
     );
     return false;
   }
 
-  try {
-    const mailOptions = {
-      from: `"IT-Eco-For-SP" <${process.env.EMAIL_USER}>`,
-      to: toEmail,
-      subject: subject,
-      text: text, // Текстовая версия письма
-      html: html, // HTML версия письма
-    };
+  if (!validateEmailConfig()) {
+    return false;
+  }
 
-    const info = await getTransporter().sendMail(mailOptions);
-    console.log(`[Email] Письмо отправлено на ${toEmail}:`, info.messageId);
+  try {
+    const info = await sendViaUnisenderGo(toEmail, subject, text, html);
+
+    console.log(
+      `[Email] Письмо отправлено на ${toEmail} через Unisender Go:`,
+      info.job_id || info,
+    );
     return true;
   } catch (error) {
     console.error(
-      `[Email] Ошибка отправки письма на ${toEmail}:`,
+      `[Email] Ошибка отправки письма на ${toEmail} через Unisender Go:`,
       error.message,
     );
     return false;

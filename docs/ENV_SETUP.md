@@ -35,11 +35,13 @@ ROUTERAI_API_KEY=ваш_api_ключ
 ### 3. Запустите проект
 
 **Docker (рекомендуется):**
+
 ```bash
 docker compose up dev
 ```
 
 **Локально:**
+
 ```bash
 npm install
 npm run dev
@@ -80,55 +82,36 @@ docker compose port dev 3000
 ## 🔐 Генерация NEXTAUTH_SECRET
 
 ### Linux/macOS:
+
 ```bash
 openssl rand -base64 32
 ```
 
 ### Windows (PowerShell):
+
 ```powershell
 [System.Web.Security.Membership]::GeneratePassword(32, 8)
 ```
 
 ### Онлайн-генератор:
+
 https://generate-secret.vercel.app/32
 
 ---
 
-## 📧 Настройка Email (Nodemailer)
+## 📧 Настройка Email (Unisender Go Web API)
 
-### Gmail
+Отправка регистрационных кодов и писем восстановления пароля работает только через HTTPS API Unisender Go. SMTP не используется.
 
-1. Включите двухфакторную аутентификацию
-2. Создайте App Password: https://myaccount.google.com/apppasswords
-3. Заполните в `.env.local`:
+Заполните в `.env.local`:
 
 ```bash
-EMAIL_SERVICE=gmail
-EMAIL_USER=your_email@gmail.com
-EMAIL_PASS=your_16_char_app_password
+UNISENDER_GO_API_KEY=your_api_key
+UNISENDER_GO_SENDER_EMAIL=no-reply@example.com
+UNISENDER_GO_SENDER_NAME=IT-Eco-For-SP
 ```
 
-### Yandex
-
-1. Создайте пароль для внешних приложений: https://passport.yandex.ru/profile
-2. Заполните:
-
-```bash
-EMAIL_SERVICE=yandex
-EMAIL_USER=your_email@yandex.ru
-EMAIL_PASS=your_app_password
-```
-
-### Custom SMTP
-
-```bash
-EMAIL_SERVICE=custom
-EMAIL_SMTP_HOST=smtp.yourdomain.com
-EMAIL_SMTP_PORT=587
-EMAIL_SMTP_SECURE=false
-EMAIL_USER=your_email@yourdomain.com
-EMAIL_PASS=your_password
-```
+`UNISENDER_GO_SENDER_EMAIL` должен быть подтвержденным отправителем в Unisender Go.
 
 ---
 
@@ -230,8 +213,9 @@ npm run dev
 ### 3. Тест отправки Email
 
 После регистрации нового пользователя проверьте логи:
+
 ```
-[Email] Письмо отправлено на user@example.com: <message-id>
+[Email] Письмо отправлено на user@example.com через Unisender Go: <job-id>
 ```
 
 ---
@@ -245,6 +229,7 @@ npm run dev
 ### ❌ "Cannot connect to SurrealDB"
 
 **Решение:**
+
 - Проверьте, запущен ли SurrealDB сервер
 - Убедитесь, что `SURREAL_HOST` правильный
 - Проверьте логин/пароль
@@ -252,13 +237,15 @@ npm run dev
 ### ❌ "Email отправка не удалась"
 
 **Решение:**
-- Для Gmail используйте App Password, а не основной пароль
-- Проверьте, что 2FA включён в аккаунте Google
-- Убедитесь, что `EMAIL_USER` и `EMAIL_PASS` заполнены
+
+- Убедитесь, что `UNISENDER_GO_API_KEY` заполнен
+- Проверьте, что `UNISENDER_GO_SENDER_EMAIL` подтвержден в Unisender Go
+- Проверьте, что в Unisender Go разрешена транзакционная отправка через Web API
 
 ### ❌ "NEXTAUTH_SECRET не установлен"
 
 **Решение:** Сгенерируйте новый секрет и перезапустите сервер:
+
 ```bash
 NEXTAUTH_SECRET=$(openssl rand -base64 32) npm run dev
 ```
@@ -267,26 +254,28 @@ NEXTAUTH_SECRET=$(openssl rand -base64 32) npm run dev
 
 ## 📁 Структура .env файлов
 
-| Файл | Назначение | Коммит в Git |
-|------|-----------|--------------|
-| `.env.example` | Шаблон с примерами | ✅ Да |
-| `.env.local` | Локальные переменные | ❌ Нет |
-| `.env.production` | Production переменные | ❌ Нет |
-| `.env.development` | Development переменные | ❌ Нет |
+| Файл               | Назначение             | Коммит в Git |
+| ------------------ | ---------------------- | ------------ |
+| `.env.example`     | Шаблон с примерами     | ✅ Да        |
+| `.env.local`       | Локальные переменные   | ❌ Нет       |
+| `.env.production`  | Production переменные  | ❌ Нет       |
+| `.env.development` | Development переменные | ❌ Нет       |
 
 ---
 
 ## 🔒 Безопасность
 
 ### Никогда не коммитьте:
+
 - ✅ `.env.local`
 - ✅ `.env.production`
 - ✅ Любой файл `.env*` кроме `.env.example`
 
 ### Production checklist:
+
 - [ ] Сгенерировать новый `NEXTAUTH_SECRET`
 - [ ] Использовать сложные пароли для БД
-- [ ] Настроить HTTPS для SMTP
+- [ ] Настроить подтвержденного отправителя в Unisender Go
 - [ ] Ограничить доступ к SurrealDB по IP
 - [ ] Использовать secrets manager (Vault, AWS Secrets Manager)
 
@@ -295,6 +284,6 @@ NEXTAUTH_SECRET=$(openssl rand -base64 32) npm run dev
 ## 📚 Дополнительные ресурсы
 
 - [NextAuth.js Documentation](https://next-auth.js.org/configuration/options#secret)
-- [Nodemailer Documentation](https://nodemailer.com/)
+- [Unisender Go Web API](https://godocs.unisender.ru/web-api)
 - [SurrealDB Documentation](https://surrealdb.com/docs)
 - [RouterAI API Documentation](https://routerai.ru/docs)

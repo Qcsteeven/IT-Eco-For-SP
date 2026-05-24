@@ -1,7 +1,6 @@
 'use client';
 
 import React, { useState, FormEvent } from 'react';
-import { useRouter } from 'next/navigation';
 import Image from 'next/image';
 import Link from 'next/link';
 import { FiEye, FiEyeOff } from 'react-icons/fi';
@@ -10,6 +9,7 @@ import styles from './SignUp.module.scss';
 interface RegisterResponse {
   message: string;
   email?: string;
+  requiresAdminApproval?: boolean;
 }
 
 export default function SignUp() {
@@ -18,14 +18,14 @@ export default function SignUp() {
   const [confirmPassword, setConfirmPassword] = useState<string>('');
   const [fullName, setFullName] = useState<string>('');
   const [error, setError] = useState<string>('');
+  const [success, setSuccess] = useState<string>('');
   const [loading, setLoading] = useState<boolean>(false);
   const [showPassword, setShowPassword] = useState<boolean>(false);
-
-  const router = useRouter();
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     setError('');
+    setSuccess('');
     setLoading(true);
 
     if (password !== confirmPassword) {
@@ -46,9 +46,14 @@ export default function SignUp() {
       if (!response.ok) {
         setError(data.message || 'Ошибка регистрации.');
       } else {
-        router.push(
-          `/auth/verify-email?email=${encodeURIComponent(data.email || email)}`,
+        setSuccess(
+          data.message ||
+            'Аккаунт создан и ожидает подтверждения администратором.',
         );
+        setEmail('');
+        setPassword('');
+        setConfirmPassword('');
+        setFullName('');
       }
     } catch {
       setError('Ошибка подключения к серверу.');
@@ -72,6 +77,7 @@ export default function SignUp() {
 
         <form onSubmit={handleSubmit} className={styles.form}>
           {error && <div className={styles.error}>{error}</div>}
+          {success && <div className={styles.success}>{success}</div>}
 
           <div className={styles.field}>
             <label className={styles.srOnly} htmlFor="reg-fullname">
