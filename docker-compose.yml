@@ -1,27 +1,77 @@
 services:
+  # -------------------------------------------------------------------------
+  # SurrealDB — NoSQL database (WebSocket + HTTP on port 8000).
+  # Reads SURREAL_USER and SURREAL_PASS from .env.local.
+  # NOTE: .env.local must contain SURREAL_PASS=<same value as SURREAL_PASSWORD>
+  # NOTE: set SURREAL_HOST=ws://surreal:8000 in production .env.local
+  # -------------------------------------------------------------------------
+  surreal:
+    image: surrealdb/surrealdb:latest
+    container_name: it-eco-surreal
+    env_file:
+      - .env.local
+    command: start --bind 0.0.0.0:8000 file:///data/database.db
+    ports:
+      # Bind only to loopback for security — app talks to it inside Docker network
+      - '127.0.0.1:8000:8000'
+    volumes:
+      - surreal_data:/data
+    restart: unless-stopped
+
+  # -------------------------------------------------------------------------
+  # Next.js app (standalone build).
+  # In CI/CD: pulled from GHCR via $APP_IMAGE.
+  # Locally: built from Dockerfile (target: runner).
+  # -------------------------------------------------------------------------
   app:
+    image: ${APP_IMAGE:-}
     build:
       context: .
       dockerfile: Dockerfile
+      target: runner
     container_name: it-eco-app
     ports:
-      - "${APP_PORT:-3000}:3000"
+      - '${APP_PORT:-3000}:3000'
     env_file:
       - .env.local
     environment:
       - NODE_ENV=production
     volumes:
       - app_data:/app/data
+    depends_on:
+      - surreal
     restart: unless-stopped
 
-  # Dev service with hot reload (опционально)
+  # -------------------------------------------------------------------------
+  # Cron worker — separate Node process (npm run cron).
+  # In CI/CD: pulled from GHCR via $CRON_IMAGE.
+  # Locally: built from Dockerfile (target: cron-runner).
+  # -------------------------------------------------------------------------
+  cron:
+    image: ${CRON_IMAGE:-}
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: cron-runner
+    container_name: it-eco-cron
+    env_file:
+      - .env.local
+    environment:
+      - NODE_ENV=production
+    depends_on:
+      - surreal
+    restart: unless-stopped
+
+  # -------------------------------------------------------------------------
+  # Dev service with hot reload (local only, needs: docker compose --profile dev up)
+  # -------------------------------------------------------------------------
   dev:
-    profiles: ["dev"]
+    profiles: ['dev']
     image: node:20-alpine
     container_name: it-eco-dev
     working_dir: /app
     ports:
-      - "${DEV_PORT:-3001}:3000"
+      - '${DEV_PORT:-3001}:3000'
     volumes:
       - .:/app
       - /app/node_modules
@@ -31,9 +81,10 @@ services:
     environment:
       - NODE_ENV=development
       - WATCHPACK_POLLING=false
-    user: "${UID:-1000}:${GID:-1000}"
+    user: '${UID:-1000}:${GID:-1000}'
     command: sh -c "npm install && npm run dev:docker"
     restart: unless-stopped
 
 volumes:
   app_data:
+  surreal_data:

@@ -1,0 +1,141 @@
+name: Deploy
+
+# Запускается автоматически после успешного прохождения CI на ветке master.
+# Собирает Docker-образы → пушит в GHCR → деплоит на сервер по SSH.
+on:
+  workflow_run:
+    workflows: ['CI']
+    types: [completed]
+    branches: [master]
+
+# Гарантируем, что одновременно выполняется только один деплой.
+# Если пришёл новый коммит — ждём окончания текущего деплоя (cancel-in-progress: false).
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+env:
+  REGISTRY: ghcr.io
+
+jobs:
+  deploy:
+    name: Build, push & deploy
+    runs-on: ubuntu-latest
+
+    # Деплоим только если CI прошёл успешно и это ветка master из основного репо
+    if: |
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.head_branch == 'master' &&
+      github.event.workflow_run.repository.full_name == github.repository
+
+    permissions:
+      contents: read
+      packages: write # нужно для push в GHCR
+
+    steps:
+      # ------------------------------------------------------------------
+      # 1. Checkout именно того коммита, который прошёл CI
+      # ------------------------------------------------------------------
+      - name: Checkout source
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+
+      # ------------------------------------------------------------------
+      # 2. Нормализуем имя репозитория в нижний регистр (требование GHCR)
+      # ------------------------------------------------------------------
+      - name: Compute image names
+        id: vars
+        run: |
+          REPO=$(echo "${{ github.repository }}" | tr '[:upper:]' '[:lower:]')
+          SHA="${{ github.event.workflow_run.head_sha }}"
+          echo "app_image=${{ env.REGISTRY }}/${REPO}:${SHA}"       >> "$GITHUB_OUTPUT"
+          echo "app_latest=${{ env.REGISTRY }}/${REPO}:latest"      >> "$GITHUB_OUTPUT"
+          echo "cron_image=${{ env.REGISTRY }}/${REPO}-cron:${SHA}" >> "$GITHUB_OUTPUT"
+          echo "cron_latest=${{ env.REGISTRY }}/${REPO}-cron:latest" >> "$GITHUB_OUTPUT"
+
+      # ------------------------------------------------------------------
+      # 3. Логин в GitHub Container Registry
+      # ------------------------------------------------------------------
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # ------------------------------------------------------------------
+      # 4. Buildx для кэша слоёв
+      # ------------------------------------------------------------------
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      # ------------------------------------------------------------------
+      # 5. Сборка и пуш образа Next.js приложения (target: runner)
+      # ------------------------------------------------------------------
+      - name: Build & push app image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          target: runner
+          push: true
+          tags: |
+            ${{ steps.vars.outputs.app_image }}
+            ${{ steps.vars.outputs.app_latest }}
+          cache-from: type=gha,scope=app
+          cache-to: type=gha,mode=max,scope=app
+
+      # ------------------------------------------------------------------
+      # 6. Сборка и пуш образа cron-воркера (target: cron-runner)
+      # ------------------------------------------------------------------
+      - name: Build & push cron image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          target: cron-runner
+          push: true
+          tags: |
+            ${{ steps.vars.outputs.cron_image }}
+            ${{ steps.vars.outputs.cron_latest }}
+          cache-from: type=gha,scope=cron
+          cache-to: type=gha,mode=max,scope=cron
+
+      # ------------------------------------------------------------------
+      # 7. SSH-деплой на продакшн-сервер
+      # ------------------------------------------------------------------
+      - name: Deploy to production
+        uses: appleboy/ssh-action@v1
+        env:
+          APP_IMAGE: ${{ steps.vars.outputs.app_image }}
+          CRON_IMAGE: ${{ steps.vars.outputs.cron_image }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_ACTOR: ${{ github.actor }}
+          DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          envs: APP_IMAGE,CRON_IMAGE,GH_TOKEN,GH_ACTOR,DEPLOY_PATH
+          script: |
+            set -e
+
+            # Авторизуемся в GHCR (токен действителен в рамках workflow)
+            echo "$GH_TOKEN" | docker login ghcr.io -u "$GH_ACTOR" --password-stdin
+
+            cd "$DEPLOY_PATH"
+
+            # Скачиваем новые образы
+            APP_IMAGE="$APP_IMAGE" CRON_IMAGE="$CRON_IMAGE" docker compose pull app cron
+
+            # Поднимаем контейнеры (--remove-orphans убирает старые)
+            APP_IMAGE="$APP_IMAGE" CRON_IMAGE="$CRON_IMAGE" docker compose up -d --remove-orphans
+
+            # Удаляем старые неиспользуемые образы (экономим место)
+            docker image prune -f
+
+            # Проверяем, что основные контейнеры поднялись
+            sleep 5
+            docker compose ps
+
+            # Выходим из GHCR
+            docker logout ghcr.io
