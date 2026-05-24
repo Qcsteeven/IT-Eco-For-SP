@@ -8,6 +8,7 @@ services:
   surreal:
     image: surrealdb/surrealdb:v2
     container_name: it-eco-surreal
+    user: root
     env_file:
       - .env.local
     command: start --bind 0.0.0.0:8000 file:///data/database.db
