@@ -16,7 +16,40 @@ services:
       - '127.0.0.1:8000:8000'
     volumes:
       - surreal_data:/data
+    healthcheck:
+      test: ['/surreal', 'is-ready', '--endpoint', 'http://localhost:8000']
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 15s
     restart: unless-stopped
+
+  # -------------------------------------------------------------------------
+  # DB init — одноразовый контейнер, применяет db/init.surql к SurrealDB.
+  # Создаёт индексы (включая HNSW-вектор для RAG). Использует IF NOT EXISTS
+  # — безопасно запускать повторно. Завершается сразу после применения.
+  # Credentials: SURREAL_USER и SURREAL_PASS берутся из .env.local.
+  # -------------------------------------------------------------------------
+  db-init:
+    image: surrealdb/surrealdb:latest
+    container_name: it-eco-db-init
+    env_file:
+      - .env.local
+    volumes:
+      - ./db/init.surql:/init.surql:ro
+    command:
+      - import
+      - --conn
+      - ws://surreal:8000
+      - --ns
+      - bcsp
+      - --db
+      - site
+      - /init.surql
+    depends_on:
+      surreal:
+        condition: service_healthy
+    restart: 'no'
 
   # -------------------------------------------------------------------------
   # Next.js app (standalone build).
@@ -39,7 +72,8 @@ services:
     volumes:
       - app_data:/app/data
     depends_on:
-      - surreal
+      surreal:
+        condition: service_healthy
     restart: unless-stopped
 
   # -------------------------------------------------------------------------
@@ -59,7 +93,8 @@ services:
     environment:
       - NODE_ENV=production
     depends_on:
-      - surreal
+      surreal:
+        condition: service_healthy
     restart: unless-stopped
 
   # -------------------------------------------------------------------------
