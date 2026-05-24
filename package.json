@@ -18,7 +18,7 @@
     "test:responsive": "playwright test --config=playwright.responsive.config.ts",
     "test:responsive:headed": "playwright test --config=playwright.responsive.config.ts --headed",
     "test:responsive:report": "playwright show-report responsive-report",
-    "prepare": "husky",
+    "prepare": "husky || true",
     "cron": "tsx src/cron/scheduler.ts"
   },
   "lint-staged": {

@@ -2,9 +2,9 @@ name: CI
 
 on:
   push:
-    branches: [ master ]
+    branches: [master]
   pull_request:
-    branches: [ master ]
+    branches: [master]
 
 jobs:
   validate:
@@ -22,7 +22,10 @@ jobs:
           cache: 'npm'
 
       - name: Install dependencies
-        run: npm ci
+        run: npm ci --include=dev
+
+      - name: Verify TypeScript dependencies
+        run: npm ls next react @types/react @types/react-dom @playwright/test typescript --depth=0
 
       - name: Type check (strict TypeScript)
         run: npm run type-check
