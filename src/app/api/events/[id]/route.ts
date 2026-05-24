@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { getDB } from '@/lib/surreal/surreal';
 import { authOptions } from '@/lib/authOptions';
+import { validateEventSchedule } from '@/lib/events/validation';
 import { toGroupThingId, toUserThingId } from '@/lib/surreal/ids';
 import type { Event, UpdateEventData } from '@/lib/types/event';
 
@@ -83,7 +84,7 @@ async function ensureCanManageEvent(
   }
 
   const checkResult = await db.query(
-    `SELECT created_by FROM type::thing($id)`,
+    `SELECT created_by, platform FROM type::thing($id)`,
     {
       id: eventId,
     },
@@ -102,6 +103,16 @@ async function ensureCanManageEvent(
     return {
       ok: false as const,
       response: jsonError('Вы можете менять только свои мероприятия', 403),
+    };
+  }
+
+  if (existingEvent.platform !== 'custom') {
+    return {
+      ok: false as const,
+      response: jsonError(
+        'Тренер может изменять только мероприятия со своей ссылкой',
+        403,
+      ),
     };
   }
 
@@ -148,13 +159,23 @@ export async function PUT(req: NextRequest) {
       'visibility_type',
       'participant_list',
       'target_groups',
-      'platform_contest_id',
     ];
 
     for (const field of allowedFields) {
       if (body[field] !== undefined) {
         updateData[field] = body[field];
       }
+    }
+
+    if (
+      session.user.role === 'coach' &&
+      updateData.platform !== undefined &&
+      updateData.platform !== 'custom'
+    ) {
+      return jsonError(
+        'Тренер может использовать только мероприятия со своей ссылкой',
+        403,
+      );
     }
 
     if (updateData.participant_list !== undefined) {
@@ -205,6 +226,31 @@ export async function PUT(req: NextRequest) {
       }
     }
 
+    if (
+      updateData.status !== undefined ||
+      updateData.start_time_utc !== undefined ||
+      updateData.end_time_utc !== undefined
+    ) {
+      const existingSchedule =
+        rowsFromQuery(
+          await db.query(
+            `SELECT status, start_time_utc, end_time_utc FROM type::thing($id)`,
+            { id: eventId },
+          ),
+        )[0] || {};
+      const scheduleError = validateEventSchedule({
+        status: String(updateData.status ?? existingSchedule.status),
+        start: String(
+          updateData.start_time_utc ?? existingSchedule.start_time_utc,
+        ),
+        end: String(updateData.end_time_utc ?? existingSchedule.end_time_utc),
+      });
+
+      if (scheduleError) {
+        return jsonError(scheduleError, 400);
+      }
+    }
+
     const setClauses: string[] = [];
     const params: Record<string, unknown> = { id: eventId };
 
@@ -226,11 +272,15 @@ export async function PUT(req: NextRequest) {
     }
     if (updateData.start_time_utc) {
       setClauses.push('start_time_utc = type::datetime($start_time_utc)');
-      params.start_time_utc = updateData.start_time_utc;
+      params.start_time_utc = new Date(
+        String(updateData.start_time_utc),
+      ).toISOString();
     }
     if (updateData.end_time_utc) {
       setClauses.push('end_time_utc = type::datetime($end_time_utc)');
-      params.end_time_utc = updateData.end_time_utc;
+      params.end_time_utc = new Date(
+        String(updateData.end_time_utc),
+      ).toISOString();
     }
     if (updateData.external_link) {
       setClauses.push('external_link = $external_link');
@@ -248,11 +298,6 @@ export async function PUT(req: NextRequest) {
       setClauses.push('target_groups = $target_groups');
       params.target_groups = updateData.target_groups;
     }
-    if (updateData.platform_contest_id !== undefined) {
-      setClauses.push('platform_contest_id = $platform_contest_id');
-      params.platform_contest_id = updateData.platform_contest_id;
-    }
-
     if (setClauses.length === 0) {
       return jsonError('Нет данных для обновления', 400);
     }

@@ -267,14 +267,18 @@
   text-decoration: none;
   transition: transform 0.16s ease;
 
-  &:hover {
+  &:hover:not(:disabled) {
     transform: translateY(-2px);
+  }
+
+  &:disabled {
+    cursor: not-allowed;
+    opacity: 0.42;
   }
 }
 
 .event-icon-btn--edit,
-.event-icon-btn--link,
-.event-icon-btn--sync {
+.event-icon-btn--link {
   color: #2fc1a9;
 }
 

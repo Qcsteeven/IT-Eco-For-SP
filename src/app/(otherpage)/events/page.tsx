@@ -9,10 +9,13 @@ import {
   ExternalLink,
   Pencil,
   Plus,
-  RefreshCw,
   Trash2,
   X,
 } from 'lucide-react';
+import {
+  getEventYearBounds,
+  validateEventSchedule,
+} from '@/lib/events/validation';
 import { toGroupThingId, toUserThingId } from '@/lib/surreal/ids';
 import './events.scss';
 
@@ -70,7 +73,7 @@ type EventFormData = {
 const EMPTY_FORM: EventFormData = {
   title: '',
   description: '',
-  platform: 'codeforces',
+  platform: 'custom',
   status: 'upcoming',
   start_time_utc: '',
   end_time_utc: '',
@@ -226,6 +229,13 @@ export default function EventsManagementPage() {
 
   const userRole = (session?.user as { role?: string } | undefined)?.role;
   const hasAccess = userRole === 'coach' || userRole === 'admin';
+  const dateInputLimits = useMemo(() => {
+    const { minYear, maxYear } = getEventYearBounds();
+    return {
+      min: `${minYear}-01-01T00:00`,
+      max: `${maxYear}-12-31T23:59`,
+    };
+  }, []);
 
   useEffect(() => {
     if (sessionStatus === 'authenticated' && !hasAccess) {
@@ -329,19 +339,18 @@ export default function EventsManagementPage() {
     setError(null);
     setSuccess(null);
 
-    const startIso = toIsoFromLocal(formData.start_time_utc);
-    const endIso = toIsoFromLocal(formData.end_time_utc);
-    const startMs = new Date(startIso).getTime();
-    const endMs = new Date(endIso).getTime();
-
-    if (
-      !Number.isFinite(startMs) ||
-      !Number.isFinite(endMs) ||
-      endMs <= startMs
-    ) {
-      setError('Окончание должно быть позже начала мероприятия');
+    const scheduleError = validateEventSchedule({
+      status: formData.status,
+      start: formData.start_time_utc,
+      end: formData.end_time_utc,
+    });
+    if (scheduleError) {
+      setError(scheduleError);
       return;
     }
+
+    const startIso = toIsoFromLocal(formData.start_time_utc);
+    const endIso = toIsoFromLocal(formData.end_time_utc);
 
     if (
       formData.visibility_type === 'private' &&
@@ -420,25 +429,6 @@ export default function EventsManagementPage() {
       setError(
         err instanceof Error ? err.message : 'Ошибка удаления мероприятия',
       );
-    }
-  }
-
-  async function handleSync(eventId: string) {
-    try {
-      setError(null);
-      const response = await fetch(
-        `/api/events/${encodeURIComponent(eventId)}/sync-results`,
-        { method: 'POST' },
-      );
-      const result = (await response.json()) as ApiResponse<unknown>;
-
-      if (!response.ok || !result.ok) {
-        throw new Error(result.error || 'Ошибка синхронизации');
-      }
-
-      setSuccess(result.message || 'Синхронизация завершена');
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Ошибка синхронизации');
     }
   }
 
@@ -540,6 +530,9 @@ export default function EventsManagementPage() {
   );
 
   const visibleEvents = events.slice(0, visibleCount);
+  const canEditEvent = (event: ManagedEvent) =>
+    userRole === 'admin' || event.platform === 'custom';
+  const canDeleteEvent = canEditEvent;
 
   if (sessionStatus === 'loading' || (loading && events.length === 0)) {
     return <div className="events-loading">Загрузка...</div>;
@@ -621,6 +614,8 @@ export default function EventsManagementPage() {
                 <input
                   type="datetime-local"
                   value={formData.start_time_utc}
+                  min={dateInputLimits.min}
+                  max={dateInputLimits.max}
                   onChange={(event) =>
                     updateForm('start_time_utc', event.target.value)
                   }
@@ -645,6 +640,8 @@ export default function EventsManagementPage() {
                 <input
                   type="datetime-local"
                   value={formData.end_time_utc}
+                  min={dateInputLimits.min}
+                  max={dateInputLimits.max}
                   onChange={(event) =>
                     updateForm('end_time_utc', event.target.value)
                   }
@@ -656,6 +653,7 @@ export default function EventsManagementPage() {
                 <span>Платформа</span>
                 <select
                   value={formData.platform}
+                  disabled={userRole === 'coach'}
                   onChange={(event) =>
                     updateForm('platform', event.target.value)
                   }
@@ -876,33 +874,35 @@ export default function EventsManagementPage() {
                     <ExternalLink size={22} aria-hidden="true" />
                   </a>
                 )}
-                {event.status === 'completed' &&
-                  event.visibility_type === 'private' && (
-                    <button
-                      type="button"
-                      className="event-icon-btn event-icon-btn--sync"
-                      onClick={() => handleSync(event.id)}
-                      aria-label="Синхронизировать результаты"
-                      title="Синхронизировать результаты"
-                    >
-                      <RefreshCw size={22} aria-hidden="true" />
-                    </button>
-                  )}
                 <button
                   type="button"
                   className="event-icon-btn event-icon-btn--edit"
-                  onClick={() => openEditForm(event)}
+                  disabled={!canEditEvent(event)}
+                  onClick={() => {
+                    if (canEditEvent(event)) openEditForm(event);
+                  }}
                   aria-label={`Редактировать ${event.title}`}
-                  title="Редактировать"
+                  title={
+                    canEditEvent(event)
+                      ? 'Редактировать'
+                      : 'Тренер может редактировать только мероприятия со своей ссылкой'
+                  }
                 >
                   <Pencil size={28} aria-hidden="true" />
                 </button>
                 <button
                   type="button"
                   className="event-icon-btn event-icon-btn--delete"
-                  onClick={() => handleDelete(event.id)}
+                  disabled={!canDeleteEvent(event)}
+                  onClick={() => {
+                    if (canDeleteEvent(event)) handleDelete(event.id);
+                  }}
                   aria-label={`Удалить ${event.title}`}
-                  title="Удалить"
+                  title={
+                    canDeleteEvent(event)
+                      ? 'Удалить'
+                      : 'Тренер может удалять только мероприятия со своей ссылкой'
+                  }
                 >
                   <Trash2 size={28} aria-hidden="true" />
                 </button>

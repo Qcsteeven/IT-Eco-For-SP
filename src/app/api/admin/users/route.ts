@@ -59,6 +59,9 @@ function normalizeUserId(value: unknown): string {
 }
 
 function serializeUser(row: UserRow) {
+  const manualKarma = Number(row.manual_karma ?? 0);
+  const codeforcesKarma = Number(row.codeforces_karma ?? 0);
+
   return {
     id: normalizeUserId(row.id),
     email: String(row.email ?? ''),
@@ -70,7 +73,8 @@ function serializeUser(row: UserRow) {
     registration_date: String(row.registration_date ?? ''),
     bscp_rating: Number(row.bscp_rating ?? row.karma ?? 0),
     karma: Number(row.karma ?? 0),
-    codeforces_karma: Number(row.codeforces_karma ?? 0),
+    codeforces_karma: codeforcesKarma,
+    manual_karma: manualKarma,
   };
 }
 
@@ -95,6 +99,21 @@ const selectUserFields = `
     codeforces_karma
   FROM users
 `;
+
+function buildManualKarmaMap(rows: UserRow[]) {
+  const manualKarma = new Map<string, number>();
+
+  for (const row of rows) {
+    const userId = normalizeUserId(row.user);
+    if (!userId) continue;
+    manualKarma.set(
+      userId,
+      (manualKarma.get(userId) ?? 0) + Number(row.amount ?? 0),
+    );
+  }
+
+  return manualKarma;
+}
 
 async function writeAdminAudit(
   db: Awaited<ReturnType<typeof getDB>>,
@@ -127,10 +146,17 @@ const getHandler = withRoleGuard(
   async () => {
     try {
       const db = await getDB();
-      const result = await db.query(
-        `${selectUserFields} ORDER BY registration_date DESC`,
+      const [usersResult, logsResult] = await Promise.all([
+        db.query(`${selectUserFields} ORDER BY registration_date DESC`),
+        db.query(`SELECT user, amount FROM karma_logs`),
+      ]);
+      const manualKarma = buildManualKarmaMap(rowsFromQuery(logsResult));
+      const users = rowsFromQuery(usersResult).map((row) =>
+        serializeUser({
+          ...row,
+          manual_karma: manualKarma.get(normalizeUserId(row.id)) ?? 0,
+        }),
       );
-      const users = rowsFromQuery(result).map(serializeUser);
 
       return NextResponse.json({
         ok: true,

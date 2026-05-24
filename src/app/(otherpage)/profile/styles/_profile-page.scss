@@ -1,4 +1,4 @@
-﻿/* Old modal styles - remove or keep for other modals */
+/* Old modal styles - remove or keep for other modals */
 
 /* =========================
    Figma Profile (Desktop-29/30)
@@ -37,12 +37,20 @@
   color: #312379;
 }
 
-.profile-card__rating {
+.profile-card__metrics {
   margin-top: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 34px;
+  color: #312379;
+}
+
+.profile-card__metric {
   display: inline-flex;
   align-items: center;
   gap: 10px;
-  color: #312379;
   font-family: var(--font-montserrat), system-ui, -apple-system, Segoe UI, Roboto,
     Arial, sans-serif;
   font-weight: 500;
@@ -50,10 +58,48 @@
   line-height: 35px;
 }
 
+.profile-card__metric--button {
+  border: 0;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  padding: 0;
+  transition:
+    opacity 0.16s ease,
+    transform 0.16s ease;
+
+  &:hover:not(:disabled) {
+    transform: translateY(-1px);
+  }
+
+  &:disabled {
+    cursor: not-allowed;
+    opacity: 0.6;
+  }
+}
+
 .profile-card__star {
   width: 30px;
   height: 30px;
   display: block;
+}
+
+.profile-card__karma-icon {
+  width: 30px;
+  height: 34px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 30px;
+  overflow: hidden;
+}
+
+.profile-card__karma-image {
+  width: 78px;
+  height: 34px;
+  max-width: none;
+  flex: 0 0 auto;
+  object-fit: contain;
 }
 
 .profile-card__field {
@@ -300,4 +346,3 @@
     flex-wrap: wrap;
   }
 }
-

@@ -15,6 +15,7 @@ import {
   X,
 } from 'lucide-react';
 import { useRoleGuard } from '@/lib/rbac/client';
+import PreviousPageLink from '@/components/PreviousPageLink';
 import './users.scss';
 
 type UserRole = 'guest' | 'user' | 'coach' | 'admin';
@@ -297,9 +298,9 @@ export default function AdminUsersPage() {
       <div className="users-container">
         <header className="users-header">
           <div>
-            <Link href="/admin" className="users-back-link">
+            <PreviousPageLink fallbackHref="/admin" className="users-back-link">
               Назад в панель
-            </Link>
+            </PreviousPageLink>
             <h1>Управление пользователями</h1>
           </div>
           <button

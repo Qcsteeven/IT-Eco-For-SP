@@ -18,7 +18,6 @@ export interface Event {
   target_groups?: string[];
   participant_snapshot?: string[];
   created_by?: string;
-  platform_contest_id?: string;
   created_at?: string;
   updated_at?: string;
 }
@@ -34,7 +33,6 @@ export interface CreateEventData {
   visibility_type: EventVisibility;
   participant_list?: string[];
   target_groups?: string[];
-  platform_contest_id?: string;
 }
 
 export interface UpdateEventData extends Partial<CreateEventData> {
