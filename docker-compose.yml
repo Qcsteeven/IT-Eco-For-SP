@@ -1,27 +1,135 @@
 services:
+  # -------------------------------------------------------------------------
+  # SurrealDB — NoSQL database (WebSocket + HTTP on port 8000).
+  # Reads SURREAL_USER and SURREAL_PASS from .env.local.
+  # NOTE: .env.local must contain SURREAL_PASS=<same value as SURREAL_PASSWORD>
+  # NOTE: set SURREAL_HOST=ws://surreal:8000 in production .env.local
+  # -------------------------------------------------------------------------
+  surreal:
+    image: surrealdb/surrealdb:v2
+    container_name: it-eco-surreal
+    user: root
+    env_file:
+      - .env.local
+    command: start --bind 0.0.0.0:8000 file:///data/database.db
+    ports:
+      # Bind only to loopback for security — app talks to it inside Docker network
+      - '127.0.0.1:8000:8000'
+    volumes:
+      - surreal_data:/data
+    healthcheck:
+      test:
+        ['CMD', '/surreal', 'is-ready', '--endpoint', 'http://localhost:8000']
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+    restart: unless-stopped
+
+  # -------------------------------------------------------------------------
+  # DB init — одноразовый контейнер, применяет db/init.surql к SurrealDB.
+  # Создаёт индексы (включая HNSW-вектор для RAG). Использует IF NOT EXISTS
+  # — безопасно запускать повторно. Завершается сразу после применения.
+  # Credentials: SURREAL_USER и SURREAL_PASS берутся из .env.local.
+  # -------------------------------------------------------------------------
+  db-init:
+    image: surrealdb/surrealdb:v2
+    container_name: it-eco-db-init
+    env_file:
+      - .env.local
+    volumes:
+      - ./db/init.surql:/init.surql:ro
+    command:
+      - import
+      - --conn
+      - ws://surreal:8000
+      - --ns
+      - bcsp
+      - --db
+      - site
+      - /init.surql
+    depends_on:
+      surreal:
+        condition: service_healthy
+    restart: 'no'
+
+  # -------------------------------------------------------------------------
+  # Next.js app (standalone build).
+  # In CI/CD: pulled from GHCR via $APP_IMAGE.
+  # Locally: built from Dockerfile (target: runner).
+  # Port 3000 доступен только с самого сервера (не снаружи) — Nginx проксирует.
+  # -------------------------------------------------------------------------
   app:
+    image: ${APP_IMAGE:-}
     build:
       context: .
       dockerfile: Dockerfile
+      target: runner
     container_name: it-eco-app
     ports:
-      - "${APP_PORT:-3000}:3000"
+      - '127.0.0.1:${APP_PORT:-3000}:3000'
     env_file:
       - .env.local
     environment:
       - NODE_ENV=production
     volumes:
       - app_data:/app/data
+    depends_on:
+      surreal:
+        condition: service_healthy
     restart: unless-stopped
 
-  # Dev service with hot reload (опционально)
+  # -------------------------------------------------------------------------
+  # Nginx — reverse proxy + автоматический SSL от Let's Encrypt.
+  # Образ jonasal/nginx-certbot сам получает и обновляет сертификаты.
+  # Слушает :80 (ACME-challenge + редирект) и :443 (HTTPS → app:3000).
+  # -------------------------------------------------------------------------
+  nginx:
+    image: jonasal/nginx-certbot:5-alpine
+    container_name: it-eco-nginx
+    ports:
+      - '80:80'
+      - '443:443'
+    environment:
+      - CERTBOT_EMAIL=zerogameminechannel@gmail.com
+    volumes:
+      - ./nginx/user_conf.d:/etc/nginx/user_conf.d:ro
+      - nginx_secrets:/etc/letsencrypt
+    depends_on:
+      - app
+    restart: unless-stopped
+
+  # -------------------------------------------------------------------------
+  # Cron worker — separate Node process (npm run cron).
+  # In CI/CD: pulled from GHCR via $CRON_IMAGE.
+  # Locally: built from Dockerfile (target: cron-runner).
+  # -------------------------------------------------------------------------
+  cron:
+    image: ${CRON_IMAGE:-}
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: cron-runner
+    container_name: it-eco-cron
+    env_file:
+      - .env.local
+    environment:
+      - NODE_ENV=production
+    depends_on:
+      surreal:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # -------------------------------------------------------------------------
+  # Dev service with hot reload (local only, needs: docker compose --profile dev up)
+  # -------------------------------------------------------------------------
   dev:
-    profiles: ["dev"]
+    profiles: ['dev']
     image: node:20-alpine
     container_name: it-eco-dev
     working_dir: /app
     ports:
-      - "${DEV_PORT:-3001}:3000"
+      - '${DEV_PORT:-3001}:3000'
     volumes:
       - .:/app
       - /app/node_modules
@@ -31,9 +139,11 @@ services:
     environment:
       - NODE_ENV=development
       - WATCHPACK_POLLING=false
-    user: "${UID:-1000}:${GID:-1000}"
+    user: '${UID:-1000}:${GID:-1000}'
     command: sh -c "npm install && npm run dev:docker"
     restart: unless-stopped
 
 volumes:
   app_data:
+  surreal_data:
+  nginx_secrets: # SSL-сертификаты Let's Encrypt (персистентны между перезапусками)
