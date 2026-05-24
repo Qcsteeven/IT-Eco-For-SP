@@ -67,7 +67,7 @@ services:
       target: runner
     container_name: it-eco-app
     ports:
-      - '127.0.0.1:${APP_PORT:-3000}:3000'
+      - '127.0.0.1:3000:3000'
     env_file:
       - .env.local
     environment:
@@ -77,26 +77,6 @@ services:
     depends_on:
       surreal:
         condition: service_healthy
-    restart: unless-stopped
-
-  # -------------------------------------------------------------------------
-  # Nginx — reverse proxy + автоматический SSL от Let's Encrypt.
-  # Образ jonasal/nginx-certbot сам получает и обновляет сертификаты.
-  # Слушает :80 (ACME-challenge + редирект) и :443 (HTTPS → app:3000).
-  # -------------------------------------------------------------------------
-  nginx:
-    image: jonasal/nginx-certbot:5-alpine
-    container_name: it-eco-nginx
-    ports:
-      - '80:80'
-      - '443:443'
-    environment:
-      - CERTBOT_EMAIL=zerogameminechannel@gmail.com
-    volumes:
-      - ./nginx/user_conf.d:/etc/nginx/user_conf.d:ro
-      - nginx_secrets:/etc/letsencrypt
-    depends_on:
-      - app
     restart: unless-stopped
 
   # -------------------------------------------------------------------------
@@ -146,4 +126,3 @@ services:
 volumes:
   app_data:
   surreal_data:
-  nginx_secrets: # SSL-сертификаты Let's Encrypt (персистентны между перезапусками)
