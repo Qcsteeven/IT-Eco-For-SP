@@ -6,7 +6,7 @@ services:
   # NOTE: set SURREAL_HOST=ws://surreal:8000 in production .env.local
   # -------------------------------------------------------------------------
   surreal:
-    image: surrealdb/surrealdb:latest
+    image: surrealdb/surrealdb:2
     container_name: it-eco-surreal
     env_file:
       - .env.local
@@ -22,7 +22,7 @@ services:
       interval: 5s
       timeout: 5s
       retries: 12
-      start_period: 15s
+      start_period: 20s
     restart: unless-stopped
 
   # -------------------------------------------------------------------------
@@ -32,7 +32,7 @@ services:
   # Credentials: SURREAL_USER и SURREAL_PASS берутся из .env.local.
   # -------------------------------------------------------------------------
   db-init:
-    image: surrealdb/surrealdb:latest
+    image: surrealdb/surrealdb:2
     container_name: it-eco-db-init
     env_file:
       - .env.local
