@@ -4,13 +4,13 @@ import { hashPassword } from '@/lib/surreal/auth';
 import { sendEmail } from '@/lib/email/sendEmail';
 import crypto from 'crypto';
 import { Surreal } from 'surrealdb';
-import { UserRole, isValidUserRole, getDefaultUserRole } from '@/lib/rbac';
+import { UserRole, getDefaultUserRole } from '@/lib/rbac';
+import { escapeHtml } from '@/lib/security/html';
 
 interface RegistrationRequestBody {
   email: string;
   password: string;
   full_name: string;
-  role?: string;
 }
 
 interface UserRecord {
@@ -29,25 +29,36 @@ interface UserRecord {
 
 export async function POST(request: NextRequest) {
   try {
-    const { email, password, full_name, role: requestedRole }: RegistrationRequestBody =
+    const { email, password, full_name }: RegistrationRequestBody =
       await request.json();
     const db: Surreal = await getDB();
+    const normalizedEmail = email?.trim().toLowerCase();
+    const fullName = full_name?.trim();
 
-    if (!email || !password || !full_name) {
+    if (!normalizedEmail || !password || !fullName) {
       return NextResponse.json(
         { message: 'Заполните все обязательные поля.' },
         { status: 400 },
       );
     }
 
+    if (password.length < 6) {
+      return NextResponse.json(
+        { message: 'Пароль должен быть не короче 6 символов.' },
+        { status: 400 },
+      );
+    }
+
     const queryResult: unknown = await db.query(
       'SELECT id FROM users WHERE email = $email',
-      { email },
+      { email: normalizedEmail },
     );
 
-    const existingUsersArray = queryResult && typeof queryResult === 'object' && '0' in queryResult
-      ? (queryResult as Record<string, { result?: unknown[] }>)['0']?.result || []
-      : [];
+    const existingUsersArray =
+      queryResult && typeof queryResult === 'object' && '0' in queryResult
+        ? (queryResult as Record<string, { result?: unknown[] }>)['0']
+            ?.result || []
+        : [];
 
     if (existingUsersArray.length > 0) {
       return NextResponse.json(
@@ -65,16 +76,12 @@ export async function POST(request: NextRequest) {
 
     const passwordHash: string = await hashPassword(password);
 
-    // Валидация роли: если передана — проверяем, иначе — роль по умолчанию
-    const userRole: UserRole =
-      requestedRole && isValidUserRole(requestedRole)
-        ? requestedRole
-        : getDefaultUserRole();
+    const userRole: UserRole = getDefaultUserRole();
 
     const newUserRecord: UserRecord = {
-      email,
+      email: normalizedEmail,
       password_hash: passwordHash,
-      full_name,
+      full_name: fullName,
       phone: '',
       is_verified: false,
       verification_code: verificationCode,
@@ -87,14 +94,14 @@ export async function POST(request: NextRequest) {
 
     const subject: string = 'Код подтверждения регистрации';
     const htmlContent: string = `
-      <p>Здравствуйте, ${full_name}!</p>
+      <p>Здравствуйте, ${escapeHtml(fullName)}!</p>
       <p>Ваш **код подтверждения** для завершения активации аккаунта:</p>
       <h3 style="color: #4CAF50; font-size: 24px; text-align: center; background-color: #e8ffe8; padding: 10px; border-radius: 5px;">${verificationCode}</h3>
       <p>Код действует в течение одного часа. Пожалуйста, не передавайте его никому.</p>
     `;
 
     const emailSent: boolean = await sendEmail(
-      email,
+      normalizedEmail,
       subject,
       `Ваш код подтверждения: ${verificationCode}`,
       htmlContent,
@@ -102,14 +109,14 @@ export async function POST(request: NextRequest) {
 
     if (!emailSent) {
       console.warn(
-        `[WARNING] Регистрация успешна, но не удалось отправить письмо на ${email}.`,
+        `[WARNING] Регистрация успешна, но не удалось отправить письмо на ${normalizedEmail}.`,
       );
     }
 
     return NextResponse.json(
       {
         message: 'Пользователь создан. Требуется подтверждение email.',
-        email: email,
+        email: normalizedEmail,
       },
       { status: 201 },
     );
@@ -133,7 +140,6 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(
       {
         message: 'Внутренняя ошибка сервера при регистрации.',
-        detail: errorMessage,
       },
       { status: 500 },
     );

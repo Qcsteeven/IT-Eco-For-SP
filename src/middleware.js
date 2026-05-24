@@ -1,35 +1,26 @@
 import { withAuth } from 'next-auth/middleware';
 
-// Маршруты, требующие определённых ролей
-const ROLE_ROUTES = {
-  // Маршруты администратора
-  '/admin': 'admin',
-  // Маршруты тренера
-  '/coach': 'coach',
-};
+const ROLE_HIERARCHY = { guest: 0, user: 1, coach: 2, admin: 3 };
 
 export default withAuth({
   callbacks: {
     authorized: ({ token, req }) => {
       const { pathname } = req.nextUrl;
 
-      // Проверяем, требует ли маршрут определённой роли
-      for (const [routePrefix, requiredRole] of Object.entries(ROLE_ROUTES)) {
-        if (pathname.startsWith(routePrefix)) {
-          // Проверяем роль пользователя
-          const userRole = token?.role;
-          if (!userRole) return false;
+      if (!token) return false;
+      if (token?.is_blocked === true) return false;
+      if (token?.is_verified === false) return false;
 
-          const roleHierarchy = { guest: 0, user: 1, coach: 2, admin: 3 };
-          const requiredLevel = roleHierarchy[requiredRole] ?? 0;
-          const userLevel = roleHierarchy[userRole] ?? 0;
+      const role = token.role;
+      const userLevel = ROLE_HIERARCHY[role] ?? -1;
 
-          return userLevel >= requiredLevel;
-        }
-      }
+      if (userLevel < 0) return false;
 
-      // Для остальных маршрутов — просто наличие токена
-      return !!token;
+      if (pathname.startsWith('/admin')) return userLevel >= ROLE_HIERARCHY.admin;
+      if (pathname.startsWith('/coach')) return userLevel >= ROLE_HIERARCHY.coach;
+
+      // /profile, /chat, /dashboard
+      return userLevel >= ROLE_HIERARCHY.user;
     },
   },
   pages: {

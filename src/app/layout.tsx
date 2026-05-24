@@ -1,21 +1,10 @@
 // src/app/layout.tsx
 
 import type { Metadata } from 'next';
-import { Geist, Geist_Mono } from 'next/font/google';
 import './globals.css';
 // 👈 Импортируем наш клиентский компонент-обертку
 import SessionWrapper from '../components/SessionWrapper';
-import { chetty, montserrat, stengazeta } from './fonts';
-
-const geistSans = Geist({
-  variable: '--font-geist-sans',
-  subsets: ['latin'],
-});
-
-const geistMono = Geist_Mono({
-  variable: '--font-geist-mono',
-  subsets: ['latin'],
-});
+import { chetty, stengazeta } from './fonts';
 
 export const metadata: Metadata = {
   title: 'Create Next App',
@@ -29,9 +18,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      <body
-        className={`${montserrat.variable} ${chetty.variable} ${stengazeta.variable} ${geistSans.variable} ${geistMono.variable} antialiased`}
-      >
+      <body className={`${chetty.variable} ${stengazeta.variable} antialiased`}>
         {/* 👈 Оборачиваем здесь: SessionProvider теперь доступен для всех дочерних элементов */}
         <SessionWrapper>{children}</SessionWrapper>
       </body>
