@@ -219,7 +219,7 @@ const CodeforcesConnect: React.FC<CodeforcesConnectProps> = ({
   };
 
   return (
-    <div className="p-6 border rounded-xl shadow-lg max-w-lg mx-auto bg-white text-black">
+    <div className="codeforces-connect p-6 border rounded-xl shadow-lg max-w-lg mx-auto bg-white text-black">
       <h2 className="text-2xl font-extrabold mb-4 border-b pb-2">
         Подключение Codeforces
       </h2>

@@ -15,6 +15,9 @@
     "format:check": "prettier --check .",
     "type-check": "tsc --noEmit",
     "validate": "npm run lint && npm run format && npm run type-check",
+    "test:responsive": "playwright test --config=playwright.responsive.config.ts",
+    "test:responsive:headed": "playwright test --config=playwright.responsive.config.ts --headed",
+    "test:responsive:report": "playwright show-report responsive-report",
     "prepare": "husky",
     "cron": "tsx src/cron/scheduler.ts"
   },
@@ -57,7 +60,10 @@
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3",
+    "@playwright/test": "^1.60.0",
     "@tailwindcss/postcss": "^4",
+    "@tesseract.js-data/eng": "^1.0.0",
+    "@tesseract.js-data/rus": "^1.0.0",
     "@types/node": "^20",
     "@types/node-cron": "^3.0.11",
     "@types/react": "^19",
@@ -73,6 +79,7 @@
     "prettier": "^3.6.2",
     "sass": "^1.96.0",
     "tailwindcss": "^4",
+    "tesseract.js": "^7.0.0",
     "tsx": "^4.21.0",
     "typescript": "^5"
   },

@@ -42,8 +42,11 @@
   text-decoration: none;
 
   img {
-    max-width: 240px;
+    width: auto;
+    max-width: 220px;
+    max-height: 72px;
     height: auto;
+    object-fit: contain;
   }
 }
 
@@ -57,6 +60,28 @@
   overflow-x: auto;
   overflow-y: hidden;
   -webkit-overflow-scrolling: touch;
+}
+
+.header-nav-toggle {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  width: 46px;
+  height: 46px;
+  border: 0;
+  border-radius: 8px;
+  background: rgba(35, 188, 186, 0.1);
+  color: #0b3852;
+  transition:
+    background-color 0.15s ease,
+    color 0.15s ease;
+
+  &:hover,
+  &:focus-visible {
+    background: rgba(35, 188, 186, 0.18);
+    color: #0b6f6d;
+    outline: none;
+  }
 }
 
 .header-nav-item {
@@ -166,7 +191,8 @@
 
 @media (max-width: 1300px) {
   .header-logo img {
-    max-width: 200px;
+    max-width: 190px;
+    max-height: 62px;
   }
 
   .header-nav {
@@ -181,7 +207,8 @@
   }
 
   .header-logo img {
-    max-width: 160px;
+    max-width: 152px;
+    max-height: 54px;
   }
 
   .header-nav {
@@ -190,5 +217,89 @@
 
   .header-profile-dropdown {
     min-width: 250px;
+  }
+}
+
+@media (max-width: 720px) {
+  .header-ghost {
+    height: 68px;
+  }
+
+  .header {
+    height: 68px;
+  }
+
+  .header-wrapper {
+    position: relative;
+    justify-content: flex-start;
+    padding: 0 12px;
+  }
+
+  .header-logo {
+    margin-right: auto;
+  }
+
+  .header-logo img {
+    max-width: 128px;
+    max-height: 46px;
+  }
+
+  .header-nav-toggle {
+    display: inline-flex;
+    margin-left: auto;
+    order: 2;
+  }
+
+  .header-nav {
+    position: absolute;
+    top: calc(100% + 10px);
+    left: 12px;
+    right: 12px;
+    display: none;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 4px;
+    max-height: calc(100vh - 92px);
+    padding: 10px;
+    border: 1px solid rgba(11, 56, 82, 0.12);
+    border-radius: 8px;
+    background: #fff;
+    box-shadow: 0 18px 42px rgba(11, 56, 82, 0.18);
+    overflow-y: auto;
+    overflow-x: hidden;
+  }
+
+  .header-nav.is-open {
+    display: flex;
+  }
+
+  .header-nav-item {
+    display: flex;
+    align-items: center;
+    min-height: 48px;
+    padding: 0 14px;
+    border-radius: 8px;
+    font-size: 17px;
+
+    &:hover,
+    &.is-active {
+      background: #e9f7f6;
+    }
+  }
+
+  .header-profile-menu,
+  .header-profile {
+    order: 3;
+  }
+
+  .header-profile {
+    width: 46px;
+    min-width: 46px;
+    height: 46px;
+  }
+
+  .header-profile-dropdown {
+    right: 0;
+    min-width: min(286px, calc(100vw - 24px));
   }
 }

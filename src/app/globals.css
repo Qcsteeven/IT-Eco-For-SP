@@ -6,6 +6,12 @@
   --font-montserrat: Montserrat, 'Segoe UI', Roboto, Arial, sans-serif;
   --font-geist-sans: Arial, Helvetica, sans-serif;
   --font-geist-mono: 'Courier New', Consolas, monospace;
+  --page-max-width: 1360px;
+  --page-gutter: clamp(16px, 4vw, 32px);
+  --section-y: clamp(40px, 6vw, 78px);
+  --card-radius: 8px;
+  --touch-target: 44px;
+  --responsive-gap: clamp(16px, 3vw, 28px);
 }
 
 @theme inline {
@@ -22,8 +28,43 @@
   }
 }
 
+html,
+body {
+  max-width: 100%;
+}
+
 body {
   background: var(--background);
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
+  min-height: 100vh;
+  overflow-x: clip;
+}
+
+img {
+  max-width: 100%;
+  height: auto;
+}
+
+main {
+  min-width: 0;
+}
+
+button,
+input,
+select,
+textarea {
+  min-height: var(--touch-target);
+}
+
+@supports not (overflow-x: clip) {
+  body {
+    overflow-x: hidden;
+  }
+}
+
+@media (max-width: 430px) {
+  :root {
+    --page-gutter: 14px;
+  }
 }

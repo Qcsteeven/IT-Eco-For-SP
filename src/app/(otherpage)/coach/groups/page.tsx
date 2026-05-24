@@ -5,6 +5,7 @@ import type { FormEvent } from 'react';
 import Link from 'next/link';
 import { useSession } from 'next-auth/react';
 import { useRoleGuard } from '@/lib/rbac/client';
+import PreviousPageLink from '@/components/PreviousPageLink';
 import { useRouter } from 'next/navigation';
 import { Archive, BarChart3, Plus, Search, UsersRound, X } from 'lucide-react';
 import '../coach.scss';
@@ -193,9 +194,7 @@ export default function CoachGroupsPage() {
     <main className="coach-page">
       <div className="coach-container">
         <header className="coach-header">
-          <Link href="/coach" className="coach-back-link">
-            Назад
-          </Link>
+          <PreviousPageLink fallbackHref="/coach" className="coach-back-link" />
           <div className="coach-header-content">
             <div>
               <p className="coach-eyebrow">Тренерская панель</p>
@@ -339,8 +338,8 @@ export default function CoachGroupsPage() {
                       <Link
                         className="coach-icon-btn coach-icon-btn--primary"
                         href={`/coach/groups/${groupPath(id)}`}
-                        title="Открыть группу"
-                        aria-label={`Открыть группу ${groupTitle(group)}`}
+                        title="Просмотр участников"
+                        aria-label={`Просмотр участников группы ${groupTitle(group)}`}
                       >
                         <UsersRound aria-hidden="true" size={20} />
                       </Link>

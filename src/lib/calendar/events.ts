@@ -1,6 +1,6 @@
 import { getDB } from '@/lib/surreal/surreal';
 
-export type CalendarEventSource = 'events' | 'contests' | 'codeforces';
+export type CalendarEventSource = 'events' | 'contests';
 
 export type CalendarEvent = {
   id: string;
@@ -24,7 +24,6 @@ export type CalendarEvent = {
 type CalendarEventQuery = {
   from?: string | null;
   to?: string | null;
-  includeCodeforces?: boolean;
   includeContests?: boolean;
   includeEvents?: boolean;
 };
@@ -66,34 +65,8 @@ function rowsFromStatement(value: unknown): RawDbEvent[] {
   return [];
 }
 
-type CodeforcesContest = {
-  id: number;
-  name: string;
-  type: string;
-  phase: string;
-  durationSeconds: number;
-  startTimeSeconds?: number;
-};
-
-type CodeforcesContestListResponse =
-  | {
-      status: 'OK';
-      result: CodeforcesContest[];
-    }
-  | {
-      status: 'FAILED';
-      comment?: string;
-    };
-
 const DEFAULT_LOOKAHEAD_DAYS = 120;
 const DEFAULT_LOOKBEHIND_DAYS = 14;
-const CODEFORCES_CACHE_TTL_MS = 30 * 60 * 1000;
-
-let codeforcesContestCache: {
-  expiresAt: number;
-  contests: CodeforcesContest[];
-} | null = null;
-let codeforcesContestRequest: Promise<CodeforcesContest[]> | null = null;
 
 function text(value: unknown, fallback = '') {
   if (typeof value === 'string') return value;
@@ -241,18 +214,27 @@ async function getDbCalendarEvents(
   try {
     const db = await getDB();
     const queries: string[] = [];
+    const rangeWhere =
+      'WHERE start_time_utc <= type::datetime($to) AND end_time_utc >= type::datetime($from)';
 
     if (options.includeEvents !== false) {
-      queries.push('SELECT * FROM events ORDER BY start_time_utc ASC');
+      queries.push(
+        `SELECT * FROM events ${rangeWhere} ORDER BY start_time_utc ASC`,
+      );
     }
 
     if (options.includeContests !== false) {
-      queries.push('SELECT * FROM contests ORDER BY start_time_utc ASC');
+      queries.push(
+        `SELECT * FROM contests ${rangeWhere} ORDER BY start_time_utc ASC`,
+      );
     }
 
     if (queries.length === 0) return [];
 
-    const result = await db.query<unknown[]>(`${queries.join(';')};`);
+    const result = await db.query<unknown[]>(`${queries.join(';')};`, {
+      from: from.toISOString(),
+      to: to.toISOString(),
+    });
     let index = 0;
     const events =
       options.includeEvents !== false ? rowsFromStatement(result[index++]) : [];
@@ -277,102 +259,6 @@ async function getDbCalendarEvents(
   }
 }
 
-function mapCodeforcesContest(
-  contest: CodeforcesContest,
-): CalendarEvent | null {
-  if (!contest.startTimeSeconds) return null;
-
-  const start = new Date(contest.startTimeSeconds * 1000);
-  const end = new Date(start.getTime() + contest.durationSeconds * 1000);
-  const startIso = start.toISOString();
-  const endIso = end.toISOString();
-
-  return {
-    id: `codeforces:${contest.id}`,
-    title: contest.name,
-    name: contest.name,
-    description: `Codeforces ${contest.type}`,
-    platform: 'codeforces',
-    status:
-      contest.phase === 'CODING'
-        ? 'active'
-        : contest.phase === 'FINISHED'
-          ? 'completed'
-          : resolveStatus(startIso, endIso),
-    start_time_utc: startIso,
-    end_time_utc: endIso,
-    registration_link: `https://codeforces.com/contest/${contest.id}`,
-    external_link: `https://codeforces.com/contest/${contest.id}`,
-    visibility_type: 'public',
-    participant_list: [],
-    platform_contest_id: String(contest.id),
-    source: 'codeforces',
-  };
-}
-
-async function getCodeforcesEvents(from: Date, to: Date) {
-  try {
-    const contests = await getCachedCodeforcesContests();
-
-    return contests
-      .map(mapCodeforcesContest)
-      .filter((event): event is CalendarEvent =>
-        Boolean(
-          event &&
-          overlapsRange(event.start_time_utc, event.end_time_utc, from, to),
-        ),
-      );
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    console.warn('[calendar] Codeforces events are unavailable:', message);
-    return [];
-  }
-}
-
-async function getCachedCodeforcesContests() {
-  const now = Date.now();
-  if (codeforcesContestCache && codeforcesContestCache.expiresAt > now) {
-    return codeforcesContestCache.contests;
-  }
-
-  if (!codeforcesContestRequest) {
-    codeforcesContestRequest = fetchCodeforcesContests()
-      .then((contests) => {
-        codeforcesContestCache = {
-          contests,
-          expiresAt: Date.now() + CODEFORCES_CACHE_TTL_MS,
-        };
-        return contests;
-      })
-      .catch((error) => {
-        if (codeforcesContestCache) return codeforcesContestCache.contests;
-        throw error;
-      })
-      .finally(() => {
-        codeforcesContestRequest = null;
-      });
-  }
-
-  return codeforcesContestRequest;
-}
-
-async function fetchCodeforcesContests() {
-  const response = await fetch('https://codeforces.com/api/contest.list', {
-    next: { revalidate: 60 * 30 },
-  });
-
-  if (!response.ok) {
-    throw new Error(`Codeforces responded with ${response.status}`);
-  }
-
-  const payload = (await response.json()) as CodeforcesContestListResponse;
-  if (payload.status !== 'OK') {
-    throw new Error(payload.comment || 'Codeforces API error');
-  }
-
-  return payload.result;
-}
-
 function dedupeEvents(events: CalendarEvent[]) {
   const seen = new Set<string>();
   const result: CalendarEvent[] = [];
@@ -391,12 +277,8 @@ function dedupeEvents(events: CalendarEvent[]) {
 export async function listCalendarEvents(query: CalendarEventQuery = {}) {
   const { from, to } = buildRange(query);
   const dbEvents = await getDbCalendarEvents(from, to, query);
-  const codeforcesEvents =
-    query.includeCodeforces === false
-      ? []
-      : await getCodeforcesEvents(from, to);
 
-  return dedupeEvents([...dbEvents, ...codeforcesEvents]).sort(
+  return dedupeEvents(dbEvents).sort(
     (a, b) =>
       new Date(a.start_time_utc).getTime() -
       new Date(b.start_time_utc).getTime(),

@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useSession } from 'next-auth/react';
 import { useRoleGuard } from '@/lib/rbac/client';
+import PreviousPageLink from '@/components/PreviousPageLink';
 import { useParams, useRouter } from 'next/navigation';
 import '../../../coach.scss';
 
@@ -23,12 +24,24 @@ type Analytics = {
   };
 };
 
+function safeDecode(value: string) {
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    return value;
+  }
+}
+
+function groupPath(id: string) {
+  return encodeURIComponent(id);
+}
+
 export default function CoachGroupAnalyticsPage() {
   const { status } = useSession();
   const { authorized, isLoading } = useRoleGuard('coach');
   const router = useRouter();
   const params = useParams<{ id: string }>();
-  const groupId = typeof params?.id === 'string' ? params.id : '';
+  const groupId = typeof params?.id === 'string' ? safeDecode(params.id) : '';
 
   const [data, setData] = useState<Analytics | null>(null);
   const [loading, setLoading] = useState(true);
@@ -50,7 +63,10 @@ export default function CoachGroupAnalyticsPage() {
     try {
       setLoading(true);
       setError(null);
-      const res = await fetch(`/api/coach/groups/${groupId}/analytics`);
+      const res = await fetch(
+        `/api/coach/groups/${groupPath(groupId)}/analytics`,
+        { cache: 'no-store' },
+      );
       const json = await res.json();
       if (!json.ok) throw new Error(json.error || 'Ошибка загрузки аналитики');
       setData(json.data);
@@ -77,9 +93,10 @@ export default function CoachGroupAnalyticsPage() {
     <div className="coach-page">
       <div className="coach-container">
         <div className="coach-header">
-          <Link href={`/coach/groups/${groupId}`} className="coach-back-link">
-            ← Назад
-          </Link>
+          <PreviousPageLink
+            fallbackHref="/coach"
+            className="coach-back-link"
+          />
           <div className="coach-header-content">
             <h1>Аналитика группы</h1>
             <button className="coach-btn coach-btn-primary" onClick={fetchAnalytics}>
@@ -163,4 +180,3 @@ export default function CoachGroupAnalyticsPage() {
     </div>
   );
 }
-

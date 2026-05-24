@@ -23,6 +23,63 @@ interface AtCoderProblem {
   difficultyLevel?: 'easy' | 'medium' | 'hard' | 'unknown';
 }
 
+interface AtCoderKarmaResponse {
+  ok: true;
+  data: {
+    karma: number;
+    karmaLevel: string;
+    karmaColor: string;
+    details: {
+      totalSolved: number;
+      easyCount: number;
+      mediumCount: number;
+      hardCount: number;
+      unknownCount: number;
+    };
+    problems: AtCoderProblem[];
+  };
+}
+
+function parseCachedAtCoderKarma(
+  cachedKarma: unknown,
+): AtCoderKarmaResponse | null {
+  try {
+    const parsed =
+      typeof cachedKarma === 'string' ? JSON.parse(cachedKarma) : cachedKarma;
+
+    if (
+      !parsed ||
+      typeof parsed !== 'object' ||
+      (parsed as { ok?: unknown }).ok !== true
+    ) {
+      return null;
+    }
+
+    const data = (parsed as { data?: unknown }).data;
+    if (!data || typeof data !== 'object') {
+      return null;
+    }
+
+    const karma = (data as { karma?: unknown }).karma;
+    const details = (data as { details?: unknown }).details;
+    const problems = (data as { problems?: unknown }).problems;
+
+    if (
+      typeof karma !== 'number' ||
+      !Number.isFinite(karma) ||
+      !details ||
+      typeof details !== 'object' ||
+      !Array.isArray(problems)
+    ) {
+      return null;
+    }
+
+    return parsed as AtCoderKarmaResponse;
+  } catch {
+    return null;
+  }
+}
+
 /**
  * GET /api/atcoder/problems
  * Получает все решенные задачи пользователя с AtCoder и рассчитывает карму
@@ -87,10 +144,15 @@ export async function GET() {
       lastKarmaUpdate && now - lastKarmaUpdate < CACHE_TTL;
 
     if (karmaCacheValid && atcoderAccountData?.cached_karma) {
-      console.log('[AtCoder Problems] Using cached data');
-      return NextResponse.json(
-        JSON.parse(atcoderAccountData.cached_karma as string),
+      const cachedKarma = parseCachedAtCoderKarma(
+        atcoderAccountData.cached_karma,
       );
+      if (cachedKarma) {
+        console.log('[AtCoder Problems] Using cached data');
+        return NextResponse.json(cachedKarma);
+      }
+
+      console.warn('[AtCoder Problems] Ignoring invalid cached karma');
     }
 
     console.log('[AtCoder Problems] Fetching from AtCoder API...');

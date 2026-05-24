@@ -9,15 +9,15 @@
 
 .card {
   width: 485px;
-  max-width: calc(100vw - 40px);
+  max-width: calc(100vw - var(--page-gutter) * 2);
   background: #ffffff;
-  border-radius: 20px;
+  border-radius: var(--card-radius);
   box-shadow: 0 0 30px 1px rgba(0, 0, 0, 0.1);
-  padding: 34px 30px 26px;
+  padding: clamp(24px, 6vw, 34px) clamp(18px, 5vw, 30px) 26px;
 }
 
 .cardLogo {
-  width: 320px;
+  width: min(286px, 100%);
   margin: 0 auto 18px;
   opacity: 0.95;
 
@@ -34,8 +34,14 @@
 
 .title {
   margin: 0 0 12px;
-  font-family: var(--font-montserrat), system-ui, -apple-system, Segoe UI, Roboto,
-    Arial, sans-serif;
+  font-family:
+    var(--font-montserrat),
+    system-ui,
+    -apple-system,
+    Segoe UI,
+    Roboto,
+    Arial,
+    sans-serif;
   font-weight: 500;
   font-size: 25px;
   line-height: 1.15;
@@ -44,8 +50,14 @@
 
 .description {
   margin: 0;
-  font-family: var(--font-montserrat), system-ui, -apple-system, Segoe UI, Roboto,
-    Arial, sans-serif;
+  font-family:
+    var(--font-montserrat),
+    system-ui,
+    -apple-system,
+    Segoe UI,
+    Roboto,
+    Arial,
+    sans-serif;
   font-weight: 300;
   font-size: 16px;
   line-height: 1.25;
@@ -74,13 +86,21 @@
   border-radius: 12px;
   border: 1px solid rgba(121, 120, 125, 0.55);
   padding: 0 16px;
-  font-family: var(--font-montserrat), system-ui, -apple-system, Segoe UI, Roboto,
-    Arial, sans-serif;
+  font-family:
+    var(--font-montserrat),
+    system-ui,
+    -apple-system,
+    Segoe UI,
+    Roboto,
+    Arial,
+    sans-serif;
   font-weight: 300;
   font-size: 16px;
   color: #1f1f1f;
   background: #fff;
-  transition: box-shadow 120ms ease, border-color 120ms ease;
+  transition:
+    box-shadow 120ms ease,
+    border-color 120ms ease;
 
   &::placeholder {
     color: #949292;
@@ -112,12 +132,20 @@
   cursor: pointer;
   background: #6a3ad4;
   color: #ffffff;
-  font-family: var(--font-montserrat), system-ui, -apple-system, Segoe UI, Roboto,
-    Arial, sans-serif;
+  font-family:
+    var(--font-montserrat),
+    system-ui,
+    -apple-system,
+    Segoe UI,
+    Roboto,
+    Arial,
+    sans-serif;
   font-weight: 600;
   font-size: 16px;
   margin-top: 8px;
-  transition: transform 120ms ease, filter 120ms ease;
+  transition:
+    transform 120ms ease,
+    filter 120ms ease;
 
   &:hover:not(:disabled) {
     filter: brightness(1.03);
@@ -154,6 +182,7 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
+  gap: 12px;
   margin-top: 8px;
 }
 
@@ -162,8 +191,14 @@
   background: transparent;
   padding: 0;
   cursor: pointer;
-  font-family: var(--font-montserrat), system-ui, -apple-system, Segoe UI, Roboto,
-    Arial, sans-serif;
+  font-family:
+    var(--font-montserrat),
+    system-ui,
+    -apple-system,
+    Segoe UI,
+    Roboto,
+    Arial,
+    sans-serif;
   font-weight: 300;
   font-size: 16px;
   color: #79787d;
@@ -198,5 +233,23 @@
   }
   to {
     opacity: 1;
+  }
+}
+
+@media (max-width: 430px) {
+  .page {
+    padding: 36px var(--page-gutter) 52px;
+  }
+
+  .linksRow {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .linkBtn {
+    min-height: var(--touch-target);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
   }
 }

@@ -15,6 +15,30 @@ function toRecordIdString(v: unknown): string {
   return String(v);
 }
 
+function rowsFromQuery(result: unknown): Record<string, unknown>[] {
+  if (!Array.isArray(result)) return [];
+
+  const first = result[0] as { result?: unknown } | unknown[] | undefined;
+  if (Array.isArray(first)) {
+    return first.filter(
+      (row): row is Record<string, unknown> =>
+        typeof row === 'object' && row !== null,
+    );
+  }
+
+  if (first && typeof first === 'object' && Array.isArray(first.result)) {
+    return first.result.filter(
+      (row): row is Record<string, unknown> =>
+        typeof row === 'object' && row !== null,
+    );
+  }
+
+  return result.filter(
+    (row): row is Record<string, unknown> =>
+      typeof row === 'object' && row !== null,
+  );
+}
+
 /**
  * GET /api/users
  *
@@ -56,36 +80,26 @@ export async function GET(req: Request) {
     const role = session.user.role as string;
     const coachId = toUserThingId(session.user.id.toString());
 
-    // Базовый запрос — только верифицированные пользователи
-    let query = `SELECT id, full_name, email, role, registration_date FROM users WHERE is_verified = true`;
+    // Базовый запрос для служебных списков тренера/админа.
+    // Не ограничиваемся is_verified: админские учетные записи могут быть
+    // заведены вручную и еще не пройти email flow, но тренеру все равно
+    // нужно иметь возможность добавить их в группу.
+    let query = `SELECT id, full_name, email, role, registration_date, is_verified FROM users WHERE is_blocked != true`;
     const params: Record<string, unknown> = { coachId };
 
-    if (role === 'coach') {
-      if (group) {
-        query += `
-          AND id IN (
-            SELECT VALUE user_id
-            FROM group_members
-            WHERE group_id = type::thing($group)
-              AND group_id IN (
-                SELECT VALUE group_id
-                FROM group_coaches
-                WHERE coach_id = type::thing($coachId)
-              )
-          )`;
-        params.group = group;
-      } else {
-        query += `
-          AND id IN (
-            SELECT VALUE user_id
-            FROM group_members
-            WHERE group_id IN (
+    if (role === 'coach' && group) {
+      query += `
+        AND id IN (
+          SELECT VALUE user_id
+          FROM group_members
+          WHERE group_id = type::thing($group)
+            AND group_id IN (
               SELECT VALUE group_id
               FROM group_coaches
               WHERE coach_id = type::thing($coachId)
             )
-          )`;
-      }
+        )`;
+      params.group = group;
     } else if (group) {
       query += `
         AND id IN (
@@ -106,7 +120,7 @@ export async function GET(req: Request) {
     params.limit = limit;
 
     const result = await db.query(query, params);
-    const usersRaw = (result[0] as Record<string, unknown>[]) || [];
+    const usersRaw = rowsFromQuery(result);
     const users = usersRaw.map((u) => ({ ...u, id: toRecordIdString(u.id) }));
 
     return NextResponse.json(

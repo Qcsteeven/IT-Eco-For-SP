@@ -5,6 +5,7 @@ import type { FormEvent } from 'react';
 import Link from 'next/link';
 import { useSession } from 'next-auth/react';
 import { useRoleGuard } from '@/lib/rbac/client';
+import PreviousPageLink from '@/components/PreviousPageLink';
 import { useParams, useRouter } from 'next/navigation';
 import {
   BarChart3,
@@ -318,9 +319,12 @@ export default function CoachGroupDetailsPage() {
     <main className="coach-page">
       <div className="coach-container">
         <header className="coach-header">
-          <Link href="/coach/groups" className="coach-back-link">
+          <PreviousPageLink
+            fallbackHref="/coach"
+            className="coach-back-link"
+          >
             Назад к группам
-          </Link>
+          </PreviousPageLink>
           <div className="coach-header-content">
             <div>
               <p className="coach-eyebrow">Редактирование группы</p>

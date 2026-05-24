@@ -1,6 +1,7 @@
 .home-features {
   background: #f4f7f7;
   padding: clamp(36px, 5vw, 56px) 16px clamp(48px, 6vw, 72px);
+  overflow-x: clip;
 }
 
 .home-features__inner {
@@ -61,6 +62,10 @@
     linear-gradient(66deg, rgb(158, 232, 230) 2%, rgba(83, 183, 216, 0.82) 99%);
   box-shadow: 0 14px 30px rgba(28, 95, 104, 0.14);
   overflow: hidden;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
 }
 
 .feature-card--small {
@@ -81,7 +86,10 @@
   line-height: 1.14;
   letter-spacing: 0;
   color: #005657;
-  overflow-wrap: anywhere;
+  overflow-wrap: normal;
+  word-break: keep-all;
+  hyphens: none;
+  text-wrap: balance;
 }
 
 .feature-card__text {
@@ -91,7 +99,7 @@
   line-height: 1.45;
   letter-spacing: 0;
   color: #116464;
-  overflow-wrap: anywhere;
+  overflow-wrap: break-word;
 }
 
 .home-features__cta {
@@ -135,10 +143,16 @@
   .feature-card {
     grid-template-columns: 1fr;
     gap: 12px;
-    padding: 18px;
+    padding: 16px;
   }
 
   .feature-card__title {
     align-self: auto;
+    font-size: clamp(19px, 5.7vw, 24px);
+  }
+
+  .feature-card__text {
+    font-size: clamp(13px, 4.1vw, 16px);
+    line-height: 1.42;
   }
 }

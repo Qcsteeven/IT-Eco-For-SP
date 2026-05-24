@@ -80,11 +80,17 @@ export async function syncCodeforcesCalendar(): Promise<SyncCodeforcesCalendarRe
     );
 
     if (cfRes.data.status !== 'OK' || !cfRes.data.result) {
-      return { ok: false, error: 'Codeforces API: неверный ответ', status: 502 };
+      return {
+        ok: false,
+        error: 'Codeforces API: неверный ответ',
+        status: 502,
+      };
     }
 
     const nowSec = Math.floor(Date.now() / 1000);
-    const toSync = cfRes.data.result.filter((c) => shouldSyncContest(c, nowSec));
+    const toSync = cfRes.data.result.filter((c) =>
+      shouldSyncContest(c, nowSec),
+    );
 
     const db = await getDB();
     if (!db) {
@@ -102,7 +108,7 @@ export async function syncCodeforcesCalendar(): Promise<SyncCodeforcesCalendarRe
       const status = cfPhaseToStatus(c.phase);
       const platformContestId = String(c.id);
       const part = `codeforces_${c.id}`;
-      const registrationLink = `https://codeforces.com/contests/${c.id}`;
+      const registrationLink = `https://codeforces.com/contest/${c.id}`;
 
       try {
         const embedText = await buildContestEmbeddingText({
@@ -137,10 +143,13 @@ export async function syncCodeforcesCalendar(): Promise<SyncCodeforcesCalendarRe
         const touched = Array.isArray(first) && first.length > 0;
 
         if (!touched) {
-          await db.query(`CREATE type::thing('contests', $part) CONTENT $data`, {
-            part,
-            data,
-          });
+          await db.query(
+            `CREATE type::thing('contests', $part) CONTENT $data`,
+            {
+              part,
+              data,
+            },
+          );
         }
 
         upserted += 1;

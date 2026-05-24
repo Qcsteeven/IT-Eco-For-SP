@@ -4,7 +4,7 @@ import Link from 'next/link';
 import Image from 'next/image';
 import { usePathname } from 'next/navigation';
 import { useSession } from 'next-auth/react';
-import { ChevronDown, User } from 'lucide-react';
+import { ChevronDown, Menu, User, X } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { hasPermission, UserRole } from '@/lib/rbac';
 import './header.scss';
@@ -13,6 +13,7 @@ export default function Header() {
   const { data: session, status } = useSession();
   const pathname = usePathname();
   const [isProfileOpen, setIsProfileOpen] = useState(false);
+  const [isNavOpen, setIsNavOpen] = useState(false);
   const profileMenuRef = useRef<HTMLDivElement>(null);
 
   const userRole = session?.user?.role as UserRole | undefined;
@@ -37,13 +38,21 @@ export default function Header() {
   const canUseAIAssistant =
     isAuthenticated && userRole && hasPermission(userRole, 'canUseAIAssistant');
   const canViewProfile =
-    isAuthenticated && userRole && hasPermission(userRole, 'canViewPersonalDashboard');
+    isAuthenticated &&
+    userRole &&
+    hasPermission(userRole, 'canViewPersonalDashboard');
   const canManageContests =
     isAuthenticated && userRole && hasPermission(userRole, 'canManageContests');
   const canManageUsers =
     isAuthenticated && userRole && hasPermission(userRole, 'canManageUsers');
 
   const closeProfileMenu = () => setIsProfileOpen(false);
+  const closeNavMenu = () => setIsNavOpen(false);
+
+  useEffect(() => {
+    setIsNavOpen(false);
+    setIsProfileOpen(false);
+  }, [pathname]);
 
   return (
     <>
@@ -52,30 +61,52 @@ export default function Header() {
         <div className="header-wrapper">
           <Link href="/home" className="header-logo" aria-label="IT-Eco-For-SP">
             <Image
-              src="/home-assets/hero/logo-full.png"
-              alt="IT-Eco-For-SP"
-              width={354}
-              height={236}
+              src="/brand/cpcore-logo.png"
+              alt="CPCore"
+              width={979}
+              height={546}
               priority
             />
           </Link>
 
-          <nav className="header-nav" aria-label="Навигация">
+          <button
+            type="button"
+            className="header-nav-toggle"
+            aria-controls="site-navigation"
+            aria-expanded={isNavOpen}
+            onClick={() => setIsNavOpen((open) => !open)}
+          >
+            {isNavOpen ? (
+              <X size={28} aria-hidden="true" />
+            ) : (
+              <Menu size={28} aria-hidden="true" />
+            )}
+            <span className="header-sr-only">Открыть меню навигации</span>
+          </button>
+
+          <nav
+            id="site-navigation"
+            className={`header-nav ${isNavOpen ? 'is-open' : ''}`}
+            aria-label="Навигация"
+          >
             <Link
               href="/home"
               className={`header-nav-item ${isActive('/home') ? 'is-active' : ''}`}
+              onClick={closeNavMenu}
             >
               Главная
             </Link>
             <Link
               href="/base"
               className={`header-nav-item ${isActive('/base') ? 'is-active' : ''}`}
+              onClick={closeNavMenu}
             >
               База знаний
             </Link>
             <Link
               href="/calendar"
               className={`header-nav-item ${isActive('/calendar') ? 'is-active' : ''}`}
+              onClick={closeNavMenu}
             >
               Календарь
             </Link>
@@ -84,6 +115,7 @@ export default function Header() {
               <Link
                 href="/chat"
                 className={`header-nav-item ${isActive('/chat') ? 'is-active' : ''}`}
+                onClick={closeNavMenu}
               >
                 ИИ - ассистент
               </Link>
@@ -107,17 +139,29 @@ export default function Header() {
               {isProfileOpen && (
                 <div className="header-profile-dropdown" role="menu">
                   {canViewProfile && (
-                    <Link href="/profile" role="menuitem" onClick={closeProfileMenu}>
+                    <Link
+                      href="/profile"
+                      role="menuitem"
+                      onClick={closeProfileMenu}
+                    >
                       Личный кабинет
                     </Link>
                   )}
                   {canManageContests && (
-                    <Link href="/coach" role="menuitem" onClick={closeProfileMenu}>
+                    <Link
+                      href="/coach"
+                      role="menuitem"
+                      onClick={closeProfileMenu}
+                    >
                       Тренерская
                     </Link>
                   )}
                   {canManageUsers && (
-                    <Link href="/admin" role="menuitem" onClick={closeProfileMenu}>
+                    <Link
+                      href="/admin"
+                      role="menuitem"
+                      onClick={closeProfileMenu}
+                    >
                       Панель администратора
                     </Link>
                   )}

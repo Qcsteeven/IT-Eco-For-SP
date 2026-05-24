@@ -123,7 +123,7 @@ export async function GET() {
 
     try {
       const cfRes = await axios.get(
-        `https://codeforces.com/api/user.info?handles=${userData.cf_username}`,
+        `https://codeforces.com/api/user.info?handles=${encodeURIComponent(cfUsername)}`,
       );
 
       if (
@@ -142,7 +142,7 @@ export async function GET() {
 
         // Получаем историю рейтинга
         const ratingRes = await axios.get(
-          `https://codeforces.com/api/user.rating?handle=${userData.cf_username}`,
+          `https://codeforces.com/api/user.rating?handle=${encodeURIComponent(cfUsername)}`,
         );
         const ratingHistory: CodeforcesRatingEntry[] =
           ratingRes.data.status === 'OK' ? ratingRes.data.result : [];

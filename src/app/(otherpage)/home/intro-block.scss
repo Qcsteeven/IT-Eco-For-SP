@@ -3,9 +3,9 @@
   justify-content: end;
   align-items: center;
   position: relative;
-  width: 1700px;
-  height: 820px;
-  padding: 0 85px;
+  width: min(1700px, calc(100% - var(--page-gutter) * 2));
+  min-height: clamp(520px, 48vw, 820px);
+  padding: clamp(28px, 5vw, 85px);
   margin: 0 auto;
 }
 
@@ -22,16 +22,16 @@
 .ib-subscribe {
   position: relative;
   z-index: 2;
-  width: 420px;
-  font-size: 22px;
-  line-height: 1;
+  width: min(420px, 100%);
+  font-size: clamp(17px, 2.2vw, 22px);
+  line-height: 1.12;
   color: #fff;
 }
 
 .ib-title {
-  font-size: 40px;
-  line-height: 1;
-  margin-bottom: 35px;
+  font-size: clamp(28px, 5vw, 40px);
+  line-height: 1.05;
+  margin-bottom: clamp(22px, 4vw, 35px);
 }
 
 .ib-tg {
@@ -65,10 +65,23 @@
 
 .ib-btn {
   display: block;
-  width: 240px;
-  height: 55px;
+  width: min(240px, 100%);
+  min-height: 55px;
   margin: 0 auto;
   border-radius: 30px;
   background-color: #fff;
   color: #000;
+}
+
+@media (max-width: 720px) {
+  .intro-block {
+    justify-content: center;
+    width: calc(100% - var(--page-gutter) * 2);
+    min-height: 560px;
+    padding: 28px 18px;
+  }
+
+  .ib-img {
+    object-fit: cover;
+  }
 }

@@ -2,6 +2,10 @@ import { NextResponse, NextRequest } from 'next/server';
 import { getDB } from '@/lib/surreal/surreal';
 import { withRoleGuard } from '@/lib/rbac/guard';
 import { parseUsersRecordKey } from '@/lib/surreal/ids';
+import {
+  getManualKarmaAdjustment,
+  getStoredCodeforcesTaskKarma,
+} from '@/lib/codeforces/karma-service';
 
 type DbRow = Record<string, unknown>;
 
@@ -98,14 +102,15 @@ const getHandler = withRoleGuard(
         `SELECT
           id,
           user,
-          user_email,
-          user_name,
+          user.email AS user_email,
+          user.full_name AS user_name,
           amount,
           reason,
           created_at
         FROM karma_logs
         ORDER BY created_at DESC
-        LIMIT 80`,
+        LIMIT 80
+        FETCH user`,
       );
 
       return NextResponse.json({
@@ -167,40 +172,28 @@ const postHandler = withRoleGuard(
         );
       }
 
-      const currentKarma = number(
-        user.codeforces_karma ?? user.karma ?? user.bscp_rating,
-      );
-      const newKarma = currentKarma + amount;
-      const userEmail = text(user.email);
-      const userName = text(user.full_name);
-
-      await db.query(
-        'UPDATE type::thing("users", $id) SET codeforces_karma = $karma',
-        {
-          id: recordKey,
-          karma: newKarma,
-        },
-      );
+      const userThingId = `users:${recordKey}`;
+      const currentKarma = await getManualKarmaAdjustment(db, userThingId);
 
       await db.query(
         `CREATE karma_logs CONTENT {
           user: type::thing("users", $userId),
-          user_email: $userEmail,
-          user_name: $userName,
           amount: $amount,
           reason: $reason,
-          admin_id: $adminId,
+          admin_id: type::thing("users", $adminId),
           created_at: time::now()
         }`,
         {
           userId: recordKey,
-          userEmail,
-          userName,
           amount,
           reason,
           adminId: parseUsersRecordKey(session.user.id),
         },
       );
+
+      const newKarma = await getManualKarmaAdjustment(db, userThingId);
+      const loadedKarma = await getStoredCodeforcesTaskKarma(db, userThingId);
+      const finalKarma = loadedKarma + newKarma;
 
       return NextResponse.json({
         ok: true,
@@ -208,6 +201,7 @@ const postHandler = withRoleGuard(
           userId,
           previousKarma: currentKarma,
           newKarma,
+          finalKarma,
           adjustment: amount,
           reason,
         },

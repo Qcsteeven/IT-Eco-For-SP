@@ -593,4 +593,88 @@
   .users-form-actions {
     flex-direction: column-reverse;
   }
+
+  .users-table-wrapper {
+    overflow-x: visible;
+    border-radius: var(--card-radius);
+    background: transparent;
+    box-shadow: none;
+  }
+
+  .users-table {
+    min-width: 0;
+    border-collapse: collapse;
+
+    thead {
+      display: none;
+    }
+
+    tbody {
+      display: grid;
+      gap: 14px;
+    }
+
+    tr,
+    td {
+      display: block;
+      width: 100%;
+    }
+
+    tr {
+      border-radius: var(--card-radius);
+      background: #fff;
+      box-shadow: 0 12px 28px rgba(88, 54, 163, 0.1);
+      overflow: hidden;
+    }
+
+    td {
+      position: relative;
+      min-height: 44px;
+      padding: 12px 14px 12px 43%;
+      border-bottom: 1px solid rgba(126, 80, 229, 0.18);
+      overflow-wrap: anywhere;
+    }
+
+    td::before {
+      position: absolute;
+      left: 14px;
+      top: 12px;
+      width: calc(43% - 24px);
+      color: #5836a3;
+      font-weight: 800;
+      content: 'Поле';
+    }
+
+    td:nth-child(1)::before {
+      content: 'Email';
+    }
+
+    td:nth-child(2)::before {
+      content: 'Имя';
+    }
+
+    td:nth-child(3)::before {
+      content: 'Роль';
+    }
+
+    td:nth-child(4)::before {
+      content: 'Верификация';
+    }
+
+    td:nth-child(5)::before {
+      content: 'Статус';
+    }
+
+    td:nth-child(6)::before {
+      content: 'Рейтинг';
+    }
+
+    td:nth-child(7)::before {
+      content: 'Дата';
+    }
+
+    td:nth-child(8)::before {
+      content: 'Действия';
+    }
+  }
 }
