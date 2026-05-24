@@ -3,13 +3,14 @@
 ## 📁 О проекте
 
 **IT-Eco-For-SP** — образовательная экосистема для студентов с:
+
 - ИИ-ассистентом (RAG + RouterAI API, модель Qwen/qwen3-235b-a22b-2507)
 - Интеграцией с Codeforces и AtCoder
 - Системой рейтингов (объединённый рейтинг CF + AtCoder)
 - Календарём соревнований
 - Email верификацией пользователей
 
-**Стек:** Next.js 15, React 19, TypeScript, SurrealDB, NextAuth.js, Nodemailer
+**Стек:** Next.js 15, React 19, TypeScript, SurrealDB, NextAuth.js, Unisender Go Web API
 
 **Репозиторий:** https://github.com/Qcsteeven/IT-Eco-For-SP
 
@@ -20,14 +21,17 @@
 ### 1. Безопасность — убран хардкод секретов ✅
 
 **Файлы изменены:**
+
 - `src/lib/surreal/surreal.ts` — убраны хардкод пароли БД, добавлена валидация переменных окружения
-- `src/lib/email/sendEmail.js` — улучшена обработка ошибок SMTP
+- `src/lib/email/sendEmail.js` — отправка писем через Unisender Go Web API
 
 **Файлы созданы:**
+
 - `.env.example` — шаблон всех необходимых переменных окружения
 - `ENV_SETUP.md` — подробная документация по настройке окружения
 
 **Файлы обновлены:**
+
 - `.gitignore` — `.env*` игнорируются, кроме `.env.example`
 - `README.md` — добавлены ссылки на документацию
 
@@ -36,6 +40,7 @@
 ### 2. Удаление bcrypt, оставлен только bcryptjs ✅
 
 **Файлы изменены:**
+
 - `package.json` — удалён `bcrypt` и `@types/bcrypt`
 - `src/lib/surreal/auth.ts` — импорт изменён с `bcrypt` на `bcryptjs`
 
@@ -45,19 +50,19 @@
 
 **Исправлено 38+ мест с `any`:**
 
-| Файл | Изменения |
-|------|-----------|
-| `src/lib/surreal/auth.ts` | `any` → `unknown`, интерфейсы User, SurrealQueryResult |
-| `src/lib/rag.ts` | `any` → `string | Record<string, unknown>` в NewsItem, Contest |
-| `src/lib/contembtext.ts` | Добавлен интерфейс `ContestRaw` |
-| `src/app/api/profile/route.ts` | `any` → `Record<string, unknown>`, интерфейсы для истории контестов |
-| `src/app/api/profile/codeforces/route.ts` | `any` → `Record<string, unknown>`, интерфейсы CodeforcesRatingEntry |
-| `src/app/api/profile/atcoder/route.ts` | `any` → `Record<string, unknown>`, интерфейс AtCoderContestRaw |
-| `src/app/api/register/route.ts` | `any` → `unknown`, `Record<string, unknown>` |
-| `src/app/api/chat/route.ts` | `any` → интерфейс `MessagePart` |
-| `src/app/api/events/route.ts`, `info/route.ts`, `verify-email/route.ts`, `resend-code/route.ts` | `any` → `unknown` с обработкой ошибок |
-| `src/app/api/atcoder/[contestId]/solved/route.ts` | Добавлен интерфейс `AtCoderSubmission` |
-| `src/app/(otherpage)/home/UpcomingEvents.tsx` | `any` → `unknown` |
+| Файл                                                                                            | Изменения                                                           |
+| ----------------------------------------------------------------------------------------------- | ------------------------------------------------------------------- | -------------------------------------------- |
+| `src/lib/surreal/auth.ts`                                                                       | `any` → `unknown`, интерфейсы User, SurrealQueryResult              |
+| `src/lib/rag.ts`                                                                                | `any` → `string                                                     | Record<string, unknown>` в NewsItem, Contest |
+| `src/lib/contembtext.ts`                                                                        | Добавлен интерфейс `ContestRaw`                                     |
+| `src/app/api/profile/route.ts`                                                                  | `any` → `Record<string, unknown>`, интерфейсы для истории контестов |
+| `src/app/api/profile/codeforces/route.ts`                                                       | `any` → `Record<string, unknown>`, интерфейсы CodeforcesRatingEntry |
+| `src/app/api/profile/atcoder/route.ts`                                                          | `any` → `Record<string, unknown>`, интерфейс AtCoderContestRaw      |
+| `src/app/api/register/route.ts`                                                                 | `any` → `unknown`, `Record<string, unknown>`                        |
+| `src/app/api/chat/route.ts`                                                                     | `any` → интерфейс `MessagePart`                                     |
+| `src/app/api/events/route.ts`, `info/route.ts`, `verify-email/route.ts`, `resend-code/route.ts` | `any` → `unknown` с обработкой ошибок                               |
+| `src/app/api/atcoder/[contestId]/solved/route.ts`                                               | Добавлен интерфейс `AtCoderSubmission`                              |
+| `src/app/(otherpage)/home/UpcomingEvents.tsx`                                                   | `any` → `unknown`                                                   |
 
 ---
 
@@ -66,6 +71,7 @@
 **Файл:** `src/lib/surreal/surreal.ts`
 
 **Добавлено:**
+
 - Функция `connectWithRetry()` — подключение с 3 попытками и exponential backoff
 - Функция `queryWithRetry<T>()` — выполнение запросов с retry
 - Функция `resetConnection()` — сброс подключения при ошибках
@@ -86,7 +92,10 @@ export interface ApiResponse<T = unknown> {
 }
 
 export function successResponse<T>(data: T): ApiResponse<T>;
-export function errorResponse(message: string, detail?: string): ApiResponse<never>;
+export function errorResponse(
+  message: string,
+  detail?: string,
+): ApiResponse<never>;
 ```
 
 ---
@@ -96,6 +105,7 @@ export function errorResponse(message: string, detail?: string): ApiResponse<nev
 **Файл:** `src/app/not-found.tsx` (новый)
 
 Создана страница с:
+
 - Стильным дизайном (gradient background)
 - Кнопкой "Вернуться на главную"
 - Адаптивной вёрсткой
@@ -107,6 +117,7 @@ export function errorResponse(message: string, detail?: string): ApiResponse<nev
 **Файл:** `src/components/layout/Footer.tsx`
 
 **Добавлено:**
+
 - Описание проекта
 - Навигация (Главная, ИИ-ассистент, Профиль, Календарь)
 - Контакты (Email, GitHub)
@@ -119,6 +130,7 @@ export function errorResponse(message: string, detail?: string): ApiResponse<nev
 **Файл:** `README.md`
 
 **Добавлено:**
+
 - Секция "Возможности проекта"
 - Пошаговая инструкция по развёртыванию
 - Таблица переменных окружения
@@ -184,57 +196,61 @@ IT-Eco-For-SP/
 
 ### Критические (🔴) — все исправлены ✅
 
-| Проблема | Статус | Решение |
-|----------|--------|---------|
-| 40+ мест с `any` | ✅ Исправлено | Заменены на конкретные типы и `unknown` |
-| Смешение bcrypt/bcryptjs | ✅ Исправлено | Удалён `bcrypt`, оставлен `bcryptjs` |
-| Нет тестов | ⏳ Ожидает | Требуется Jest + React Testing Library |
+| Проблема                 | Статус        | Решение                                 |
+| ------------------------ | ------------- | --------------------------------------- |
+| 40+ мест с `any`         | ✅ Исправлено | Заменены на конкретные типы и `unknown` |
+| Смешение bcrypt/bcryptjs | ✅ Исправлено | Удалён `bcrypt`, оставлен `bcryptjs`    |
+| Нет тестов               | ⏳ Ожидает    | Требуется Jest + React Testing Library  |
 
 ### Средние (🟡) — частично исправлены
 
-| Проблема | Статус | Решение |
-|----------|--------|---------|
-| profile/page.tsx 1563 строки | ⏳ Ожидает | Разделить на хуки |
+| Проблема                       | Статус        | Решение                     |
+| ------------------------------ | ------------- | --------------------------- |
+| profile/page.tsx 1563 строки   | ⏳ Ожидает    | Разделить на хуки           |
 | Не унифицированы API responses | ✅ Исправлено | Создан тип `ApiResponse<T>` |
-| Нет обработки ошибок БД | ✅ Исправлено | Добавлена retry-логика |
+| Нет обработки ошибок БД        | ✅ Исправлено | Добавлена retry-логика      |
 
 ### Низкие (🟢) — все исправлены ✅
 
-| Проблема | Статус | Решение |
-|----------|--------|---------|
-| Пустой Footer | ✅ Исправлено | Заполнен навигацией и контактами |
-| Нет страницы 404 | ✅ Исправлено | Создан `src/app/not-found.tsx` |
-| Сложная анимация печати | ⏳ Ожидает | Требуется упрощение |
+| Проблема                | Статус        | Решение                          |
+| ----------------------- | ------------- | -------------------------------- |
+| Пустой Footer           | ✅ Исправлено | Заполнен навигацией и контактами |
+| Нет страницы 404        | ✅ Исправлено | Создан `src/app/not-found.tsx`   |
+| Сложная анимация печати | ⏳ Ожидает    | Требуется упрощение              |
 
 ---
 
 ## 🔑 Ключевые файлы
 
 ### Аутентификация
+
 - `src/lib/authOptions.ts` — настройки NextAuth
 - `src/components/SessionWrapper.js` — SessionProvider
 - `src/middleware.js` — защита роутов
 - `src/lib/surreal/auth.ts` — hashPassword, verifyPassword (bcryptjs)
 
 ### База данных
+
 - `src/lib/surreal/surreal.ts` — getDB, queryWithRetry, resetConnection
 - `src/lib/surreal/auth.ts` — getUserByEmail, hashPassword, verifyPassword
 
 ### API endpoints
-| Endpoint | Описание |
-|----------|----------|
-| `api/auth/[...nextauth]` | NextAuth handler |
-| `api/register` | Регистрация пользователя |
-| `api/verify-email` | Верификация email кодом |
-| `api/resend-code` | Повторная отправка кода |
-| `api/profile` | Данные профиля + история контестов |
-| `api/profile/codeforces` | Привязка/отвязка Codeforces |
-| `api/profile/atcoder` | Привязка/отвязка AtCoder |
-| `api/chat` | ИИ-чат (RouterAI API) |
-| `api/events` | Календарь событий |
-| `api/info` | Информация |
+
+| Endpoint                 | Описание                           |
+| ------------------------ | ---------------------------------- |
+| `api/auth/[...nextauth]` | NextAuth handler                   |
+| `api/register`           | Регистрация пользователя           |
+| `api/verify-email`       | Верификация email кодом            |
+| `api/resend-code`        | Повторная отправка кода            |
+| `api/profile`            | Данные профиля + история контестов |
+| `api/profile/codeforces` | Привязка/отвязка Codeforces        |
+| `api/profile/atcoder`    | Привязка/отвязка AtCoder           |
+| `api/chat`               | ИИ-чат (RouterAI API)              |
+| `api/events`             | Календарь событий                  |
+| `api/info`               | Информация                         |
 
 ### Интеграции
+
 - **Codeforces API** — получение рейтинга и истории контестов
 - **AtCoder API** — получение рейтинга и истории (через @qatadaazzeh/atcoder-api)
 - **RouterAI API** — ИИ-ассистент (модель `qwen/qwen3-235b-a22b-2507`)
@@ -256,18 +272,19 @@ IT-Eco-For-SP/
 cp .env.example .env.local
 ```
 
-| Переменная | Описание | Где взять |
-|------------|----------|-----------|
-| `NEXTAUTH_SECRET` | Секрет сессий NextAuth | `openssl rand -base64 32` |
-| `NEXTAUTH_URL` | URL приложения | `http://localhost:3000` (dev) |
-| `SURREAL_HOST` | Подключение к БД | Ваш SurrealDB сервер |
-| `SURREAL_USER` | Пользователь БД | Ваш SurrealDB пользователь |
-| `SURREAL_PASSWORD` | Пароль БД | Ваш SurrealDB пароль |
-| `SURREAL_NAMESPACE` | Namespace БД | Например: `bcsp` |
-| `SURREAL_DATABASE` | Database БД | Например: `site` |
-| `EMAIL_USER` | Email для отправки | Ваш Gmail |
-| `EMAIL_PASS` | App Password Gmail | Настройки Google Account |
-| `ROUTERAI_API_KEY` | API ключ ИИ | RouterAI API |
+| Переменная                  | Описание                   | Где взять                     |
+| --------------------------- | -------------------------- | ----------------------------- |
+| `NEXTAUTH_SECRET`           | Секрет сессий NextAuth     | `openssl rand -base64 32`     |
+| `NEXTAUTH_URL`              | URL приложения             | `http://localhost:3000` (dev) |
+| `SURREAL_HOST`              | Подключение к БД           | Ваш SurrealDB сервер          |
+| `SURREAL_USER`              | Пользователь БД            | Ваш SurrealDB пользователь    |
+| `SURREAL_PASSWORD`          | Пароль БД                  | Ваш SurrealDB пароль          |
+| `SURREAL_NAMESPACE`         | Namespace БД               | Например: `bcsp`              |
+| `SURREAL_DATABASE`          | Database БД                | Например: `site`              |
+| `UNISENDER_GO_API_KEY`      | API-ключ отправки писем    | Unisender Go                  |
+| `UNISENDER_GO_SENDER_EMAIL` | Подтвержденный отправитель | Unisender Go                  |
+| `UNISENDER_GO_SENDER_NAME`  | Имя отправителя            | Например: `IT-Eco-For-SP`     |
+| `ROUTERAI_API_KEY`          | API ключ ИИ                | RouterAI API                  |
 
 ### Для Docker (файл `.env` в корне)
 
@@ -312,7 +329,6 @@ docker compose logs -f   # логи
   "react": "^19.1.0",
   "next-auth": "^4.24.13",
   "surrealdb": "^1.3.2",
-  "nodemailer": "^7.0.11",
   "bcryptjs": "^3.0.3",
   "axios": "^1.13.2",
   "ai": "^5.0.113",
@@ -327,14 +343,17 @@ docker compose logs -f   # логи
 ## 🐛 Известные ошибки
 
 ### ESLint
+
 ```
 0 ошибок (все any исправлены)
 ```
 
 ### TypeScript
+
 ```
 Module not found: Can't resolve 'next-auth/react'
 ```
+
 **Решение:** `npm install`
 
 ---
@@ -348,6 +367,7 @@ Module not found: Can't resolve 'next-auth/react'
 **Функция:** `createSystemPrompt({ ragContext, agentRole, mode })`
 
 **Режимы:**
+
 - `chat` — обычный режим общения
 - `action` — режим действий (JSON response)
 
@@ -360,10 +380,12 @@ Module not found: Can't resolve 'next-auth/react'
 **Функция:** `getRagContext(query: string | undefined)`
 
 **Источники:**
+
 - Новости из БД (SurrealDB)
 - Контесты с векторным поиском (cosine similarity)
 
 **Базовые ответы:**
+
 - Дедлайны → "Дедлайн по задаче 'AI-агент' — 14 декабря 2025"
 - RAG → "RAG (Retrieval-Augmented Generation) — метод..."
 
@@ -380,10 +402,10 @@ Module not found: Can't resolve 'next-auth/react'
 
 ## 📅 История изменений
 
-| Дата | Ветка | Изменения |
-|------|-------|-----------|
+| Дата       | Ветка                    | Изменения                                                      |
+| ---------- | ------------------------ | -------------------------------------------------------------- |
 | 2026-03-30 | `feature/security-fixes` | Исправление типов, bcryptjs, retry-логика, 404, Footer, README |
-| 2026-03-30 | `feature/security-fixes` | Убран хардкод секретов, .env.example, ENV_SETUP.md |
+| 2026-03-30 | `feature/security-fixes` | Убран хардкод секретов, .env.example, ENV_SETUP.md             |
 
 ---
 
