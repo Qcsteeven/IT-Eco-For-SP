@@ -123,6 +123,9 @@ jobs:
 
             cd /home/deploy/it-eco
 
+            # Обновляем docker-compose.yml и прочие конфиги из репозитория
+            git pull origin master
+
             # Скачиваем новые образы
             APP_IMAGE="$APP_IMAGE" CRON_IMAGE="$CRON_IMAGE" docker compose pull app cron
 
