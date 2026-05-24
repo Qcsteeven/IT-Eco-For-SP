@@ -47,7 +47,7 @@ export const knowledgeGroups: KnowledgeGroup[] = [
           'Короткое введение в формат контестов, вердикты, ограничения и привычку проверять решение до отправки.',
         duration: '35 минут',
         level: 'Старт',
-        source: 'Введение БЦСП',
+        source: 'Введение',
         goals: [
           'Понять, из каких частей состоит задача и как читать ограничения.',
           'Разобраться с вердиктами Accepted, Wrong Answer, Runtime Error и Time Limit.',

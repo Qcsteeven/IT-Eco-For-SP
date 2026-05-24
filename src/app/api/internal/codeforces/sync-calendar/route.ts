@@ -6,7 +6,7 @@ import { cronAuthErrorResponse } from '@/lib/internal/cron-auth';
 export const dynamic = 'force-dynamic';
 
 /**
- * Внутренний эндпоинт синхронизации календаря Codeforces.
+ * Внутренний эндпоинт синхронизации календаря Codeforces и AtCoder.
  * Вызывается Render Cron / фоновым воркером с Authorization: Bearer CRON_SECRET.
  */
 export async function GET(request: Request) {

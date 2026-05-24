@@ -131,26 +131,6 @@ export default function ExternalSystemsCard({
         )}
 
         <a
-          href="https://contest.yandex.ru/enter"
-          target="_blank"
-          rel="noopener noreferrer"
-          className="profile-system-btn"
-        >
-          <span className="profile-system-btn__text">
-            Подключить
-            <br />
-            Yandex.Contest
-          </span>
-          <Image
-            className="profile-system-btn__logo profile-system-btn__logo--yandex"
-            src="/profile-assets/yandex.svg"
-            alt=""
-            width={96}
-            height={96}
-            aria-hidden="true"
-          />
-        </a>
-        <a
           href="https://leetcode.com/accounts/login/"
           target="_blank"
           rel="noopener noreferrer"
@@ -164,26 +144,6 @@ export default function ExternalSystemsCard({
           <Image
             className="profile-system-btn__logo profile-system-btn__logo--leetcode"
             src="/profile-assets/leetcode.png"
-            alt=""
-            width={96}
-            height={96}
-            aria-hidden="true"
-          />
-        </a>
-        <a
-          href="https://icpc.global/login"
-          target="_blank"
-          rel="noopener noreferrer"
-          className="profile-system-btn"
-        >
-          <span className="profile-system-btn__text">
-            Подключить
-            <br />
-            ICPC
-          </span>
-          <Image
-            className="profile-system-btn__logo profile-system-btn__logo--icpc"
-            src="/profile-assets/codeforces.png"
             alt=""
             width={96}
             height={96}

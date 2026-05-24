@@ -4,7 +4,6 @@ import { getDB } from '@/lib/surreal/surreal';
 import { authOptions } from '@/lib/authOptions';
 import axios from 'axios';
 import {
-  calculateSimpleKarma,
   getKarmaLevel,
   getKarmaColor,
 } from '@/lib/codeforces/karma';
@@ -160,11 +159,13 @@ export async function GET() {
     // Получаем все submission'ы пользователя с AtCoder
     // Используем неофициальное API или парсинг
     let allSubmissions: AtCoderProblem[] = [];
+    let shouldCacheKarma = true;
 
     try {
       // Получаем данные через Kenkoooo API (неофициальное AtCoder API)
       const submissionsRes = await axios.get(
-        `https://kenkoooo.com/atcoder/atcoder-api/v2/user/submissions?user=${atcoderHandle}`,
+        `https://kenkoooo.com/atcoder/atcoder-api/v3/user/submissions?user=${encodeURIComponent(atcoderHandle)}&from_second=0`,
+        { timeout: 15000 },
       );
 
       if (submissionsRes.data && Array.isArray(submissionsRes.data)) {
@@ -201,14 +202,27 @@ export async function GET() {
         }));
       }
     } catch (e) {
-      console.error('[AtCoder Problems] Error fetching submissions:', e);
-      return NextResponse.json(
-        {
-          ok: false,
-          error: 'Ошибка при получении данных с AtCoder. Попробуйте позже.',
-        },
-        { status: 500 },
-      );
+      const status = axios.isAxiosError(e) ? e.response?.status : undefined;
+      const message = e instanceof Error ? e.message : String(e);
+
+      if (status === 404) {
+        shouldCacheKarma = false;
+        console.warn(
+          `[AtCoder Problems] Kenkoooo returned 404 for "${atcoderHandle}", using empty submissions`,
+        );
+      } else {
+        console.error('[AtCoder Problems] Error fetching submissions:', {
+          status,
+          message,
+        });
+        return NextResponse.json(
+          {
+            ok: false,
+            error: 'Ошибка при получении данных с AtCoder. Попробуйте позже.',
+          },
+          { status: 502 },
+        );
+      }
     }
 
     // Убираем дубликаты задач (оставляем первое решение)
@@ -283,7 +297,10 @@ export async function GET() {
     uniqueSubmissions.sort((a, b) => b.solvedAt - a.solvedAt);
 
     // Рассчитываем карму
-    const totalKarma = calculateSimpleKarma(easyCount, mediumCount, hardCount);
+    const totalKarma = uniqueSubmissions.reduce(
+      (sum, problem) => sum + problem.karma,
+      0,
+    );
     console.log('[AtCoder Problems] Total karma:', totalKarma);
 
     const response = {
@@ -304,7 +321,7 @@ export async function GET() {
     };
 
     // Сохраняем в кэш
-    if (atcoderAccountData?.id) {
+    if (shouldCacheKarma && atcoderAccountData?.id) {
       try {
         await db.query(
           `UPDATE type::thing($id) SET cached_karma = $karma, updated_at = time::now() WHERE platform_name = 'atcoder'`,
