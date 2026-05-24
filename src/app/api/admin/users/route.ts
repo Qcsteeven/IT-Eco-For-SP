@@ -1,5 +1,4 @@
 import { NextResponse, NextRequest } from 'next/server';
-import crypto from 'crypto';
 import { getDB } from '@/lib/surreal/surreal';
 import { hashPassword } from '@/lib/surreal/auth';
 import { withRoleGuard } from '@/lib/rbac/guard';
@@ -231,8 +230,6 @@ const postHandler = withRoleGuard(
         role,
         is_verified: body.is_verified ?? true,
         is_blocked: body.is_blocked ?? false,
-        verification_code: crypto.randomInt(100000, 999999).toString(),
-        code_expiry: new Date(Date.now() + 60 * 60 * 1000),
         registration_date: new Date(),
         bscp_rating: rating,
         karma: 0,

@@ -81,9 +81,8 @@ export async function GET(req: Request) {
     const coachId = toUserThingId(session.user.id.toString());
 
     // Базовый запрос для служебных списков тренера/админа.
-    // Не ограничиваемся is_verified: админские учетные записи могут быть
-    // заведены вручную и еще не пройти email flow, но тренеру все равно
-    // нужно иметь возможность добавить их в группу.
+    // Не ограничиваемся is_verified: администратор подтверждает аккаунты
+    // вручную, но тренеру все равно нужно видеть их при работе с группами.
     let query = `SELECT id, full_name, email, role, registration_date, is_verified FROM users WHERE is_blocked != true`;
     const params: Record<string, unknown> = { coachId };
 

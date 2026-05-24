@@ -452,7 +452,7 @@ export default function AdminUsersPage() {
                     updateForm('is_verified', event.target.checked)
                   }
                 />
-                <span>Email подтвержден</span>
+                <span>Аккаунт подтвержден</span>
               </label>
 
               <label className="users-checkbox">
@@ -496,7 +496,7 @@ export default function AdminUsersPage() {
                   <th>Email</th>
                   <th>Имя</th>
                   <th>Роль</th>
-                  <th>Верификация</th>
+                  <th>Подтверждение</th>
                   <th>Статус</th>
                   <th>Рейтинг</th>
                   <th>Дата регистрации</th>
@@ -517,10 +517,14 @@ export default function AdminUsersPage() {
                       <span
                         className={`user-verified ${user.is_verified ? 'verified' : 'not-verified'}`}
                         aria-label={
-                          user.is_verified ? 'Подтвержден' : 'Не подтвержден'
+                          user.is_verified
+                            ? 'Подтвержден администратором'
+                            : 'Ожидает подтверждения'
                         }
                         title={
-                          user.is_verified ? 'Подтвержден' : 'Не подтвержден'
+                          user.is_verified
+                            ? 'Подтвержден администратором'
+                            : 'Ожидает подтверждения'
                         }
                       >
                         {user.is_verified ? (

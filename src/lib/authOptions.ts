@@ -123,9 +123,9 @@ export const authOptions: NextAuthOptions = {
 
             if (!user.is_verified) {
               console.warn(
-                `[AUTH] БЛОКИРОВКА ВХОДА: Email ${user.email} не верифицирован.`,
+                `[AUTH] БЛОКИРОВКА ВХОДА: Аккаунт ${user.email} не подтвержден администратором.`,
               );
-              throw new Error('EmailNotVerified');
+              throw new Error('AccountNotApproved');
             }
 
             return {

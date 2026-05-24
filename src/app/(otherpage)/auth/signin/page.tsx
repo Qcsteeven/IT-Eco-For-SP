@@ -9,7 +9,12 @@ import Link from 'next/link';
 import { FiEye, FiEyeOff } from 'react-icons/fi';
 import styles from './SignIn.module.scss';
 
-type AuthErrorType = 'EmailNotVerified' | 'AccountBlocked' | 'CredentialsSignin' | string;
+type AuthErrorType =
+  | 'AccountNotApproved'
+  | 'EmailNotVerified'
+  | 'AccountBlocked'
+  | 'CredentialsSignin'
+  | string;
 
 interface SignInResult {
   error: string | null;
@@ -36,8 +41,8 @@ function SignInForm() {
 
     const urlError = searchParams?.get('error') as AuthErrorType | null;
     if (urlError) {
-      if (urlError === 'EmailNotVerified') {
-        setError('Ваш аккаунт не верифицирован.');
+      if (urlError === 'AccountNotApproved' || urlError === 'EmailNotVerified') {
+        setError('Аккаунт еще не подтвержден администратором.');
       } else if (urlError === 'AccountBlocked') {
         setError('Ваш аккаунт заблокирован. Обратитесь к администратору.');
       } else if (urlError === 'CredentialsSignin') {
@@ -64,8 +69,10 @@ function SignInForm() {
     if (!result.error) {
       router.push('/');
     } else {
-      const errorCode: AuthErrorType = result.error.includes('EmailNotVerified')
-        ? 'EmailNotVerified'
+      const errorCode: AuthErrorType = result.error.includes(
+        'AccountNotApproved',
+      ) || result.error.includes('EmailNotVerified')
+        ? 'AccountNotApproved'
         : result.error.includes('AccountBlocked')
           ? 'AccountBlocked'
         : 'CredentialsSignin';

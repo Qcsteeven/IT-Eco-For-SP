@@ -11,7 +11,7 @@
 - 🤖 ИИ-ассистент на базе RAG (RouterAI API, модель Qwen)
 - 📊 Интеграция с Codeforces и AtCoder для отслеживания рейтинга
 - 📅 Календарь соревнований
-- 📧 Email верификация пользователей
+- ✅ Ручное подтверждение новых аккаунтов администратором
 - 🔐 Аутентификация через NextAuth.js
 - 📈 Система рейтингов (объединённый рейтинг CF + AtCoder)
 
@@ -47,19 +47,19 @@ cp .env.example .env.local
 
 **Обязательно заполните в `.env.local`:**
 
-| Переменная                  | Описание                                  | Пример                    |
-| --------------------------- | ----------------------------------------- | ------------------------- |
-| `NEXTAUTH_SECRET`           | Секрет сессий                             | `openssl rand -base64 32` |
-| `NEXTAUTH_URL`              | URL приложения                            | `http://localhost:3000`   |
-| `SURREAL_HOST`              | Подключение к БД                          | `ws://45.149.234.80:8000` |
-| `SURREAL_USER`              | Пользователь БД                           | `admin`                   |
-| `SURREAL_PASSWORD`          | Пароль БД                                 | `ваш_пароль`              |
-| `SURREAL_NAMESPACE`         | Namespace БД                              | `bcsp`                    |
-| `SURREAL_DATABASE`          | Database БД                               | `site`                    |
-| `UNISENDER_GO_API_KEY`      | API-ключ Unisender Go для отправки писем  | `replace_me`              |
-| `UNISENDER_GO_SENDER_EMAIL` | Подтвержденный отправитель в Unisender Go | `no-reply@example.com`    |
-| `UNISENDER_GO_SENDER_NAME`  | Имя отправителя                           | `IT-Eco-For-SP`           |
-| `ROUTERAI_API_KEY`          | API ключ ИИ                               | `sk-...`                  |
+| Переменная                  | Описание                                        | Пример                    |
+| --------------------------- | ----------------------------------------------- | ------------------------- |
+| `NEXTAUTH_SECRET`           | Секрет сессий                                   | `openssl rand -base64 32` |
+| `NEXTAUTH_URL`              | URL приложения                                  | `http://localhost:3000`   |
+| `SURREAL_HOST`              | Подключение к БД                                | `ws://45.149.234.80:8000` |
+| `SURREAL_USER`              | Пользователь БД                                 | `admin`                   |
+| `SURREAL_PASSWORD`          | Пароль БД                                       | `ваш_пароль`              |
+| `SURREAL_NAMESPACE`         | Namespace БД                                    | `bcsp`                    |
+| `SURREAL_DATABASE`          | Database БД                                     | `site`                    |
+| `UNISENDER_GO_API_KEY`      | API-ключ Unisender Go для восстановления пароля | `replace_me`              |
+| `UNISENDER_GO_SENDER_EMAIL` | Подтвержденный отправитель в Unisender Go       | `no-reply@example.com`    |
+| `UNISENDER_GO_SENDER_NAME`  | Имя отправителя                                 | `IT-Eco-For-SP`           |
+| `ROUTERAI_API_KEY`          | API ключ ИИ                                     | `sk-...`                  |
 
 **Генерация NEXTAUTH_SECRET:**
 
@@ -202,7 +202,7 @@ IT-Eco-For-SP/
 
 - NextAuth.js для аутентификации
 - bcryptjs для хеширования паролей
-- Email верификация пользователей
+- Ручное подтверждение новых аккаунтов администратором
 - Защищённые API endpoints
 - Middleware для защиты роутов
 
