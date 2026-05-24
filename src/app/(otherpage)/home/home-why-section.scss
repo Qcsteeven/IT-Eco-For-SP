@@ -1,6 +1,7 @@
 .home-why {
   background: #f4f7f7;
   padding: clamp(28px, 4vw, 48px) 16px clamp(44px, 6vw, 64px);
+  overflow-x: clip;
 }
 
 .home-why__inner {
@@ -24,6 +25,7 @@
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: clamp(16px, 2.6vw, 32px);
+  min-width: 0;
 }
 
 .home-why-card {
@@ -37,11 +39,18 @@
   background-repeat: no-repeat;
   background-position: center;
   background-size: 100% 100%;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+  overflow: hidden;
 }
 
 .home-why-card__content {
   width: min(100%, 500px);
   padding: clamp(18px, 2.2vw, 26px);
+  min-width: 0;
+  box-sizing: border-box;
 }
 
 .home-why-card__heading {
@@ -51,7 +60,10 @@
   line-height: 1.18;
   letter-spacing: 0;
   color: #493b90;
-  overflow-wrap: anywhere;
+  overflow-wrap: normal;
+  word-break: keep-all;
+  hyphens: none;
+  text-wrap: balance;
 }
 
 .home-why-card__text {
@@ -60,7 +72,7 @@
   line-height: 1.45;
   letter-spacing: 0;
   color: #493b90;
-  overflow-wrap: anywhere;
+  overflow-wrap: break-word;
 }
 
 @media (max-width: 860px) {
@@ -80,11 +92,20 @@
 
   .home-why-card {
     min-height: 0;
-    padding: 18px 12px;
-    background-size: cover;
+    padding: 16px 10px;
+    background-size: 100% 100%;
   }
 
   .home-why-card__content {
-    padding: 18px 14px;
+    padding: 16px 12px;
+  }
+
+  .home-why-card__heading {
+    font-size: clamp(19px, 6vw, 24px);
+  }
+
+  .home-why-card__text {
+    font-size: clamp(13px, 4.1vw, 16px);
+    line-height: 1.42;
   }
 }

@@ -134,8 +134,9 @@ export default function ProfileHistoryCard({
         </button>
       </div>
 
-      <table className="profile-history-table">
-        <thead>
+      <div className="profile-history-table-wrap" data-responsive-scroll>
+        <table className="profile-history-table">
+          <thead>
           <tr>
             <th>Дата</th>
             <th>Соревнование</th>
@@ -144,7 +145,7 @@ export default function ProfileHistoryCard({
             <th>Рейтинг БЦСП</th>
           </tr>
         </thead>
-        <tbody>
+          <tbody>
           {visibleHistory.length > 0 ? (
             visibleHistory.map((item, index) => {
               const uniqueKey = item.contest.id
@@ -159,8 +160,10 @@ export default function ProfileHistoryCard({
               return (
                 <React.Fragment key={index}>
                   <tr className={isExpanded ? 'expanded-row' : ''}>
-                    <td>{new Date(item.date_recorded).toLocaleDateString()}</td>
-                    <td>
+                    <td data-label="Дата">
+                      {new Date(item.date_recorded).toLocaleDateString()}
+                    </td>
+                    <td data-label="Соревнование">
                       {item.contest.id ? (
                         <button
                           className="contest-link"
@@ -180,7 +183,7 @@ export default function ProfileHistoryCard({
                         item.contest.title
                       )}
                     </td>
-                    <td>
+                    <td data-label="Платформа">
                       <span
                         className={`platform-badge platform-${item.contest.platform.toLowerCase()}`}
                       >
@@ -189,13 +192,14 @@ export default function ProfileHistoryCard({
                         {item.contest.platform}
                       </span>
                     </td>
-                    <td>
+                    <td data-label="Результат">
                       {item.placement}
                       {item.is_manual && (
                         <span className="manual-tag">вручную</span>
                       )}
                     </td>
                     <td
+                      data-label="Рейтинг БЦСП"
                       className={`rating-change ${item.mmr_change < 0 ? 'negative' : ''}`}
                     >
                       {item.mmr_change > 0
@@ -205,7 +209,7 @@ export default function ProfileHistoryCard({
                   </tr>
                   {isExpanded && uniqueKey && (
                     <tr className="problems-expand-row">
-                      <td colSpan={5}>
+                      <td className="profile-history-expanded-cell" colSpan={5}>
                         <div className="problems-container">
                           {isLoading ? (
                             <div className="loading-problems">
@@ -219,7 +223,8 @@ export default function ProfileHistoryCard({
                                   Решено задач: <strong>{problems.length}</strong>
                                 </p>
                               </div>
-                              <table className="problems-table">
+                              <div className="problems-table-wrap" data-responsive-scroll>
+                                <table className="problems-table">
                                 <thead>
                                   <tr>
                                     <th>Индекс</th>
@@ -252,7 +257,8 @@ export default function ProfileHistoryCard({
                                     </tr>
                                   ))}
                                 </tbody>
-                              </table>
+                                </table>
+                              </div>
                             </>
                           ) : (
                             <div className="no-problems">
@@ -274,8 +280,9 @@ export default function ProfileHistoryCard({
               <td colSpan={5}>Нет записей, соответствующих фильтрам.</td>
             </tr>
           )}
-        </tbody>
-      </table>
+          </tbody>
+        </table>
+      </div>
 
       {filteredCount > visibleHistory.length && (
         <div className="profile-history-more">

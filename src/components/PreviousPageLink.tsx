@@ -1,7 +1,7 @@
 'use client';
 
-import type { MouseEvent, ReactNode } from 'react';
-import { useRouter } from 'next/navigation';
+import type { ReactNode } from 'react';
+import Link from 'next/link';
 
 interface PreviousPageLinkProps {
   className?: string;
@@ -14,22 +14,9 @@ export default function PreviousPageLink({
   fallbackHref,
   children = '← Назад',
 }: PreviousPageLinkProps) {
-  const router = useRouter();
-
-  const handleClick = (event: MouseEvent<HTMLAnchorElement>) => {
-    event.preventDefault();
-
-    if (window.history.length > 1) {
-      router.back();
-      return;
-    }
-
-    router.push(fallbackHref);
-  };
-
   return (
-    <a href={fallbackHref} className={className} onClick={handleClick}>
+    <Link href={fallbackHref} className={className}>
       {children}
-    </a>
+    </Link>
   );
 }

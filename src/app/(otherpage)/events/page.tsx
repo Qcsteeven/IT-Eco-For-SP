@@ -251,10 +251,7 @@ export default function EventsManagementPage() {
       setError(null);
 
       const [eventsData, usersData, groupsData] = await Promise.all([
-        readApi<ManagedEvent[]>(
-          '/api/events?includeContests=false&includeCodeforces=false',
-          [],
-        ),
+        readApi<ManagedEvent[]>('/api/events?includeContests=false', []),
         readApi<User[]>('/api/users?limit=200', []),
         readApi<Group[]>('/api/groups', []),
       ]);

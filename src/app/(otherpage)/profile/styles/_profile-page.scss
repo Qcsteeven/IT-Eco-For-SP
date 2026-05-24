@@ -29,8 +29,14 @@
 }
 
 .profile-card__name {
-  font-family: var(--font-montserrat), system-ui, -apple-system, Segoe UI, Roboto,
-    Arial, sans-serif;
+  font-family:
+    var(--font-montserrat),
+    system-ui,
+    -apple-system,
+    Segoe UI,
+    Roboto,
+    Arial,
+    sans-serif;
   font-weight: 500;
   font-size: 32px;
   line-height: 35px;
@@ -51,8 +57,14 @@
   display: inline-flex;
   align-items: center;
   gap: 10px;
-  font-family: var(--font-montserrat), system-ui, -apple-system, Segoe UI, Roboto,
-    Arial, sans-serif;
+  font-family:
+    var(--font-montserrat),
+    system-ui,
+    -apple-system,
+    Segoe UI,
+    Roboto,
+    Arial,
+    sans-serif;
   font-weight: 500;
   font-size: 32px;
   line-height: 35px;
@@ -112,13 +124,23 @@
   align-items: center;
   justify-content: flex-start;
   padding: 0 22px;
-  font-family: var(--font-montserrat), system-ui, -apple-system, Segoe UI, Roboto,
-    Arial, sans-serif;
+  font-family:
+    var(--font-montserrat),
+    system-ui,
+    -apple-system,
+    Segoe UI,
+    Roboto,
+    Arial,
+    sans-serif;
   font-weight: 400;
   font-size: 24px;
   line-height: 35px;
   color: #424242;
   text-decoration: none;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .profile-card__actions {
@@ -134,8 +156,14 @@
   border: 0;
   border-radius: 16px;
   cursor: pointer;
-  font-family: var(--font-montserrat), system-ui, -apple-system, Segoe UI, Roboto,
-    Arial, sans-serif;
+  font-family:
+    var(--font-montserrat),
+    system-ui,
+    -apple-system,
+    Segoe UI,
+    Roboto,
+    Arial,
+    sans-serif;
   font-weight: 700;
   font-size: 16px;
   color: #fff;
@@ -155,8 +183,14 @@
 
 .profile-systems-card__title {
   text-align: center;
-  font-family: var(--font-montserrat), system-ui, -apple-system, Segoe UI, Roboto,
-    Arial, sans-serif;
+  font-family:
+    var(--font-montserrat),
+    system-ui,
+    -apple-system,
+    Segoe UI,
+    Roboto,
+    Arial,
+    sans-serif;
   font-weight: 500;
   font-size: 32px;
   line-height: 35px;
@@ -184,8 +218,14 @@
   text-decoration: none;
   cursor: pointer;
   color: #424242;
-  font-family: var(--font-montserrat), system-ui, -apple-system, Segoe UI, Roboto,
-    Arial, sans-serif;
+  font-family:
+    var(--font-montserrat),
+    system-ui,
+    -apple-system,
+    Segoe UI,
+    Roboto,
+    Arial,
+    sans-serif;
   font-weight: 500;
   font-size: 16px;
   letter-spacing: 0.8px;
@@ -229,8 +269,14 @@
 
 .profile-history-card__title {
   text-align: center;
-  font-family: var(--font-montserrat), system-ui, -apple-system, Segoe UI, Roboto,
-    Arial, sans-serif;
+  font-family:
+    var(--font-montserrat),
+    system-ui,
+    -apple-system,
+    Segoe UI,
+    Roboto,
+    Arial,
+    sans-serif;
   font-weight: 500;
   font-size: 32px;
   line-height: 35px;
@@ -248,8 +294,14 @@
 
 .profile-history-filter label {
   display: block;
-  font-family: var(--font-montserrat), system-ui, -apple-system, Segoe UI, Roboto,
-    Arial, sans-serif;
+  font-family:
+    var(--font-montserrat),
+    system-ui,
+    -apple-system,
+    Segoe UI,
+    Roboto,
+    Arial,
+    sans-serif;
   font-weight: 500;
   font-size: 16px;
   line-height: 18px;
@@ -264,8 +316,14 @@
   border-radius: 8px;
   border: 1px solid rgba(73, 59, 144, 0.45);
   padding: 0 10px;
-  font-family: var(--font-montserrat), system-ui, -apple-system, Segoe UI, Roboto,
-    Arial, sans-serif;
+  font-family:
+    var(--font-montserrat),
+    system-ui,
+    -apple-system,
+    Segoe UI,
+    Roboto,
+    Arial,
+    sans-serif;
   font-weight: 400;
   font-size: 16px;
   color: #493b90;
@@ -285,8 +343,22 @@
 .profile-history-table {
   width: 100%;
   border-collapse: collapse;
-  font-family: var(--font-montserrat), system-ui, -apple-system, Segoe UI, Roboto,
-    Arial, sans-serif;
+  font-family:
+    var(--font-montserrat),
+    system-ui,
+    -apple-system,
+    Segoe UI,
+    Roboto,
+    Arial,
+    sans-serif;
+}
+
+.profile-history-table-wrap,
+.problems-table-wrap {
+  width: 100%;
+  max-width: 100%;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
 }
 
 .profile-history-table thead th {
@@ -326,8 +398,14 @@
   cursor: pointer;
   background: #6a3ad4;
   color: #fff;
-  font-family: var(--font-montserrat), system-ui, -apple-system, Segoe UI, Roboto,
-    Arial, sans-serif;
+  font-family:
+    var(--font-montserrat),
+    system-ui,
+    -apple-system,
+    Segoe UI,
+    Roboto,
+    Arial,
+    sans-serif;
   font-weight: 500;
   font-size: 20px;
 }
@@ -344,5 +422,130 @@
   .profile-card__actions {
     justify-content: center;
     flex-wrap: wrap;
+  }
+}
+
+@media (max-width: 560px) {
+  #profile.profile-page {
+    padding: 40px 16px 56px;
+  }
+
+  .profile-card,
+  .profile-systems-card,
+  .profile-history-card {
+    width: 100%;
+    border-radius: 18px;
+  }
+
+  .profile-card {
+    padding: 36px 20px 42px;
+  }
+
+  .profile-card__name,
+  .profile-systems-card__title,
+  .profile-history-card__title {
+    font-size: 30px;
+    line-height: 1.12;
+  }
+
+  .profile-card__field {
+    padding: 0 18px;
+    font-size: clamp(16px, 4.6vw, 20px);
+  }
+
+  .profile-card__actions {
+    margin-top: 28px;
+    justify-content: center;
+    gap: 18px;
+  }
+
+  .profile-history-card {
+    padding: 24px 16px 28px;
+  }
+
+  .profile-history-filters {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+
+  .profile-history-filter input,
+  .profile-history-filter select,
+  .profile-history-reset {
+    min-height: 44px;
+  }
+
+  .profile-history-table-wrap {
+    overflow-x: visible;
+  }
+
+  .profile-history-table {
+    display: block;
+  }
+
+  .profile-history-table > thead {
+    display: none;
+  }
+
+  .profile-history-table > tbody {
+    display: grid;
+    gap: 12px;
+  }
+
+  .profile-history-table > tbody > tr {
+    display: grid;
+    width: 100%;
+    border: 1px solid rgba(125, 99, 229, 0.24);
+    border-radius: 14px;
+    background: #fff;
+    overflow: hidden;
+  }
+
+  .profile-history-table > tbody > tr > td {
+    display: grid;
+    grid-template-columns: minmax(96px, 36%) minmax(0, 1fr);
+    gap: 10px;
+    align-items: start;
+    padding: 12px 14px;
+    font-size: 14px;
+    line-height: 1.35;
+    border-bottom: 1px solid rgba(125, 99, 229, 0.18);
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+
+  .profile-history-table > tbody > tr > td:last-child {
+    border-bottom: 0;
+  }
+
+  .profile-history-table > tbody > tr > td::before {
+    content: attr(data-label);
+    color: #493b90;
+    font-weight: 700;
+  }
+
+  .profile-history-expanded-cell,
+  .profile-history-empty {
+    display: block !important;
+  }
+
+  .profile-history-expanded-cell::before,
+  .profile-history-empty::before {
+    content: none !important;
+  }
+
+  .contest-link {
+    width: 100%;
+    min-width: 0;
+    min-height: 44px;
+    align-items: flex-start;
+    overflow-wrap: anywhere;
+  }
+
+  .problems-container {
+    padding: 14px;
+  }
+
+  .problems-table {
+    min-width: 460px;
   }
 }

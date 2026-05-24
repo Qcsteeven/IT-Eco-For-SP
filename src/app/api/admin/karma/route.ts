@@ -102,14 +102,15 @@ const getHandler = withRoleGuard(
         `SELECT
           id,
           user,
-          user_email,
-          user_name,
+          user.email AS user_email,
+          user.full_name AS user_name,
           amount,
           reason,
           created_at
         FROM karma_logs
         ORDER BY created_at DESC
-        LIMIT 80`,
+        LIMIT 80
+        FETCH user`,
       );
 
       return NextResponse.json({
@@ -173,23 +174,17 @@ const postHandler = withRoleGuard(
 
       const userThingId = `users:${recordKey}`;
       const currentKarma = await getManualKarmaAdjustment(db, userThingId);
-      const userEmail = text(user.email);
-      const userName = text(user.full_name);
 
       await db.query(
         `CREATE karma_logs CONTENT {
           user: type::thing("users", $userId),
-          user_email: $userEmail,
-          user_name: $userName,
           amount: $amount,
           reason: $reason,
-          admin_id: $adminId,
+          admin_id: type::thing("users", $adminId),
           created_at: time::now()
         }`,
         {
           userId: recordKey,
-          userEmail,
-          userName,
           amount,
           reason,
           adminId: parseUsersRecordKey(session.user.id),

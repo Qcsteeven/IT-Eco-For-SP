@@ -116,7 +116,6 @@ export async function GET(req: NextRequest) {
   const events = await listCalendarEvents({
     from: searchParams.get('from'),
     to: searchParams.get('to'),
-    includeCodeforces: searchParams.get('includeCodeforces') !== 'false',
     includeContests: searchParams.get('includeContests') !== 'false',
     includeEvents: searchParams.get('includeEvents') !== 'false',
   });

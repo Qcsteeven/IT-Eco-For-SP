@@ -320,7 +320,7 @@ export default function CoachGroupDetailsPage() {
       <div className="coach-container">
         <header className="coach-header">
           <PreviousPageLink
-            fallbackHref="/coach/groups"
+            fallbackHref="/coach"
             className="coach-back-link"
           >
             Назад к группам

@@ -94,7 +94,7 @@ export default function CoachGroupAnalyticsPage() {
       <div className="coach-container">
         <div className="coach-header">
           <PreviousPageLink
-            fallbackHref={`/coach/groups/${groupPath(groupId)}`}
+            fallbackHref="/coach"
             className="coach-back-link"
           />
           <div className="coach-header-content">

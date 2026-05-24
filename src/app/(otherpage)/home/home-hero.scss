@@ -4,6 +4,7 @@
   --home-hero-teal-hover: #159ea6;
   background: var(--home-hero-bg);
   padding: clamp(16px, 3vw, 28px) 16px clamp(32px, 5vw, 56px);
+  overflow-x: clip;
 }
 
 .home-hero__inner {
@@ -56,14 +57,17 @@
 .home-hero__title {
   width: min(100%, 560px);
   margin: 0 0 16px;
-  font-size: clamp(30px, 4.6vw, 60px);
+  font-size: clamp(28px, 4.4vw, 60px);
   font-weight: 700;
   line-height: 1.05;
   letter-spacing: 0;
   text-transform: uppercase;
   color: #fff;
   text-shadow: 0 3px 18px rgba(0, 0, 0, 0.42);
-  overflow-wrap: anywhere;
+  overflow-wrap: normal;
+  word-break: keep-all;
+  hyphens: none;
+  text-wrap: balance;
 }
 
 .home-hero__lead {
@@ -132,7 +136,8 @@
   }
 
   .home-hero__title {
-    font-size: clamp(28px, 9vw, 40px);
+    font-size: clamp(23px, 7.4vw, 36px);
+    line-height: 1.08;
   }
 }
 
@@ -143,6 +148,10 @@
 
   .home-hero__overlay {
     padding: 18px;
+  }
+
+  .home-hero__title {
+    font-size: clamp(21px, 6.7vw, 28px);
   }
 
   .home-hero__cta {
